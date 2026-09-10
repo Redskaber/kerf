@@ -191,17 +191,16 @@ fn import_export_misuse() {
     }
 }
 
-/// quote 误用（6 case）：元数/符号值（TD-002 推迟）/向量值（TD-002）/
-/// 列表内符号/列表内未绑定名。
+/// quote 误用（4 case）：元数/向量值（Vector 推迟）。
+/// TD-002 解除后符号 datum 为正例——符号值的**语义**负例（算术/条件
+/// 位置误用）在 negative_vm_tests / negative_semantics_tests 层锚定。
 #[test]
 fn quote_misuse() {
     let cases: &[(&str, &str)] = &[
         ("(quote)", "quote 形式：(quote 数据)"),
         ("(quote x y)", "quote 形式：(quote 数据)"),
-        ("'sym", "quote 符号暂不支持"),
         ("'[1 2]", "quote 向量暂不支持"),
-        ("'(a b)", "quote 符号暂不支持"),
-        ("(+ 1 (quote (1 undefined-ok)))", "quote 符号暂不支持"),
+        ("'[1 [2 a]]", "quote 向量暂不支持"),
     ];
     for (src, msg) in cases {
         expect_expand_err(src, msg);

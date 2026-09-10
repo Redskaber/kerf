@@ -1,10 +1,10 @@
 # Stage 0 最小内置库边界
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.2：内置清单重写为 24 项准确清单（#15）+ I/O 双层表面说明）
-> **Version**: v5.2
+> **Date**: 2026-09-10（v5.3：r5 标准库最小集扩张 24→48 项——列表 8/字符串 10/I/O 6 新增，高阶函数显式推迟 B3）
+> **Version**: v5.3
 > **Status**: Active
-> **处理程度**：P1（最小集 Stage 0 已实现；完整标准库生长是 Stage 1→2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1/2（库化生长） ｜ **推迟项**：列表操作/字符串处理库化（Stage 1+）、中缀运算符宏（Stage 1+）、能力模型 I/O（Stage 2）
+> **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐）→ Stage 2（库化生长） ｜ **推迟项**：高阶函数（map/filter/foldl/for-each——B3 用 kerf preamble 实现）、中缀运算符宏（Stage 1+）、能力模型 I/O（Stage 2）
 
 > 本文件界定 Stage 0 的内置库边界：**语言核心零内置**——算术、比较、序对、谓词、I/O 与 print 等内置函数全部由 driver（宿主侧启动器）在启动时注册为全局函数，而不进入语言核心。设计依据提取自 stage0.md §8.8（最小 I/O）与 §14.5（语言规范与文档流程），并遵循 [01-核心原语 §2](./01-core-forms.md) 的核心冻结原则。相关实现：I/O 与分配器接口见 [05-运行时](./05-runtime.md)，操作码级能力见 [04-字节码 VM §1](./04-bytecode-vm.md)，12 个能力模型矩阵见 [13-能力矩阵](./13-capability-matrix.md)（其 §2.8 为本文件 §2 的规范副本）。
 
@@ -28,7 +28,7 @@
 
 Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print` 两个用户可见内置函数（经 driver 注册的全局函数，非能力模型）；**通道层**是 [05-运行时 §1](./05-runtime.md) 的 `read_line_stdin()` / `write_line_stdout()`（kerf-runtime/src/io.rs，错误显式返回）。两层经 driver 内置函数接线（语言层 `read-line`/`print` 调用通道层函数）。Stage 0 不引入能力模型 I/O，但 VM 栈帧和分配器接口必须预留 `register_foreign_ref` 等接口（Stage 0 可为 no-op），以便 Stage 1+ 升级到能力模型时无需破坏接口——能力模型 I/O 的类型预留定义见 [13-能力矩阵 §3.1.3](./13-capability-matrix.md)。
 
-**Stage 0 内置函数完整清单（24 项，v5.2 逐项对齐 `kerf-driver/src/builtins.rs` 的 `register_globals`——此前文档写「20 项」且函数名与实现表面错位，deep-review R1 偏差 #15）**：
+**Stage 0/1 内置函数完整清单（48 项，v5.3：24 项 Stage 0 基线 + r5 批次 B 标准库最小集 24 项——逐项对齐 `kerf-driver/src/builtins.rs` 的 `register_globals`）**：
 
 | 类别 | 函数（个数） | 实现层 |
 |------|------------|--------|
@@ -41,11 +41,14 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 > 校验（`(< 1 2 "s")` 报类型错）。该值依赖的短路行为是 Stage 0 的既定
 > 语义（实测锚定于 negative_vm_tests 语义边界注记），Stage 1 与类型
 > 检查器联动时统一收紧为全操作数静态检查（TD-016）。
-| 序对（4） | `cons` / `car` / `cdr` / `list` | VM 操作码（MAKE_PAIR/CAR/CDR）+ driver 注册（`list` 变长参数右折叠 cons） |
+| 序对（4） | `cons` / `car` / `cdr` / `list` | VM 操作码（MAKE_PAIR/CAR/CDR）+ driver 注册（`list` 变长参数右折叠 cons；空参 → nil 值形态，r5） |
+| 列表操作（8，r5） | `length` / `append` / `reverse` / `list-ref` / `list-tail` / `member` / `assoc` / `last-pair` | driver 注册（堆序对链遍历；nil 终结契约——improper 拒绝，除 `append` 末参原样与 `member` 首匹配；`member`/`assoc` 按 `eq?` 查找，命中返回子表/点对、未命中 false） |
 | 谓词（6） | `null?` / `pair?` / `int?` / `bool?` / `procedure?` / `eq?` | VM 操作码（IS_NULL/IS_PAIR/IS_INT/IS_BOOL/IS_PROCEDURE）+ EQ（`eq?` 恰 2 参不可链；即时值按值、堆值按引用） |
 | 逻辑（1） | `not` | VM 操作码（NOT，仅 Bool） |
 | I/O（2） | `print` / `read-line` | driver 注册的外部函数（语言层 → 通道层 read_line_stdin/write_line_stdout；`read-line` 元数不校验为已存档语义发现） |
 | 字符串（1） | `str-append` | driver 注册的外部函数（恰 2 参字符串拼接） |
+| 字符串处理（10，r5） | `str-length` / `str-substring` / `str-index-of` / `str-contains?` / `str-prefix?` / `str-suffix?` / `str-upcase` / `str-downcase` / `string->symbol` / `symbol->string` | driver 注册（字符索引 Unicode 安全——非字节；`str-index-of` 未找到 -1；大小写 Unicode 变换；符号互转依赖 TD-002 符号值） |
+| 基本 I/O（6，r5） | `newline` / `write-string` / `read-int` / `read-num` / `error` / `assert-eq?` | driver 注册（`newline` 0 参；`write-string` 无换行——通道层 write_stdout（r5 新增）；`read-int`/`read-num` 行解析（失败结构化报错，EOF → nil）；`error` ≥1 参消息部件（str 原文、其余类型名）；`assert-eq?` 按 `eq?` 断言） |
 
 > **表面名与通道名的区分**（v5.2 澄清）：语言层用连字符命名（`read-line`/`str-append`——与 kerf 标识符规则一致）；通道层用 Rust snake_case（`read_line_stdin`/`write_line_stdout`）；谓词是 `null?`（非 `nil?`）。该清单为 Stage 0 的**最小骨架**：仅保证自举与测试所需（同 [12-路线图 §1.1](./12-roadmap.md) 里程碑验证清单的要求）；标准库的完整生长（列表操作、字符串处理、基本 I/O 的库化）是 Stage 1 → Stage 2 的阶段切换信号之一（见 [07-自举策略 §3.3](./07-bootstrap-strategy.md)）。完整清单以 `kerf-driver` 实现为准（δ 函数表）。`and`/`or`/`when`/`unless` 等是**语法糖**（[01-核心原语 §2](./01-core-forms.md) 推导表，展开期处理），不在内置函数表内。
 

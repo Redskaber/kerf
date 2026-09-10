@@ -224,6 +224,7 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
                 LiteralValue::Int(v) => ctx.intern_const(BcConst::Int(*v)),
                 LiteralValue::Float(v) => ctx.intern_const(BcConst::Float(*v)),
                 LiteralValue::Str(s) => ctx.intern_const(BcConst::Str(s.clone())),
+                LiteralValue::Symbol(s) => ctx.intern_const(BcConst::SymLit(s.clone())),
                 LiteralValue::Bool(b) => {
                     ctx.emit(if *b { Op::PushTrue } else { Op::PushFalse }, span);
                     return Ok(());
@@ -369,6 +370,11 @@ fn compile_literal_value(
 ) -> Result<(), CompileError> {
     match v {
         LiteralValue::Pair(a, b) => compile_literal_pair(ctx, a, b, span),
+        LiteralValue::Symbol(s) => {
+            let idx = ctx.intern_const(BcConst::SymLit(s.clone()));
+            ctx.emit(Op::PushConst(idx), span);
+            Ok(())
+        }
         other => compile_expr(
             ctx,
             &CoreExpr::Literal {

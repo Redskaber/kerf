@@ -26,6 +26,8 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Str(Rc<str>),
+    /// 符号值（quote 符号 datum 的运行时形态——TD-002；按名相等）。
+    Symbol(Rc<str>),
     /// 堆引用：序对 (a . b)（kerf-runtime GC 管理）。
     Pair(GcRef),
     /// 闭包。
@@ -44,6 +46,7 @@ impl Value {
             Value::Int(_) => "int",
             Value::Float(_) => "float",
             Value::Str(_) => "str",
+            Value::Symbol(_) => "symbol",
             Value::Pair(_) => "pair",
             Value::Closure(_) => "procedure",
             Value::Builtin(_) => "builtin-procedure",
@@ -92,6 +95,7 @@ impl Value {
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Str(a), Value::Str(b)) => a == b,
+            (Value::Symbol(a), Value::Symbol(b)) => a == b,
             (Value::Pair(a), Value::Pair(b)) => a == b,
             (Value::Closure(a), Value::Closure(b)) => Rc::ptr_eq(a, b),
             (Value::Builtin(a), Value::Builtin(b)) => Rc::ptr_eq(a, b),
@@ -166,6 +170,7 @@ pub fn render_value(v: &Value, heap: &Heap) -> String {
             }
         }
         Value::Str(s) => s.to_string(),
+        Value::Symbol(s) => s.to_string(),
         Value::Pair(r) => render_pair(*r, heap, &mut HashMap::new()),
         Value::Closure(_) => "#<procedure>".to_string(),
         Value::Builtin(b) => format!("#<builtin:{}>", b.name),
@@ -225,6 +230,7 @@ fn slot_terminal(r: GcRef, heap: &Heap) -> Option<String> {
         Some(kerf_runtime::HeapObj::Float(v)) => Some(v.to_string()),
         Some(kerf_runtime::HeapObj::Bool(b)) => Some(b.to_string()),
         Some(kerf_runtime::HeapObj::Str(s)) => Some(s.to_string()),
+        Some(kerf_runtime::HeapObj::Symbol(s)) => Some(s.to_string()),
         _ => None,
     }
 }
@@ -237,6 +243,7 @@ fn render_slot(r: GcRef, heap: &Heap) -> String {
         Some(kerf_runtime::HeapObj::Int(v)) => v.to_string(),
         Some(kerf_runtime::HeapObj::Float(v)) => v.to_string(),
         Some(kerf_runtime::HeapObj::Bool(b)) => b.to_string(),
+        Some(kerf_runtime::HeapObj::Symbol(s)) => s.to_string(),
         Some(kerf_runtime::HeapObj::Nil) => "nil".to_string(),
         None => "#<invalid-slot>".to_string(),
     }

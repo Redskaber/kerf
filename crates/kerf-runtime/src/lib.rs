@@ -27,4 +27,4 @@ pub mod io;
 pub use gc::{mark_sweep_cycle, RootSet};
 pub use heap::GcStats;
 pub use heap::{BoxedInput, GcRef, Heap, HeapObj, ValueSlot};
-pub use io::{read_line_stdin, write_line_stdout, RuntimeError};
+pub use io::{read_line_stdin, write_line_stdout, write_stdout, RuntimeError};

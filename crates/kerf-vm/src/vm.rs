@@ -607,6 +607,7 @@ fn const_to_value(c: &BcConst) -> Value {
         BcConst::Str(s) => Value::Str(s.clone()),
         BcConst::Bool(b) => Value::Bool(*b),
         BcConst::Nil => Value::Nil,
+        BcConst::SymLit(s) => Value::Symbol(s.clone()),
         BcConst::Symbol(_) => Value::Nil, // 符号常量仅作全局名索引（不会压栈）
     }
 }
@@ -617,6 +618,7 @@ pub fn box_value(v: &Value, heap: &mut Heap) -> GcRef {
     match v {
         Value::Pair(r) => *r,
         Value::Str(s) => heap.alloc_boxed(BoxedInput::Str(s.clone())),
+        Value::Symbol(s) => heap.alloc_symbol(s.clone()),
         Value::Int(i) => heap.alloc_boxed(BoxedInput::Int(*i)),
         Value::Float(f) => heap.alloc_boxed(BoxedInput::Float(*f)),
         Value::Bool(b) => heap.alloc_boxed(BoxedInput::Bool(*b)),
@@ -640,6 +642,7 @@ pub fn unbox_slot(r: GcRef, heap: &Heap) -> Value {
         Some(ValueSlot::Int(i)) => Value::Int(i),
         Some(ValueSlot::Float(f)) => Value::Float(f),
         Some(ValueSlot::Bool(b)) => Value::Bool(b),
+        Some(ValueSlot::Symbol(s)) => Value::Symbol(s),
         Some(ValueSlot::Nil) => Value::Nil,
         None => Value::Nil,
     }

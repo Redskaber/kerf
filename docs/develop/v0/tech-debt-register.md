@@ -11,7 +11,7 @@
 | TD ID | 标题 | 等级 | 状态 | 目标阶段 |
 |-------|------|------|------|---------|
 | TD-001 | （编号断档——不可考） | — | 断档存档 | — |
-| TD-002 | quote 符号/向量值类型缺失 | P3 | 开放 | Stage 1 |
+| TD-002 | quote 符号/向量值类型缺失 | P3 | **已解决（符号——r5）** | Stage 1 |
 | TD-003 | 图 IR 复合节点 CSE 共享 | P3 | 开放 | Stage 2 |
 | TD-004 | 作用域集解析（Racket 式）替换名称基解析 | P2 | 开放 | Stage 1 |
 | TD-005 | syntax-parse 级宏组合 | P3 | 开放 | Stage 2 |
@@ -37,12 +37,23 @@
 （禁止复用），以满足 §6.2 规则 2「大阶段末全审须闭环『已解决项确实消失』」的审计要求；
 后续新增债一律从 TD-015 起编。
 
-### TD-002 quote 符号/向量值类型缺失
+### TD-002 quote 符号/向量值类型缺失（r5 符号部分解决）
 - **描述**：`LiteralValue` 无 Symbol/Vector 变体——`(quote sym)` 显式报错
 - **根因**：Stage 0 值模型最小化（§3.2 literal_value 定义如此）
 - **修复方案**：Stage 1 增加 `Value::Symbol`；quote 符号 datum → 符号值
-- **影响范围**：expander::datum_to_value / vm::value
-- **代码锚**：kerf-core（literal_value 定义）；负测锚点：negative_expander_tests::quote_misuse
+- **r5 执行注记**（2026-09-10，批次 B Task 22-a）：**符号部分已解决**——
+  全链落地：`LiteralValue::Symbol(Rc<str>)`（存剥离卫生后缀的基名，
+  Racket 语义近似——与 resolve_hygiene_fallbacks 同一剥离口径）/
+  `Value::Symbol` + eq? 按名相等 + `BcConst::SymLit`（与全局名索引
+  `Symbol` 变体严格区分，§11 接口隔离）/ `HeapObj::Symbol`（符号入序对）
+  / `ValueSlot::Symbol`（car/cdr 往返）；双路径（VM const_to_value +
+  eval eval_literal）同步覆盖；宏模板内 quote 符号的卫生后缀在 datum
+  层剥离（实测验证）。**向量部分仍开放**（显式报错，后续阶段）；
+  正负测试 +5 函数（expander 2 / vm 3）+ 负例 6 case（符号值语义误用
+  ——算术/条件/序对/比较位置），实跑校准消息。
+- **影响范围**：expander::datum_to_value / vm::value / runtime::heap /
+  compiler::bytecode（r5 实际触点比登记时扩大——含堆装箱三处）
+- **代码锚**：kerf-core（literal_value 定义）；负测锚点：negative_expander_tests::quote_misuse（向量 case 保留）
 - **优先级依据**：符号值影响宏编程体验（P3——不影响语义验证闭环）
 
 ### TD-003 图 IR 复合节点 CSE 共享

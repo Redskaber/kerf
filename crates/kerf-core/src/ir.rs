@@ -69,6 +69,8 @@ pub enum LiteralKey {
     Nil,
     /// 浮点键：按位展开（f64 不实现 Eq/Hash，Stage 0 以位模式为键）。
     FloatBits(u64),
+    /// 符号键（按名去重——TD-002）。
+    Symbol(Rc<str>),
 }
 
 impl LiteralKey {
@@ -80,6 +82,7 @@ impl LiteralKey {
             LiteralValue::Str(s) => LiteralKey::Str(s.clone()),
             LiteralValue::Bool(b) => LiteralKey::Bool(*b),
             LiteralValue::Nil => LiteralKey::Nil,
+            LiteralValue::Symbol(s) => LiteralKey::Symbol(s.clone()),
             LiteralValue::Pair(..) => LiteralKey::Nil,
         }
     }

@@ -72,7 +72,10 @@ pub fn register_globals(table: &mut SymbolTable) -> HashMap<Symbol, Value> {
     defs.push((
         "list",
         BuiltinFn::new("list", |heap, args| {
-            // 右折叠构造
+            // 右折叠构造；空参 → nil 值形态（与 '() 一致——空表即 nil）
+            if args.is_empty() {
+                return Ok(Value::Nil);
+            }
             let mut acc = heap.alloc_boxed(BoxedInput::Nil);
             for a in args.iter().rev() {
                 let elem = box_value(a, heap);
@@ -169,6 +172,624 @@ pub fn register_globals(table: &mut SymbolTable) -> HashMap<Symbol, Value> {
                     Ok(Value::Str(Rc::from(format!("{}{}", a, b).as_str())))
                 }
                 _ => Err(RuntimeError::new("str-append 需要 2 个字符串")),
+            }
+        }),
+    ));
+
+    // ------------------------------------------------------------------
+    // 标准库最小集扩展（r5，批次 B——07 §3.3 阶段门条件 3：
+    // 列表操作/字符串处理/基本 I/O 各 ≥8 函数）
+    // ------------------------------------------------------------------
+
+    // —— 列表操作（8）——
+    defs.push((
+        "length",
+        BuiltinFn::new("length", |heap, args| {
+            one_arg("length", &args)?;
+            let mut n: u64 = 0;
+            let mut cur = args[0].clone();
+            loop {
+                match cur {
+                    Value::Nil => return Ok(Value::Int(n as i64)),
+                    Value::Pair(r) => match heap.get_pair(r) {
+                        Some((_, cdr)) => {
+                            n += 1;
+                            cur = unbox_slot(cdr, heap);
+                        }
+                        None => {
+                            return Err(RuntimeError::new("length 应用于非序对堆槽"));
+                        }
+                    },
+                    other => {
+                        return Err(RuntimeError::new(format!(
+                            "length 需要 list（nil 终结的序对链），实际 {}",
+                            other.type_name()
+                        )))
+                    }
+                }
+            }
+        }),
+    ));
+    defs.push((
+        "append",
+        BuiltinFn::new("append", |heap, args| {
+            // 可变参：0 参 → nil；末参原样（允许 improper）；前参必须 list
+            if args.is_empty() {
+                return Ok(Value::Nil);
+            }
+            let last = args[args.len() - 1].clone();
+            if args.len() == 1 {
+                return Ok(last);
+            }
+            // 收集前 n-1 个链的元素（扁平化到向量——每参必须 nil 终结）
+            let mut elems: Vec<Value> = Vec::new();
+            for (i, a) in args[..args.len() - 1].iter().enumerate() {
+                let mut cur = a.clone();
+                loop {
+                    match cur {
+                        Value::Nil => break,
+                        Value::Pair(r) => match heap.get_pair(r) {
+                            Some((car, cdr)) => {
+                                elems.push(unbox_slot(car, heap));
+                                cur = unbox_slot(cdr, heap);
+                            }
+                            None => {
+                                return Err(RuntimeError::new("append 应用于非序对堆槽"));
+                            }
+                        },
+                        other => {
+                            return Err(RuntimeError::new(format!(
+                                "append 第 {} 参需要 list，实际 {}",
+                                i + 1,
+                                other.type_name()
+                            )))
+                        }
+                    }
+                }
+            }
+            // 右折叠重建（新链——不共享前参结构；末参共享尾部）
+            let mut acc = box_value(&last, heap);
+            for e in elems.iter().rev() {
+                let elem = box_value(e, heap);
+                acc = heap.alloc_pair(elem, acc);
+            }
+            Ok(Value::Pair(acc))
+        }),
+    ));
+    defs.push((
+        "reverse",
+        BuiltinFn::new("reverse", |heap, args| {
+            one_arg("reverse", &args)?;
+            // 空表恒等返回（nil 值形态——不包装为序对）
+            if matches!(args[0], Value::Nil) {
+                return Ok(Value::Nil);
+            }
+            let mut acc = heap.alloc_boxed(BoxedInput::Nil);
+            let mut cur = args[0].clone();
+            loop {
+                match cur {
+                    Value::Nil => return Ok(Value::Pair(acc)),
+                    Value::Pair(r) => match heap.get_pair(r) {
+                        Some((car, cdr)) => {
+                            let elem = unbox_slot(car, heap);
+                            let elem_r = box_value(&elem, heap);
+                            acc = heap.alloc_pair(elem_r, acc);
+                            cur = unbox_slot(cdr, heap);
+                        }
+                        None => {
+                            return Err(RuntimeError::new("reverse 应用于非序对堆槽"));
+                        }
+                    },
+                    other => {
+                        return Err(RuntimeError::new(format!(
+                            "reverse 需要 list，实际 {}",
+                            other.type_name()
+                        )))
+                    }
+                }
+            }
+        }),
+    ));
+    defs.push((
+        "list-ref",
+        BuiltinFn::new("list-ref", |heap, args| {
+            two_args("list-ref", &args)?;
+            let n = match &args[1] {
+                Value::Int(i) if *i >= 0 => *i as u64,
+                Value::Int(i) => {
+                    return Err(RuntimeError::new(format!(
+                        "list-ref 索引需要非负整数，实际 {}",
+                        i
+                    )))
+                }
+                other => {
+                    return Err(RuntimeError::new(format!(
+                        "list-ref 索引需要 int，实际 {}",
+                        other.type_name()
+                    )))
+                }
+            };
+            let mut cur = args[0].clone();
+            let mut k = n;
+            loop {
+                match cur {
+                    Value::Pair(r) => match heap.get_pair(r) {
+                        Some((car, cdr)) => {
+                            if k == 0 {
+                                return Ok(unbox_slot(car, heap));
+                            }
+                            k -= 1;
+                            cur = unbox_slot(cdr, heap);
+                        }
+                        None => {
+                            return Err(RuntimeError::new("list-ref 应用于非序对堆槽"));
+                        }
+                    },
+                    _ => {
+                        return Err(RuntimeError::new(format!(
+                            "list-ref 索引 {} 超出列表范围",
+                            n
+                        )))
+                    }
+                }
+            }
+        }),
+    ));
+    defs.push((
+        "list-tail",
+        BuiltinFn::new("list-tail", |heap, args| {
+            two_args("list-tail", &args)?;
+            let n = match &args[1] {
+                Value::Int(i) if *i >= 0 => *i as u64,
+                Value::Int(i) => {
+                    return Err(RuntimeError::new(format!(
+                        "list-tail 起始索引需要非负整数，实际 {}",
+                        i
+                    )))
+                }
+                other => {
+                    return Err(RuntimeError::new(format!(
+                        "list-tail 索引需要 int，实际 {}",
+                        other.type_name()
+                    )))
+                }
+            };
+            let mut cur = args[0].clone();
+            let mut k = n;
+            // 每步校验形态（k=0 时非 list 输入也拒绝——类型严格，
+            // Racket contract 语义：list-tail 输入必须是 list）
+            loop {
+                match cur {
+                    Value::Nil => {
+                        if k == 0 {
+                            return Ok(Value::Nil);
+                        }
+                        return Err(RuntimeError::new(format!(
+                            "list-tail 索引 {} 超出列表范围",
+                            n
+                        )));
+                    }
+                    Value::Pair(r) => {
+                        if k == 0 {
+                            return Ok(Value::Pair(r));
+                        }
+                        match heap.get_pair(r) {
+                            Some((_, cdr)) => {
+                                k -= 1;
+                                cur = unbox_slot(cdr, heap);
+                            }
+                            None => {
+                                return Err(RuntimeError::new("list-tail 应用于非序对堆槽"));
+                            }
+                        }
+                    }
+                    other => {
+                        return Err(RuntimeError::new(format!(
+                            "list-tail 需要 list，实际 {}",
+                            other.type_name()
+                        )))
+                    }
+                }
+            }
+        }),
+    ));
+    defs.push((
+        "member",
+        BuiltinFn::new("member", |heap, args| {
+            two_args("member", &args)?;
+            // 按 eq? 逐元素查找；命中返回子表，未命中返回 false
+            let mut cur = args[1].clone();
+            loop {
+                match cur {
+                    Value::Nil => return Ok(Value::Bool(false)),
+                    Value::Pair(r) => match heap.get_pair(r) {
+                        Some((car, cdr)) => {
+                            let elem = unbox_slot(car, heap);
+                            if elem.eq_value(&args[0]) {
+                                return Ok(Value::Pair(r));
+                            }
+                            cur = unbox_slot(cdr, heap);
+                        }
+                        None => {
+                            return Err(RuntimeError::new("member 应用于非序对堆槽"));
+                        }
+                    },
+                    other => {
+                        return Err(RuntimeError::new(format!(
+                            "member 第二参需要 list，实际 {}",
+                            other.type_name()
+                        )))
+                    }
+                }
+            }
+        }),
+    ));
+    defs.push((
+        "assoc",
+        BuiltinFn::new("assoc", |heap, args| {
+            two_args("assoc", &args)?;
+            // 点对表按键 eq? 查找；命中返回该点对（键值对），未命中 false
+            let mut cur = args[1].clone();
+            loop {
+                match cur {
+                    Value::Nil => return Ok(Value::Bool(false)),
+                    Value::Pair(r) => match heap.get_pair(r) {
+                        Some((entry, cdr)) => {
+                            let entry_v = unbox_slot(entry, heap);
+                            match entry_v {
+                                Value::Pair(ep) => match heap.get_pair(ep) {
+                                    Some((key, _)) => {
+                                        let key_v = unbox_slot(key, heap);
+                                        if key_v.eq_value(&args[0]) {
+                                            return Ok(Value::Pair(ep));
+                                        }
+                                        cur = unbox_slot(cdr, heap);
+                                    }
+                                    None => {
+                                        return Err(RuntimeError::new(
+                                            "assoc 表项应应用于非序对堆槽",
+                                        ))
+                                    }
+                                },
+                                other => {
+                                    return Err(RuntimeError::new(format!(
+                                        "assoc 表项需要 pair，实际 {}",
+                                        other.type_name()
+                                    )))
+                                }
+                            }
+                        }
+                        None => {
+                            return Err(RuntimeError::new("assoc 应用于非序对堆槽"));
+                        }
+                    },
+                    other => {
+                        return Err(RuntimeError::new(format!(
+                            "assoc 第二参需要 list，实际 {}",
+                            other.type_name()
+                        )))
+                    }
+                }
+            }
+        }),
+    ));
+    defs.push((
+        "last-pair",
+        BuiltinFn::new("last-pair", |heap, args| {
+            one_arg("last-pair", &args)?;
+            let mut cur = args[0].clone();
+            loop {
+                match cur {
+                    Value::Pair(r) => match heap.get_pair(r) {
+                        Some((_, cdr)) => {
+                            let next = unbox_slot(cdr, heap);
+                            if matches!(next, Value::Nil) {
+                                return Ok(Value::Pair(r));
+                            }
+                            cur = next;
+                        }
+                        None => {
+                            return Err(RuntimeError::new("last-pair 应用于非序对堆槽"));
+                        }
+                    },
+                    Value::Nil => {
+                        return Err(RuntimeError::new("last-pair 需要非空 list"));
+                    }
+                    other => {
+                        return Err(RuntimeError::new(format!(
+                            "last-pair 需要 list，实际 {}",
+                            other.type_name()
+                        )))
+                    }
+                }
+            }
+        }),
+    ));
+
+    // —— 字符串处理（10，含 TD-002 联动互转）——
+    defs.push((
+        "str-length",
+        BuiltinFn::new("str-length", |_, args| {
+            one_arg("str-length", &args)?;
+            match &args[0] {
+                Value::Str(s) => Ok(Value::Int(s.chars().count() as i64)),
+                other => Err(RuntimeError::new(format!(
+                    "str-length 需要 str，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "str-substring",
+        BuiltinFn::new("str-substring", |_, args| {
+            if args.len() != 3 {
+                return Err(RuntimeError::new("str-substring 需要 3 个参数"));
+            }
+            let s = match &args[0] {
+                Value::Str(s) => s.clone(),
+                other => {
+                    return Err(RuntimeError::new(format!(
+                        "str-substring 需要 str，实际 {}",
+                        other.type_name()
+                    )))
+                }
+            };
+            let (start, end) = match (&args[1], &args[2]) {
+                (Value::Int(a), Value::Int(b)) => (*a, *b),
+                (a, _) => {
+                    return Err(RuntimeError::new(format!(
+                        "str-substring 索引需要 int，实际 {}",
+                        a.type_name()
+                    )))
+                }
+            };
+            let len = s.chars().count() as i64;
+            if start < 0 || end < start || end > len {
+                return Err(RuntimeError::new(format!(
+                    "str-substring 索引越界：{}..{}（长度 {}）",
+                    start, end, len
+                )));
+            }
+            let out: String = s
+                .chars()
+                .skip(start as usize)
+                .take((end - start) as usize)
+                .collect();
+            Ok(Value::Str(Rc::from(out.as_str())))
+        }),
+    ));
+    defs.push((
+        "str-index-of",
+        BuiltinFn::new("str-index-of", |_, args| {
+            two_args("str-index-of", &args)?;
+            match (&args[0], &args[1]) {
+                (Value::Str(s), Value::Str(sub)) => {
+                    // 字符索引（Unicode 安全：先字节查找再换算字符位）
+                    let idx = s
+                        .find(sub.as_ref())
+                        .map(|b| s[..b].chars().count() as i64)
+                        .unwrap_or(-1);
+                    Ok(Value::Int(idx))
+                }
+                (a, b) => Err(RuntimeError::new(format!(
+                    "str-index-of 两参都需要 str，实际 {} 与 {}",
+                    a.type_name(),
+                    b.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "str-contains?",
+        BuiltinFn::new("str-contains?", |_, args| {
+            two_args("str-contains?", &args)?;
+            match (&args[0], &args[1]) {
+                (Value::Str(s), Value::Str(sub)) => Ok(Value::Bool(s.contains(sub.as_ref()))),
+                (a, b) => Err(RuntimeError::new(format!(
+                    "str-contains? 两参都需要 str，实际 {} 与 {}",
+                    a.type_name(),
+                    b.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "str-prefix?",
+        BuiltinFn::new("str-prefix?", |_, args| {
+            two_args("str-prefix?", &args)?;
+            match (&args[0], &args[1]) {
+                (Value::Str(s), Value::Str(pre)) => Ok(Value::Bool(s.starts_with(pre.as_ref()))),
+                (a, b) => Err(RuntimeError::new(format!(
+                    "str-prefix? 两参都需要 str，实际 {} 与 {}",
+                    a.type_name(),
+                    b.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "str-suffix?",
+        BuiltinFn::new("str-suffix?", |_, args| {
+            two_args("str-suffix?", &args)?;
+            match (&args[0], &args[1]) {
+                (Value::Str(s), Value::Str(suf)) => Ok(Value::Bool(s.ends_with(suf.as_ref()))),
+                (a, b) => Err(RuntimeError::new(format!(
+                    "str-suffix? 两参都需要 str，实际 {} 与 {}",
+                    a.type_name(),
+                    b.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "str-upcase",
+        BuiltinFn::new("str-upcase", |_, args| {
+            one_arg("str-upcase", &args)?;
+            match &args[0] {
+                Value::Str(s) => {
+                    let out: String = s.chars().flat_map(char::to_uppercase).collect();
+                    Ok(Value::Str(Rc::from(out.as_str())))
+                }
+                other => Err(RuntimeError::new(format!(
+                    "str-upcase 需要 str，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "str-downcase",
+        BuiltinFn::new("str-downcase", |_, args| {
+            one_arg("str-downcase", &args)?;
+            match &args[0] {
+                Value::Str(s) => {
+                    let out: String = s.chars().flat_map(char::to_lowercase).collect();
+                    Ok(Value::Str(Rc::from(out.as_str())))
+                }
+                other => Err(RuntimeError::new(format!(
+                    "str-downcase 需要 str，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "string->symbol",
+        BuiltinFn::new("string->symbol", |_, args| {
+            one_arg("string->symbol", &args)?;
+            match &args[0] {
+                Value::Str(s) => Ok(Value::Symbol(s.clone())),
+                other => Err(RuntimeError::new(format!(
+                    "string->symbol 需要 str，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "symbol->string",
+        BuiltinFn::new("symbol->string", |_, args| {
+            one_arg("symbol->string", &args)?;
+            match &args[0] {
+                Value::Symbol(s) => Ok(Value::Str(s.clone())),
+                other => Err(RuntimeError::new(format!(
+                    "symbol->string 需要 symbol，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+
+    // —— 基本 I/O（6）——
+    defs.push((
+        "newline",
+        BuiltinFn::new("newline", |_, args| {
+            if !args.is_empty() {
+                return Err(RuntimeError::new(format!(
+                    "newline 需要 0 个参数，实际 {}",
+                    args.len()
+                )));
+            }
+            kerf_runtime::write_line_stdout("")?;
+            Ok(Value::Nil)
+        }),
+    ));
+    defs.push((
+        "write-string",
+        BuiltinFn::new("write-string", |_, args| {
+            one_arg("write-string", &args)?;
+            match &args[0] {
+                Value::Str(s) => {
+                    kerf_runtime::write_stdout(s)?;
+                    Ok(Value::Nil)
+                }
+                other => Err(RuntimeError::new(format!(
+                    "write-string 需要 str，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "read-int",
+        BuiltinFn::new("read-int", |_, args| {
+            if !args.is_empty() {
+                return Err(RuntimeError::new(format!(
+                    "read-int 需要 0 个参数，实际 {}",
+                    args.len()
+                )));
+            }
+            let line = kerf_runtime::read_line_stdin()?;
+            match line {
+                None => Ok(Value::Nil),
+                Some(s) => match s.trim().parse::<i64>() {
+                    Ok(v) => Ok(Value::Int(v)),
+                    Err(_) => Err(RuntimeError::new(format!(
+                        "read-int 解析失败：非整数字符串「{}」",
+                        s.trim()
+                    ))),
+                },
+            }
+        }),
+    ));
+    defs.push((
+        "read-num",
+        BuiltinFn::new("read-num", |_, args| {
+            if !args.is_empty() {
+                return Err(RuntimeError::new(format!(
+                    "read-num 需要 0 个参数，实际 {}",
+                    args.len()
+                )));
+            }
+            let line = kerf_runtime::read_line_stdin()?;
+            match line {
+                None => Ok(Value::Nil),
+                Some(s) => {
+                    let t = s.trim();
+                    if let Ok(v) = t.parse::<i64>() {
+                        return Ok(Value::Int(v));
+                    }
+                    match t.parse::<f64>() {
+                        Ok(v) => Ok(Value::Float(v)),
+                        Err(_) => Err(RuntimeError::new(format!(
+                            "read-num 解析失败：非数字字符串「{}」",
+                            t
+                        ))),
+                    }
+                }
+            }
+        }),
+    ));
+    defs.push((
+        "error",
+        BuiltinFn::new("error", |_, args| {
+            if args.is_empty() {
+                return Err(RuntimeError::new("error 需要 ≥1 个参数（错误消息）"));
+            }
+            let mut parts: Vec<String> = Vec::new();
+            for a in args {
+                // 消息部件：str 原文，其余渲染形式（符号名/数值）
+                match a {
+                    Value::Str(s) => parts.push(s.to_string()),
+                    other => parts.push(other.type_name().to_string()),
+                }
+            }
+            Err(RuntimeError::new(parts.join(" ")))
+        }),
+    ));
+    defs.push((
+        "assert-eq?",
+        BuiltinFn::new("assert-eq?", |heap, args| {
+            two_args("assert-eq?", &args)?;
+            if args[0].eq_value(&args[1]) {
+                Ok(Value::Bool(true))
+            } else {
+                Err(RuntimeError::new(format!(
+                    "assert-eq? 断言失败：{} ≠ {}",
+                    render_value(&args[0], heap),
+                    render_value(&args[1], heap)
+                )))
             }
         }),
     ));

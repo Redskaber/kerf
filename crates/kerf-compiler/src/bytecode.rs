@@ -27,6 +27,9 @@ pub enum BcConst {
     Nil,
     /// 符号（全局变量名按名解析：LOAD_GLOBAL/STORE_GLOBAL 的操作数）。
     Symbol(Symbol),
+    /// 符号字面量值（quote 符号 datum 的常量池形态——TD-002；
+    /// 与 `Symbol` 变体的全局名索引语义严格区分，§11 接口隔离）。
+    SymLit(Rc<str>),
 }
 
 impl Eq for BcConst {}
@@ -41,6 +44,7 @@ impl std::hash::Hash for BcConst {
             BcConst::Bool(b) => b.hash(state),
             BcConst::Nil => {}
             BcConst::Symbol(s) => s.hash(state),
+            BcConst::SymLit(s) => s.hash(state),
         }
     }
 }

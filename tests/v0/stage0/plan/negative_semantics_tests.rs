@@ -435,10 +435,13 @@ fn scope_closure_negatives() {
     expect_run_err("(define (f x) (+ x y)) (f 1)", "未绑定");
     // begin 内局部定义后引用另一未定义
     expect_run_err("(begin (define a 1) b)", "未绑定");
-    // quote 符号值类型（TD-002 边界——展开期显式拒绝）
-    let err = run_source("'x", "q.krf").expect_err("quote 符号应报 E0002");
-    assert_eq!(err.stage, Stage::Expand);
-    assert!(err.rendered.contains("quote 符号暂不支持"));
+    // TD-002 解除后符号 datum 为合法符号值——负向锚点转为值消费端：
+    // 符号值参与算术在两路径均报 E0004（双路径一致负例）
+    let vm_err = run_source("(+ 'x 1)", "q.krf").expect_err("符号算术应报错（VM）");
+    assert_eq!(vm_err.stage, Stage::Run);
+    assert!(vm_err.rendered.contains("+ 需要 int"));
+    let ev_err = eval_source("(+ 'x 1)", "q.krf").expect_err("符号算术应报错（eval）");
+    assert!(ev_err.rendered.contains("int"));
 }
 
 // ---------------------------------------------------------------------------

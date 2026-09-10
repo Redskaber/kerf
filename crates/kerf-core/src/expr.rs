@@ -28,6 +28,8 @@ pub enum LiteralValue {
     Str(Rc<str>),
     Bool(bool),
     Nil,
+    /// 符号值（quote 符号 datum——TD-002；存剥离卫生后缀的基名）。
+    Symbol(Rc<str>),
     Pair(Rc<LiteralValue>, Rc<LiteralValue>),
 }
 
@@ -46,6 +48,7 @@ impl LiteralValue {
             LiteralValue::Str(s) => format!("{:?}", s),
             LiteralValue::Bool(b) => b.to_string(),
             LiteralValue::Nil => "nil".to_string(),
+            LiteralValue::Symbol(s) => s.to_string(),
             LiteralValue::Pair(a, b) => {
                 // 经典 Scheme 列表打印：非平凡尾列表用点对表示
                 let mut parts = vec![render_elem(a)];

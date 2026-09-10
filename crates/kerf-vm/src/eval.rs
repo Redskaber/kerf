@@ -302,6 +302,7 @@ fn eval_literal(v: &LiteralValue, heap: &mut Heap, span: Span) -> Result<Value, 
         LiteralValue::Int(i) => Ok(Value::Int(*i)),
         LiteralValue::Float(f) => Ok(Value::Float(*f)),
         LiteralValue::Str(s) => Ok(Value::Str(s.clone())),
+        LiteralValue::Symbol(s) => Ok(Value::Symbol(s.clone())),
         LiteralValue::Bool(b) => Ok(Value::Bool(*b)),
         LiteralValue::Nil => Ok(Value::Nil),
         LiteralValue::Pair(car, cdr) => {

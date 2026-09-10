@@ -653,3 +653,185 @@ Stage Summary:
 - 复杂度发现升级遵循 §1.2.1（只升不降）；裁定依据引用 §2.3-11/
   §12/§11/§4.2
 - 本条目为规划修订记录（无代码变更）
+
+---
+Task ID: 21
+Agent: Super Z (main) — QA-A/REC-A
+Task: §3.2 终验全绿 + web 同步 + §19 打包 r4（Stage 1 批次 A 交付闭环）
+
+Work Log:
+- §3.2 六命令实测全绿（硬性门 1）：
+  (1) cargo clean ✅（5080 文件 782.4MiB）
+  (2) cargo build --release：0 警告 ✅
+  (3) cargo check --workspace --all-targets：0 errors / 0 warnings ✅
+  (4) cargo fmt --check：零 diff（修复 driver.rs 守护测试 1 处格式后达成）✅
+  (5) cargo clippy --workspace --all-targets -- -D warnings：0 ✅
+  (6) cargo test --release --workspace：**304 通过 / 0 失败 / 1 忽略** ✅
+      （297 基线 + 7 增量：TD-015 守护 1 + TD-007 单元 2 + 集成 4）
+- 审计集复跑（release）：41/41 PASS / XFAIL-WARN 0 / EXIT 0；§7.3.1
+  配比与七类覆盖全部满足
+- web 同步：roadmap Stage 1 →「进行中（批次 A 已交付）」+ 批次 A 三
+  MUV 要点；kerf-data 测试计数 297→304（r4 口径）；Stage 0 卡片
+  同步 304
+- Agent Browser 端到端自验证：
+  - 页面渲染：Stage 1 状态徽章 + 批次 A 文本 + trampoline 关键词 ✅
+  - Playground 执行：fib → 55（API）/ 宏链 (m (m (m 42))) → 42
+    （trampoline 语义经 web 全链路）/ 无限自指宏 → E0002 结构化
+    报错「宏展开深度超过上限 500」带 Span 定位（新上限生效实证）
+  - UI 输出渲染「⇒ 144」正常；console 零错误（仅 DevTools/HMR 日志）
+  - docs API 动态读取 03-macro-system TD-007 注记（v5.2 自动同步）
+  - 响应式 390×844 无 undefined
+- 文档对账回写：matrix.md（304 + 新套件 expansion_worklist 行）/
+  status.md（r4 头 + 计数）/ RELEASE_NOTES（r4 章节）/ data-flow.md
+  （TD-015 分流注记——lower 从主链改消费方旁路 + compile_front 快路径）
+- git commit：feat(stage1-batchA)——TD-015/012/007 偿还 + TD-004 重排
+- §19 打包 r4：kerf-stage1-v0.2.0-batchA-td015-td012-td007-trampoline-
+  304tests-r4.tar.gz（463,717 B 压缩 / 185 文件；exclude target/.git/
+  download）；**包内解压全 workspace 自举验证 304:0:1 与交付环境一致**
+
+Stage Summary:
+- Stage 1 批次 A 交付闭环：§3.2 全绿 + 审计集 + web 同步 + 自举
+  验证包 + git 提交（r4）
+- 遵循原则：§3.2（交付前实测——六命令逐条记录）、§7.3.1（审计集
+  release 复跑）、§19（打包 + 包内自举验证）、浏览器验证标准（非
+  "编译通过"即完成——Playground/渲染/响应式/console 四面验证）
+
+---
+Task ID: 22-a
+Agent: Super Z (main) — PM-A/PL-A 裁定 → DEV-A 实现 → QA-A 验收
+Task: TD-002 符号值偿还（Stage 1 批次 B 首个 MUV）——quote 符号 datum → Value::Symbol 全链
+
+Work Log:
+- 启动协议（§0）：读 sop.md §1 路由（写代码/写测试/写文档/交付验收四类
+  任务约束）→ 复杂度 L3 判定（TD-004 中枢类型变更在本批；本 MUV 实际
+  L2 触点 9 文件）→ worklog 摘 Task 20-d/21（无冲突）→ MUV 六字段拆分
+  （22-a TD-002 / 22-b TD-004）
+- 知识搜索（§2.3-11 先查现状禁猜测）：触点链实测定位——LiteralValue
+  （expr.rs）/ LiteralKey（ir.rs）/ BcConst::Symbol=全局名索引（bytecode.rs
+  ——与符号值语义冲突点：vm const_to_value 对 Symbol 返回 Nil「不会压栈」）/
+  Value 枚举（value.rs）/ HeapObj+BoxedInput+ValueSlot 三处装箱
+  （heap.rs——序对元素必须堆存，触点比登记册预估扩大）/ compile.rs
+  intern_const / eval.rs eval_literal / core_forms datum_to_value
+- 实现全链（9 文件）：
+  1. LiteralValue::Symbol(Rc<str>) + render 裸名（kerf-core/expr.rs）
+  2. LiteralKey::Symbol（ir.rs 字面量共享去重）
+  3. BcConst::SymLit(Rc<str>)（bytecode.rs——与全局名索引 Symbol 变体
+     语义严格区分，§11 接口隔离；Hash 手工 impl 补臂）
+  4. compile_literal Symbol → SymLit 常量 + compile_literal_value 同步
+     （compile.rs 222/365 两处）
+  5. Value::Symbol + type_name "symbol" + eq_value 按名相等 + render_value
+     + slot_terminal/render_slot（value.rs 5 处）
+  6. const_to_value SymLit → Value::Symbol + box_value alloc_symbol +
+     unbox_slot ValueSlot::Symbol（vm.rs 3 处）
+  7. HeapObj::Symbol + alloc_symbol + unbox + ValueSlot::Symbol（heap.rs）
+  8. eval_literal Symbol 分支（eval.rs——双路径同步）
+  9. datum_to_value：Symbol 分支基名剥离 $hyg$ 后缀（core_forms.rs——
+     Racket 语义近似：符号值名=用户可见名，与 driver resolve_hygiene_
+     fallbacks 同一口径；宏模板内符号被 instantiate_template 卫生重命名
+     → quote 后剥离回原名，实测验证）；Vector 分支保持显式报错（消息
+     去 TD-002 引用）
+- 卫生语义裁定（worklog 透明记录）：instantiate_template 对模板所有
+  非保留/非模式变量符号重命名（含 quote 内 datum——与 Racket 的
+  syntax->datum 纯数据语义有差）；剥离策略 = 名称基实现下的显式近似，
+  TD-004 scope-set 解析落地后 datum 层天然不受解析影响（剥离保持）
+- 测试（+5 函数 / +6 负例 case）：
+  - expander_tests：quote_symbol_becomes_symbol_literal（改自旧报错
+    负例——datum 正例 4 断言）+ quote_symbol_from_macro_template_strips_
+    hygiene（宏模板卫生剥离端到端）
+  - vm_tests：quote_symbol_value_semantics（quote/列表/混合/eq? 7 断言）+
+    symbol_construction_and_extraction（cons/list/car 往返）+
+    quote_symbol_dual_path_agreement（T1 双路径 5 断言）
+  - negative_vm_tests：symbol_value_misuse（6 case 算术/条件/序对/比较
+    ——消息实跑校准：+ 需要 int / 条件位置需要 bool，实际 symbol /
+    car 需要 pair / = 需要数值）
+  - expander.rs 单元：quote_symbol_is_explicit_error 改名
+    quote_symbol_becomes_symbol_literal（正例化）
+  - 负例迁移：negative_expander_tests::quote_misuse 6→4 case（符号
+    datum case 转正后负向锚点转向值消费端 VM 层）；negative_semantics_
+    tests::scope_closure_negatives 末 case 改双路径符号算术负例
+- 负例消息实测（§9.4.3 实跑校准纪律）：探针 11 程序实跑（含 VM 渲染
+  Str 不带引号 vs LiteralValue 带引号的分层差异——断言修正实录）
+- 回归：309:0:1（304 基线 + 5）；release 同口径；clippy -D 零警告；
+  fmt 零 diff（expand_quote 签名单行化 1 处）；审计集 41/41 EXIT 0
+- 文档回写：TD 登记 TD-002 → 已解决（符号部分，向量开放注记）/
+  capability-boundaries（quote 符号移入支持行 + 显式不支持改为 quote
+  向量）/ matrix.md 309 对账（负 case 489 + 审计 32 = 521，正负比
+  1:3.2 维持）/ status.md r5 / RELEASE_NOTES r5 章节
+
+Stage Summary:
+- TD-002 符号部分解决：quote 符号全链（expander datum→core→compiler
+  常量池→VM/eval 双路径→堆装箱→eq?/渲染）+ 卫生剥离语义锚定
+- 触点扩大教训：登记册「影响范围」低估（expander/vm 两处 → 实际 9
+  文件含 runtime 装箱三处）——序对元素必经堆路径，后续值类型变更
+  前先查 HeapObj 触点（登记时注记）
+- 遵循原则：§2.3-11（触点链先查禁猜——BcConst::Symbol 语义冲突因此
+  提前发现，避免常量池双义）、§11（SymLit 与全局名索引严格分立）、
+  §9.4.3（负例实跑校准 + 正负比维持）、§2.3-4（符号值语义误用显式
+  报错不静默）、§5.3（八项内循环退出——1-7 项全过，8 非阶段末轮）
+
+---
+Task ID: 22-c
+Agent: Super Z (main) — PM-A 裁定 → DEV-A 实现 → QA-A 验收
+Task: 标准库最小集（批次 B 第二 MUV）——列表/字符串/I/O 各 ≥8 函数（07 §3.3 阶段门条件 3）
+
+Work Log:
+- MUV 重排裁定（PM-A，§12 最优>最小 + plan §5 批次 B 序列）：
+  22-b（TD-004）按 20-d 重排裁定留批次 E 收口批次整体推进（≥800 LOC
+  中枢变更不可分割——绑定注入/VarRef 桥/解析切换一体交付才有意义，
+  单独注入 = 无消费死数据）；本 MUV 先行（独立于 scope 解析）
+- 高阶函数实现路径裁定（worklog 透明记录）：map/filter/foldl/for-each
+  推迟 B3「Reader kerf 重写」——用 kerf 源码 preamble 实现是 B3 自举
+  验证命题本体；三方案否决实录：P1 源码拼接（Span 诊断污染 = P1 缺陷）、
+  P3 跨程序全局合并（独立 SymbolTable id 不可比）、P5 Builtin 调闭包
+  （需 VM 递归 re-entry——架构越界 §11）
+- 实现 24 新函数（builtins.rs register_globals + io.rs write_stdout
+  通道层 + lib.rs 导出）：
+  - 列表 8（length/append/reverse/list-ref/list-tail/member/assoc/
+    last-pair）：堆序对链遍历模式（Pair → unbox cdr 递进）；nil 终结
+    契约；member/assoc 按 eq?（命中子表/点对，未命中 false）；append
+    末参原样（Racket improper 尾语义）
+  - 字符串 10：字符索引 Unicode 安全（str-length "héllo"=5；
+    str-substring chars().skip/take；str-index-of 字节 find→字符位
+    换算）；大小写 Unicode char 变换；string->symbol/symbol->string
+    TD-002 联动
+  - I/O 6：newline/write-string（通道层 write_stdout 新增）/
+    read-int/read-num（行解析 i64→f64 降级，失败结构化报错，
+    EOF→nil）/error（消息部件 str 原文+其余类型名）/assert-eq?
+    （eq? 断言失败渲染两值）
+- 实跑发现并修复 2 伴随缺陷（P1 级——测试先行发现的实现 bug）：
+  1. list/reverse 空参返回 (nil) 包装（堆 nil 槽被包成序对）——
+     改 nil 值形态与 '() 一致（空表即 nil 语义）
+  2. list-tail k=0 对非 list 输入静默返回原值——重写为每步形态
+     校验（Racket contract 严格：输入必须是 list）
+- 消息校准两轮（§9.4.3 实跑禁臆测）：批量探针 21+48 程序；
+  修正 str 四函数两参错误消息误导（第二参错误时报第一参类型 →
+  改两参类型并报）；类型消息模板多样本实测后矩阵推广
+- 测试 stdlib_tests.rs（15 函数 / 正例 59 断言 + 负例 172 case）：
+  - 正例三组（列表 16/字符串 17 含 Unicode/I-O 6）+ Racket 语义
+    边界注记（(append 1)=1 恒等、(member 1 (cons 1 2)) improper
+    首命中、(list-tail lst 0) 恒等）+ eq? 语义边界（堆值按引用
+    断言失败/无数值塔 1≠1.0/字符串按内容/符号按名）
+  - 负例矩阵四层（元数 25/类型 86 含全扫描/边界 12/语义）——
+    全局正负比 1:3.1 维持（§9.4.3 门限）
+  - 双路径一致 14 断言（T1）
+- 负例探针校准实录：(append '() '() 5) 期望末参报错实测 Ok——
+  末参原样是设计语义（末参 improper 允许），测试改四参中间位
+  （负例「期望报错实际 Ok」的探针自我纠错——写测试前先实测的
+  流程价值实证）
+- 回归：324:0:1（304 基线 + 20）；release 同口径；clippy -D
+  零警告（修 unused ty 1 处）；fmt 零 diff；审计集 41/41 EXIT 0
+- 文档回写：09-stdlib v5.3（24→48 项清单 + 高阶函数 B3 推迟
+  注记）/ capability-boundaries（48 内置）/ matrix 324 对账 +
+  stdlib 行/ status r5（+20）/ RELEASE_NOTES r5 修正结构 /
+  tests/v0/stage1/plan.md + plan/stdlib.md 新建（§9.2 双向印证）
+
+Stage Summary:
+- 阶段门条件 3（07 §3.3「标准库已包含：列表操作、字符串处理、
+  基本 I/O」）的 Stage 1 最小集交付：48 内置函数
+- 2 项实现缺陷经实跑发现即修（空表包装形态/list-tail 静默通过
+  ——「报错>静默」§2.3-4 的实证）；负例矩阵四层维持全局 ≥1:3
+- 遵循原则：§12（高阶函数 B3 时序裁定——最优>最小的时间维度）、
+  §2.3-4（list-tail 类型严格）、§9.4.3（172 负 case + 消息全实跑
+  校准 + 正负比维持）、§8.4.6（write_stdout 落 kerf-runtime 通道层
+  ——语言层 kerf-driver 注册的双层表面架构一致性）、§11（Builtin
+  无 VM re-entry 的边界尊重——高阶函数不走 builtins 通道）

@@ -29,6 +29,13 @@ pub fn write_line_stdout(s: &str) -> Result<(), RuntimeError> {
     writeln!(out, "{}", s).map_err(|e| RuntimeError::new(format!("stdout 写入失败：{}", e)))
 }
 
+/// 写字符串到标准输出（无换行——`write-string` 的通道层载体，r5 标准库）。
+pub fn write_stdout(s: &str) -> Result<(), RuntimeError> {
+    use std::io::Write;
+    let mut out = std::io::stdout();
+    write!(out, "{}", s).map_err(|e| RuntimeError::new(format!("stdout 写入失败：{}", e)))
+}
+
 /// 从标准输入读一行（EOF 返回 None）。
 pub fn read_line_stdin() -> Result<Option<String>, RuntimeError> {
     use std::io::BufRead;

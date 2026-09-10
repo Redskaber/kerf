@@ -481,10 +481,13 @@ mod tests {
     }
 
     #[test]
-    fn quote_symbol_is_explicit_error() {
+    fn quote_symbol_becomes_symbol_literal() {
+        // TD-002 解除：符号 datum → 符号字面量（卫生后缀剥离）
         let mut c = ctx();
-        let err = expand_src("(quote sym)", &mut c).unwrap_err();
-        assert!(err.message.contains("TD-002"));
+        let out = expand_src("(quote sym)", &mut c).unwrap();
+        assert_eq!(render(&out, &c)[0], "sym");
+        let out2 = expand_src("'sym", &mut c).unwrap();
+        assert_eq!(render(&out2, &c)[0], "sym");
     }
 
     #[test]

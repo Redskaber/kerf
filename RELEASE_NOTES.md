@@ -155,3 +155,62 @@ Gate R2 门审查复审（审计集就位后按 §7.3 重跑）→ §6.3 外循�
 - 审计集 41/41 复跑 EXIT 0；新增集成套件 expansion_worklist_tests（4 例）
 - SOP 文件更名：`stage-committee-process.md` → `sop.md`（引用同步 3 处）
 - worklog Task 18-21 全记录；lang-design 03-macro-system TD-007 注记回写
+
+## v0.1.0-r5（2026-09-10）——Stage 1 批次 B：TD-002 符号值 + 标准库最小集
+
+**SOP 流程**：批次 B 按 plan.md §5 序列推进；MUV 22-a（TD-002）与
+MUV 22-c（标准库最小集）各走完整内循环（22-b TD-004 按重排裁定留批次 E 收口批次整体推进）。
+
+### 交付（2 MUV）
+
+- **TD-002 符号部分已解决**：`(quote sym)` / `'sym` → 符号值——全链落地：
+  - `LiteralValue::Symbol(Rc<str>)`（kerf-core；存剥离卫生后缀的基名，
+    Racket 语义近似——与 resolve_hygiene_fallbacks 同一 $hyg$ 剥离口径）
+  - `Value::Symbol`（kerf-vm）+ eq? 按名相等 + type_name "symbol"
+    + render（裸名）/ 序对渲染（slot_terminal/render_slot）
+  - `BcConst::SymLit`（kerf-compiler 常量池；与全局名索引 `Symbol`
+    变体语义严格区分——§11 接口隔离）
+  - `HeapObj::Symbol` / `ValueSlot::Symbol` / `Heap::alloc_symbol`
+    （kerf-runtime；符号入序对 + car/cdr 往返）
+  - 双路径同步：VM `const_to_value` 与 eval `eval_literal`；
+    宏模板内 quote 符号卫生后缀 datum 层剥离（实测验证）
+- **向量 datum 仍显式报错**（TD-002 向量部分开放，后续阶段）
+
+### 质量口径
+
+- §3.2 全绿：build --release 0 警告 / fmt 零 diff / clippy -D warnings
+  零警告 / test --release **324:0:1**（304 基线 + 20：TD-002 5 +
+  stdlib 15）/ 审计集 41/41 复跑 EXIT 0
+- 负向锚点迁移：符号 datum 报错负例 → 符号值语义负例（negative_vm
+  symbol_value_misuse 6 case 实跑校准：算术/条件/序对/比较位置）；
+  全局正负比 1:3.1 维持（stdlib 负例 172 case 三维矩阵）
+
+### 追加交付（MUV 22-c：标准库最小集）
+
+- **24 项新内置函数**（48 项总量；07 §3.3 阶段门条件 3：列表/字符串/I/O
+  各 ≥8——driver `register_globals` 注册，语言核心零内置原则不变）：
+  - 列表操作（8）：`length`/`append`/`reverse`/`list-ref`/`list-tail`/
+    `member`/`assoc`/`last-pair`——堆序对链遍历，nil 终结契约；
+    `member`/`assoc` 按 `eq?` 查找
+  - 字符串处理（10）：`str-length`/`str-substring`/`str-index-of`/
+    `str-contains?`/`str-prefix?`/`str-suffix?`/`str-upcase`/
+    `str-downcase`/`string->symbol`/`symbol->string`——字符索引
+    Unicode 安全（`str-length "héllo"` = 5）；符号互转联动 TD-002
+  - 基本 I/O（6）：`newline`/`write-string`（通道层 `write_stdout` 新增）/
+    `read-int`/`read-num`（行解析，失败结构化报错）`/`error`/`assert-eq?`
+- **高阶函数（map/filter/foldl/for-each）显式推迟 B3**：用 kerf 源码
+  preamble 实现是 B3「Reader kerf 重写」的自举验证命题本体（§12
+  最优>最小：Rust 抢实现移除 B3 验证内容；源码拼接方案的 Span 污染
+  为真实 P1 缺陷，worklog 22-c 记录裁定依据）
+- **修复伴随缺陷 2 项**（std 函数实跑发现）：`list`/`reverse` 空参
+  曾返回 `(nil)` 包装形态（堆 nil 槽包成序对）——改 nil 值形态与 `'()`
+  一致；`list-tail` k=0 曾对非 list 输入静默返回（Racket contract
+  严格语义：每步形态校验）
+- 测试：stdlib_tests 15 函数（正例 59 断言 + 负例 172 case——元数/
+  类型/边界三维矩阵 + 类型全扫描）；全局正负比 1:3.1 维持
+
+### 文档回写（合并）
+
+- 09-stdlib v5.3（48 项清单 + 高阶函数 B3 推迟注记）/ capability-
+  boundaries（48 内置）/ matrix 324 对账（stdlib 15 函数 172 负 case）/
+  status r5 / tests/v0/stage1/plan.md + plan/stdlib.md 新建

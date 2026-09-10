@@ -214,3 +214,43 @@ fn app_evaluation_order_fn_first_dual_path() {
     assert!(dual_path_agrees("((lambda (x) (* x x)) 6)"));
     assert!(dual_path_agrees("(define (f a b) (+ a b)) (f 1 2)"));
 }
+
+// ---------------------------------------------------------------------------
+// TD-002 符号值（quote 符号 datum → Value::Symbol）：VM 语义 + 双路径
+// ---------------------------------------------------------------------------
+
+/// 符号值基础语义：quote 符号 / 符号列表 / 混合列表 / eq? 按名相等。
+#[test]
+fn quote_symbol_value_semantics() {
+    assert_eq!(common::run_rendered("(quote sym)"), "sym");
+    assert_eq!(common::run_rendered("'sym"), "sym");
+    // 符号列表（符号入堆序对——HeapObj::Symbol 槽位形态）
+    assert_eq!(common::run_rendered("'(a b c)"), "(a b c)");
+    // 混合 datum 列表（VM 渲染层 Str 不带引号——render_value 语义）
+    assert_eq!(common::run_rendered("'(a 1 \"s\")"), "(a 1 s)");
+    // eq? 按名相等（值语义）
+    assert_eq!(common::run_rendered("(eq? 'a 'a)"), "true");
+    assert_eq!(common::run_rendered("(eq? 'a 'b)"), "false");
+    // 符号 ≠ 字符串（类型严格）
+    assert_eq!(common::run_rendered("(eq? 'a \"a\")"), "false");
+}
+
+/// 符号值构造路径：cons/list 内置装箱符号 + car 取回。
+#[test]
+fn symbol_construction_and_extraction() {
+    assert_eq!(common::run_rendered("(cons 'a '(b))"), "(a b)");
+    assert_eq!(common::run_rendered("(list 'a 'b)"), "(a b)");
+    // car 取回符号（堆槽 → Value::Symbol 往返）
+    assert_eq!(common::run_rendered("(car '(a b))"), "a");
+    assert_eq!(common::run_rendered("(car (cdr '(a b)))"), "b");
+}
+
+/// 符号值双路径一致（T1：VM 与 eval 渲染等价——TD-002 触点双路径覆盖）。
+#[test]
+fn quote_symbol_dual_path_agreement() {
+    assert!(dual_path_agrees("'sym"));
+    assert!(dual_path_agrees("'(a b c)"));
+    assert!(dual_path_agrees("(eq? 'a 'a)"));
+    assert!(dual_path_agrees("(cons 'x '(y))"));
+    assert!(dual_path_agrees("(car '(a b))"));
+}

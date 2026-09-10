@@ -24,6 +24,8 @@ pub enum HeapObj {
     Float(f64),
     /// 装箱布尔。
     Bool(bool),
+    /// 装箱符号（quote 符号值的槽位形态——TD-002）。
+    Symbol(Rc<str>),
     /// 装箱 nil。
     Nil,
 }
@@ -36,6 +38,7 @@ impl std::fmt::Debug for HeapObj {
             HeapObj::Int(i) => write!(f, "Int({})", i),
             HeapObj::Float(v) => write!(f, "Float({})", v),
             HeapObj::Bool(b) => write!(f, "Bool({})", b),
+            HeapObj::Symbol(s) => write!(f, "Symbol({:?})", s),
             HeapObj::Nil => write!(f, "Nil"),
         }
     }
@@ -49,6 +52,7 @@ impl PartialEq for HeapObj {
             (HeapObj::Int(a), HeapObj::Int(b)) => a == b,
             (HeapObj::Float(a), HeapObj::Float(b)) => a == b,
             (HeapObj::Bool(a), HeapObj::Bool(b)) => a == b,
+            (HeapObj::Symbol(a), HeapObj::Symbol(b)) => a == b,
             (HeapObj::Nil, HeapObj::Nil) => true,
             // _ 臂理由：不同构造子的组合（跨类型装箱值）不相等——类型严格相等
             _ => false,
@@ -143,6 +147,11 @@ impl Heap {
         self.alloc_obj(HeapObj::Nil)
     }
 
+    /// 分配装箱符号（TD-002：quote 符号值入序对）。
+    pub fn alloc_symbol(&mut self, s: Rc<str>) -> GcRef {
+        self.alloc_obj(HeapObj::Symbol(s))
+    }
+
     /// 装箱即时值（闭包/内置不可装箱——显式限制，TD-010）。
     pub fn alloc_boxed(&mut self, v: BoxedInput) -> GcRef {
         match v {
@@ -163,6 +172,7 @@ impl Heap {
             HeapObj::Int(v) => ValueSlot::Int(*v),
             HeapObj::Float(v) => ValueSlot::Float(*v),
             HeapObj::Bool(v) => ValueSlot::Bool(*v),
+            HeapObj::Symbol(v) => ValueSlot::Symbol(v.clone()),
             HeapObj::Nil => ValueSlot::Nil,
         })
     }
@@ -314,6 +324,7 @@ pub enum ValueSlot {
     Int(i64),
     Float(f64),
     Bool(bool),
+    Symbol(Rc<str>),
     Nil,
 }
 

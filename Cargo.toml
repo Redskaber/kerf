@@ -94,3 +94,8 @@ path = "tests/v0/stage0/plan/negative_semantics_tests.rs"
 [[test]]
 name = "expansion_worklist_tests"
 path = "tests/v0/stage1/plan/expansion_worklist_tests.rs"
+
+# Stage 1 批次 B（r5：标准库最小集）
+[[test]]
+name = "stdlib_tests"
+path = "tests/v0/stage1/plan/stdlib_tests.rs"

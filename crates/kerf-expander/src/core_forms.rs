@@ -14,7 +14,7 @@
 use std::rc::Rc;
 
 use kerf_core::{CoreExpr, LiteralValue};
-use kerf_syntax::{Keyword, ScopeSet, Stx, StxDatum};
+use kerf_syntax::{Keyword, ScopeSet, Stx, StxDatum, SymbolTable};
 
 use crate::expander::{
     expand_form, expand_program, is_head_keyword, keyword_stx, make_setbang, nil_stx, ExpandCtxt,
@@ -36,7 +36,7 @@ pub(crate) fn expand_core_form(
         Keyword::Define => expand_define(stx, items, ctx),
         Keyword::Begin => expand_begin(stx, items, ctx, true),
         Keyword::Module => expand_module(stx, items, ctx),
-        Keyword::Quote => expand_quote(stx, items),
+        Keyword::Quote => expand_quote(stx, items, ctx),
         Keyword::Import | Keyword::Export => Err(ExpandError::new(
             "import/export 只能出现在 module 形式内部",
             stx.span,
@@ -376,37 +376,51 @@ fn expand_module(
     }))
 }
 
-fn expand_quote(stx: &Stx, items: &[Stx]) -> Result<Rc<CoreExpr>, ExpandError> {
+fn expand_quote(stx: &Stx, items: &[Stx], ctx: &ExpandCtxt) -> Result<Rc<CoreExpr>, ExpandError> {
     if items.len() != 2 {
         return Err(ExpandError::new("quote 形式：(quote 数据)", stx.span));
     }
-    let value = datum_to_value(&items[1])?;
+    let value = datum_to_value(&items[1], &ctx.table)?;
     Ok(Rc::new(CoreExpr::Literal {
         value,
         span: stx.span,
     }))
 }
 
-/// datum → 字面量值（quote 语义；符号 datum 显式报错——Symbol 值推迟，TD-002）。
-fn datum_to_value(stx: &Stx) -> Result<LiteralValue, ExpandError> {
+/// datum → 字面量值（quote 语义；符号 datum → 符号值（基名剥离卫生后缀）
+/// ——TD-002；向量 datum 仍显式报错）。
+fn datum_to_value(stx: &Stx, table: &SymbolTable) -> Result<LiteralValue, ExpandError> {
     match &stx.datum {
         StxDatum::Literal(l) => Ok(crate::expander::literal_from_stx(l)),
         StxDatum::List(items) => {
             // 列表 → 右折叠点对
             let mut acc = LiteralValue::Nil;
             for item in items.iter().rev() {
-                acc = LiteralValue::Pair(Rc::new(datum_to_value(item)?), Rc::new(acc));
+                acc = LiteralValue::Pair(Rc::new(datum_to_value(item, table)?), Rc::new(acc));
             }
             Ok(acc)
         }
-        StxDatum::Symbol(_) => Err(ExpandError::new(
-            "quote 符号暂不支持（Symbol 值类型推迟到 Stage 1，TD-002）",
-            stx.span,
-        )),
+        StxDatum::Symbol(sym) => {
+            // 符号值的名字 = 用户可见名：卫生重命名（$hyg$N 后缀）是实现细节，
+            // 剥离后给出 Racket 语义近似（scope-set 解析落地前的显式近似，
+            // 与 driver::resolve_hygiene_fallbacks 同一剥离口径）。
+            let name = sym.as_str(table);
+            let base = strip_hygiene_suffix(name);
+            Ok(LiteralValue::Symbol(Rc::from(base)))
+        }
         StxDatum::Vector(_) => Err(ExpandError::new(
-            "quote 向量暂不支持（Vector 值类型推迟，TD-002）",
+            "quote 向量暂不支持（Vector 值类型推迟，后续阶段）",
             stx.span,
         )),
+    }
+}
+
+/// 卫生后缀剥离（`name$hyg$N` → `name`；无后缀原样返回）。
+/// 与 driver 的全局解析回退同一口径（TD-004 的名称基显式近似）。
+fn strip_hygiene_suffix(name: &str) -> &str {
+    match name.rsplit_once("$hyg$") {
+        Some((base, _)) => base,
+        None => name,
     }
 }
 

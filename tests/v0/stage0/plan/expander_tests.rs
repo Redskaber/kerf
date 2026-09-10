@@ -162,11 +162,27 @@ fn quote_list_becomes_pairs() {
     assert_eq!(expand("(quote (1 2 3))").unwrap(), "(1 2 3)");
 }
 
-/// quote 符号显式错误（TD-002）。
+/// quote 符号值（TD-002 解除：符号 datum → 符号字面量）。
 #[test]
-fn quote_symbol_is_explicit_error() {
-    let err = expand("(quote sym)").unwrap_err();
-    assert!(err.contains("TD-002"));
+fn quote_symbol_becomes_symbol_literal() {
+    assert_eq!(expand("(quote sym)").unwrap(), "sym");
+    assert_eq!(expand("'sym").unwrap(), "sym");
+    // 列表内符号（符号入序对结构）
+    assert_eq!(expand("'(a b)").unwrap(), "(a b)");
+    // 混合 datum：符号与字面量同列表
+    assert_eq!(expand("'(a 1 \"s\")").unwrap(), "(a 1 \"s\")");
+}
+
+/// 宏模板内 quote 符号：卫生重命名（$hyg$N）在 datum 层被剥离——
+/// 符号值名字 = 用户可见名（Racket 语义近似，TD-004 名称基显式近似口径）。
+#[test]
+fn quote_symbol_from_macro_template_strips_hygiene() {
+    // swap 宏：模板引入标识符 t，(quote t) 的 datum 带卫生后缀，
+    // quote 数据化后应剥离回 t
+    let src = "(define-syntax m (syntax-rules () ((_) (quote t)))) (m)";
+    // define-syntax 形式本身数据化为 nil（transformer 注册为相位作用），
+    // (m) 展开为 (quote t$hyg$N) → datum 剥离 → 符号字面量 t
+    assert_eq!(expand(src).unwrap(), "nil\nt");
 }
 
 /// 模块形式展开。
