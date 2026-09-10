@@ -1,6 +1,8 @@
 //! 共享测试辅助（sop.md §9.1 规则 4：tests/common/ 放共享辅助）。
 //!
-//! 注：不同测试目标消费不同子集——未用助手按公共库语义允许 dead_code。
+//! 注：经 runner.rs 总入口单实例共享（v11.2 测试入口架构）——各测试
+//! 模块以 `use crate::common` 消费不同子集；未用助手按公共库语义允许
+//! dead_code。
 
 use kerf_driver::{run_source, run_source_rendered, RunOutcome};
 use kerf_vm::Value;

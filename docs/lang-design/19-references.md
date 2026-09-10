@@ -33,6 +33,11 @@
 | Mojo（2026） | Python 语法 + 编译期元编程 | 内存安全模型仍在完善 |
 | Gleam | 类型安全 + 可扩展编译器 | 现代 BEAM 语言设计 |
 | Esterel | 同步语言信号流图 | 程序编译为有限状态机 |
+| MLton | 全程序优化编译器（Standard ML） | ~1x C 效率 + 小体积可执行文件（v5.5 增补，next2） |
+| Koka | 行多态效应类型 + 效应消除编译 | 静态消除处理器显著提升性能（v5.5 增补，next2） |
+| Unison | 能力（abilities）系统 | 生产级能力模型实践（v5.5 增补，next2） |
+| CompCert | 形式化验证编译器 | 唯一经机器辅助证明免误编译的编译器（航空认证）（v5.5 增补，next2） |
+| Zig comptime | 编译期求值 | 元编程逻辑与常规代码同语言（v5.5 增补，next2） |
 
 ---
 
@@ -310,3 +315,12 @@ Stage 0 合计：约 7,000-7,300 行 = 6,500 行核心实现 + 500-800 行接口
 50. **Cone Compiler**：https://www.jondgoodwin.com/cone/
     - LLVM 后端性能开销实测数据来源
     - 文档引用位置：[08-后端演化 §1](./08-backend-evolution.md)、本文 §1（参考案例与关键数据）
+
+## 4. next2 讨论引用增补（v5.5 吸收）
+
+- **MLton**：https://mlton.org/ ——全程序优化（ANF + 闭包转换 + SSA）达 ~1x C 的实证；三种闭包表示（Toplevel/Flat/Linked）为本设计 Stage 2 优化锚点
+- **Koka**：https://koka-lang.github.io/ ——行多态效应类型 + 类型导向编译（效应消除四阶段：纯函数检测/重排/内联/已知状态消除）
+- **Unison**：https://www.unison-lang.org/ ——abilities 能力系统（能力=不可撤销效应的视角）
+- **CompCert**：https://compcert.org/ ——形式化验证编译器（Stage 3+ 安全目标参照）
+- **Zig comptime**：https://ziglang.org/documentation/master/#comptime ——编译期求值的生产实践（多阶段编程的务实前身）
+- **λ○▷ staging 演算**（研究跟踪）——let-splice 绑定机制（Stage 3+ 多阶段复杂度缓解候选）

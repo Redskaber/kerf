@@ -230,6 +230,8 @@ flowchart TD
 
 **时机依据**：生产就绪成熟度允许 Stage 0 直接实现到 P0 深度；Stage 1 重写是自举链的强制环节而非可选优化——重写过程本身是对语言表达力的第一轮真实测试。数据结构的具体形态（Token 结构体、GraphIR 定义、Reader trait）已在 [13-能力矩阵 §2.1/§2.2](./13-capability-matrix.md) 冻结（Reader 实现框架另见 [02-语法模型 §6](./02-syntax-model.md)），此处不重复。
 
+
+> **v5.5 量化背书（next2.md 第 5 轮吸收——S 表达式表面语法决策）**：Stage 0 采用 S 表达式的**量化论证**——Reader ~300 行 vs 中缀语法 ~3000 行（Pratt parser + 递归下降 + 错误恢复）；脱糖近恒等变换（vs 完整脱糖管线每步皆 bug 源）；宏系统直接基于同像性（vs 语法桥接层）。**S 表达式是工程脚手架而非设计终点**（"皮肤非骨架"——五目标无影响论）。分阶段语法策略：Stage 0 S-expr（宿主实现）→ Stage 1 S-expr（VM 上 kerf 源码——**r6 已兑现 B3**）→ Stage 2 切换目标语法（Rust/Go 风格 Reader ~3000 行，两语法编译后 CoreExpr 全等——Racket `#lang`（Rhombus/Hackett）先例）→ Stage 2+ 多语法共存（可插拔 Reader）。本设计 02-语法模型 §1 的「表面语法层可替换」蓝图与此完全一致。
 #### 2.4.2 结构化 CodeValue：逐级增强的主题（原 §21.4.2）
 
 | 阶段 | 功能范围 | 关键能力 |

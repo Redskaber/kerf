@@ -3,9 +3,6 @@
 //! 覆盖：跳转回填零占位残留（§20.1 Week 3 验收）/ 常量池去重 /
 //! 闭包捕获描述符 / 栈平衡 / 调试信息全覆盖 / 同结果（确定性）编译。
 
-#[path = "../../../common/mod.rs"]
-mod common;
-
 use kerf_compiler::{compile_module, Op};
 use kerf_core::CoreExpr;
 use std::rc::Rc;

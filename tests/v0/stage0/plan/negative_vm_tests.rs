@@ -34,8 +34,7 @@
 //! - negative_vm_tests::read_line_arity_ignored（read-line 元数不校验
 //!   ——语义发现 FS-4）。
 
-#[path = "../../../common/mod.rs"]
-mod common;
+use crate::common;
 
 use kerf_driver::{run_source, Stage};
 use kerf_vm::Value;

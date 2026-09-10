@@ -1452,3 +1452,133 @@ Stage Summary:
 - 遵循原则：§19（打包规则：全绿后打包 + 包内自举验证 + 文件数
   对账）、§3.2（交付前实测全绿）、浏览器验证标准（交互/渲染/
   响应式/console 四面 + VLM 视觉审查）
+
+---
+Task ID: 28-a
+Agent: Super Z (main) — REV-A/ARCH-A
+Task: next2.md 吸收审计（五轮讨论对照）——增量缺口识别
+
+Work Log:
+- 读 upload/next2.md 全文（2180 行五轮：①核心原语 9→8→6 最小性/
+  命名精确性/de Bruijn/效应原语化 ②2026 前沿全景五维 ③四层正交+
+  八 IR 批判（六缺陷）④六 IR 最终修正 + MLton 闭包 + Koka 效应消除
+  + continuation 类型安全（五弱点）⑤Stage 0 S 表达式决策量化论证）
+- 关键词矩阵核对：Perform/Handle/de Bruijn/四层正交/六 IR/MLton/
+  Koka/comptime 于 lang-design 20 文件**零命中**——与 next.md 轮
+  （零缺口）相反，本轮判定**实质缺口**，需全量吸收
+- 增量清单确定：01（最小性对照+演进裁定）/14（前沿全景+审查史）/
+  15（四层对照+IR 演进）/13（comptime）/12（S 表达式背书）/17/
+  18/19/00 九文件落点
+- Cargo.toml 现状核查：[[test]] 18 块显式声明（用户「干净精要仅总
+  入口」意图的改造对象）；mod common 挂载方式确认（#[path] 相对
+  文件目录解析——合并可行性前提）
+
+Stage Summary:
+- 审计结论：next2.md 存在实质增量（核心原语批判审查史 + 前沿全景
+  矩阵 + 四层正交/六 IR 修正版 + MLton/Koka 性能路径 + S 表达式
+  量化论证）；kerf r8 实现与 next2 最终修正版架构同构（四层解耦
+  对照待写入 15 §5）
+- 遵循原则：§8.4.5 规则 1（先查文档）、§2.3-11（知识搜索>猜测）
+
+---
+Task ID: 28-b
+Agent: Super Z (main) — REV-A/REC-A
+Task: lang-design v5.5 增量回写（next2 五轮 → 九文件）
+
+Work Log:
+- 01-core-forms §7：9（本设计）vs 8（Racket kernel 真实数）vs 7
+  （不可消除最小集——Define 是糖）数量真相 + 命名精确性九行对照表
+  （裁定：核心 ADT 冻结期不变，表作为 Stage 2 表面语言命名参考）+
+  §7.3 效应原语化（Perform/Handle）Stage 2 演进对照裁定（与当前
+  路径同归殊途——语言级引入时的首选评估对象）+ de Bruijn/continuation
+  类型安全登记
+- 14-design-alternatives §4：前沿五维成熟度矩阵（与 12 §2.1.1 三档
+  分级一致性核对——唯一增量 comptime 生产就绪档）+ 批判审查史链
+  （推荐→批判→修正×3 轮与本项目内循环结构同构的方法论注记）+
+  可行性评分五目标对照 + 四风险缓解
+- 15-architecture-layers §5：四层正交 crate 对照表（语法/类型/效应/
+  能力/组合器五行逐一映射 kerf-core::expr、typecheck、effects、
+  capability、driver front——**r8 实现与 next2 最终版架构同构实证**）
+  + IR 六层演进表（当前 4 层对照 + ANF/SSA Stage 2 主题）+ MLton
+  三种闭包表示 + Koka 效应消除四阶段 + 性能路径量化
+- 12-roadmap §2.4.1：S 表达式量化背书（Reader 300 vs 3000 行 +
+  脱糖恒等 + 宏直接性——「脚手架非终点」皮肤骨架论）+ 分阶段语法
+  策略表（r6 B3 已兑现 Stage 1 行）
+- 17-principles：next2 六原则对照映射表（合并>新增——全部映射到
+  既有原则 2/9/22/24/5/12/27/28）；前沿整合五原则同构注记
+- 18-terminology §3：ANF/CPS/de Bruijn/行多态/效应安全/闭包转换/
+  comptime/continuation 八条术语
+- 19-references：§1 表 +6 行（MLton/Koka/Unison/CompCert/Zig
+  comptime）+ §4 引用链接（+λ○▷ 研究跟踪）
+- 13-capability-matrix v5.5：附注（comptime Stage 1+ 主题登记——
+  多阶段 P3 预留的务实前身）
+- 00-overview v5.5 修订记录（吸收审计结论 + 九文件落点 + 关键裁定）
+
+Stage Summary:
+- lang-design v5.5 就位：next2 五轮全部增量有文档归宿；核心冻结
+  不动摇（效应原语化 = Stage 2 评估对照而非当前变更）；交叉引用
+  均为既有文件锚点（01§7/14§4/15§5/12§2.4.1 互链）
+- 遵循原则：§8.4.5 规则 3（新内容有设计文档）、§3.3（合并>新增）、
+  §17 原则 9（核心冻结）
+
+---
+Task ID: 28-c
+Agent: Super Z (main) — ARCH-A/PM-A
+Task: sop.md v11.2——测试入口架构意图 + Cargo.toml 精要原则
+
+Work Log:
+- §8.4.6 新增「测试入口架构意图」块（Cargo.toml = workspace 清单
+  与根 package 总入口，不承载逐测试目标机械声明——[[test]] 反
+  模式论证：清单与 tests/ 树双维护违反精要与单一事实源；方案 =
+  runner.rs 单一总入口 #[path] mod 树，阶段/plan/gate 语义不变；
+  选择性运行口径；[[example]] 例外保留）
+- §8.4.6 强制规则 8（测试入口精要：禁止新增 [[test]]，新测试 =
+  runner 加一行 mod + 新文件）；§8.4.6 树图注释更新；§9.1 测试树
+  加 runner.rs 行 + common 单实例注记
+- §16.1 变更日志 v11.2 行 + 头部 Version 11.2 + 尾部版本说明
+- 工具事故：MultiEdit 多处 old_str 非唯一/部分生效（规则块标题
+  多处命中）→ 改 python 行级锚点补丁（v11.1 轮同类事故——两次
+  会话均遇，MultiEdit 对 sop.md 大文件多处同名锚点稳定性不足，
+  已形成「python 锚点补丁优先」的操作记忆）
+
+Stage Summary:
+- sop.md v11.2 就位：测试架构意图入流程权威（§8.4.6 + §9.1 +
+  规则 8），Cargo.toml 精要原则可执行可审计；lang-design v5.5
+  同步登记于变更日志
+- 遵循原则：§3.3（精要>冗长——单一意图块+一条规则，不发明重
+  流程）、§8.6（变更日志追加）
+
+---
+Task ID: 28-d
+Agent: Super Z (main) — DEV-A/QA-A
+Task: 测试入口架构重构——Cargo.toml [[test]] 18 块清零 + runner.rs 总入口 + 全绿保持
+
+Work Log:
+- 新建 tests/runner.rs（18 个 #[path] mod 声明按 stage/批次分组
+  + 文档注释：总入口/选择性运行/新增动作/相对 path 解析基准）
+- Cargo.toml 重写测试段：[[test]] 18 块全部移除（125 行 → 50 行），
+  保留 [[example]] 嵌套声明 + 新增测试入口注释（指向 sop §8.4.6）
+- 全量测试首轮通过：runner 单二进制 301 集成 + 175 单元 = 476；
+  逐模块计数与 r8 逐二进制口径**完全一致**（--list 逐模块统计核对）
+- clippy duplicate_mod 修复：10 个测试文件原 `#[path] mod common`
+  重复加载 → runner 单实例 `#[path = "common/mod.rs"] mod common`
+  + 各文件 `use crate::common`（10 文件迁移；其中 reader/expander/
+  compiler 3 文件实际未使用 common——清理未用 import；教训：早期
+  grep head -5 截断导致首轮只发现 5/10 个引用文件，第二轮全量
+  grep 补齐）
+- 文档对账：testing-guide.md r9 重写（结构树 + 运行命令 + 编写
+  规则「runner 加一行」）+ matrix.md r9（入口口径注记 + 逐模块
+  一致性声明）+ common/mod.rs 头注（单实例共享）+ RELEASE_NOTES
+  r9 段
+- §3.2 六命令 clean release 实测全绿：build 8.93s / fmt OK /
+  clippy 0 / test --release **476:0:0** / 审计集 41/41 EXIT 0；
+  集成测试单二进制 6.95s（原 18 二进制顺序执行——合并后并行且
+  零重复编译）
+
+Stage Summary:
+- 测试入口架构落地：Cargo.toml [[test]] = 0（仅剩 1 个 [[example]]
+  例外声明）；runner.rs 为唯一总入口；测试总数与逐模块计数零变化
+  （组织收敛零语义变化——476 保持）；共享辅助单实例化
+- 遵循原则：§8.4.6 规则 8（本轮自身落地）、§3.2（六命令逐条实测）、
+  §9.4.3（正负比与总数不减的硬约束——合并前后逐模块对账）、
+  §2.3-4（报错>静默——duplicate_mod 当场修复非 allow 压制）

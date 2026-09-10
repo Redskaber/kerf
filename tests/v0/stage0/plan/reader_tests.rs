@@ -2,9 +2,6 @@
 //!
 //! 覆盖：Token 无损性 / Span 精确性 / 词法分类 / 错误结构化 / 引号简写。
 
-#[path = "../../../common/mod.rs"]
-mod common;
-
 use kerf_reader::{lex_source, read_source};
 use kerf_span::Span;
 use kerf_syntax::SymbolTable;

@@ -4,8 +4,7 @@
 //! Span 全管线传播（§21.3 验收项 4）/ CodeValue 检查 / 接口预留冻结 /
 //! 诊断渲染 / 性能基准基线。
 
-#[path = "../../../common/mod.rs"]
-mod common;
+use crate::common;
 
 use kerf_core::CodeValue;
 use kerf_driver::{compile_source, eval_source, run_source, Stage};

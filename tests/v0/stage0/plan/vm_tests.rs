@@ -3,8 +3,7 @@
 //! 覆盖：9 核心原语执行语义（§21.3 Stage 0 验收项 1）/ fib(25) /
 //! 运行时错误含堆栈追踪 / 双路径互查。
 
-#[path = "../../../common/mod.rs"]
-mod common;
+use crate::common;
 
 use common::{assert_int, dual_path_agrees};
 

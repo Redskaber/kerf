@@ -16,8 +16,7 @@
 //!
 //! （50+ 快照测试与性能基线由 plan/ 树全量覆盖——见 docs/tests/matrix.md。）
 
-#[path = "../../../common/mod.rs"]
-mod common;
+use crate::common;
 
 use kerf_driver::{compile_source, run_source};
 use kerf_vm::Value;

@@ -39,85 +39,12 @@ kerf-driver = { path = "crates/kerf-driver" }
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 
-# 测试目标（sop.md §9.1：tests/v0/stage-N 树——cargo 不自动发现嵌套目录，显式声明）
-[[test]]
-name = "reader_tests"
-path = "tests/v0/stage0/plan/reader_tests.rs"
-
-[[test]]
-name = "expander_tests"
-path = "tests/v0/stage0/plan/expander_tests.rs"
-
-[[test]]
-name = "compiler_tests"
-path = "tests/v0/stage0/plan/compiler_tests.rs"
-
-[[test]]
-name = "vm_tests"
-path = "tests/v0/stage0/plan/vm_tests.rs"
-
-[[test]]
-name = "gc_tests"
-path = "tests/v0/stage0/plan/gc_tests.rs"
-
-[[test]]
-name = "pipeline_tests"
-path = "tests/v0/stage0/plan/pipeline_tests.rs"
+# 测试入口（sop.md §8.4.6 v11.2 测试入口架构意图）：跨 crate 集成测试经
+# tests/runner.rs 单一总入口（cargo 自动发现）以 #[path] mod 树挂载
+# v0/stage-N 全部测试文件——禁止 [[test]] 逐文件声明（清单精要原则）。
 
 # 负向门审计集（sop.md §7.3.1 规则 3：examples/audit/ 可重运行，cargo 自动
 # 发现不覆盖嵌套目录，显式声明）
 [[example]]
 name = "stage0_gate_audit_r1"
 path = "examples/audit/stage0_gate_audit_r1.rs"
-
-[[test]]
-name = "gate_review_r1"
-path = "tests/v0/stage0/gate/gate_review_r1.rs"
-
-[[test]]
-name = "negative_reader_tests"
-path = "tests/v0/stage0/plan/negative_reader_tests.rs"
-
-[[test]]
-name = "negative_expander_tests"
-path = "tests/v0/stage0/plan/negative_expander_tests.rs"
-
-[[test]]
-name = "negative_vm_tests"
-path = "tests/v0/stage0/plan/negative_vm_tests.rs"
-
-[[test]]
-name = "negative_semantics_tests"
-path = "tests/v0/stage0/plan/negative_semantics_tests.rs"
-
-# Stage 1 批次 A（sop.md §9.1：tests/v0/stage1/ 树——显式声明）
-[[test]]
-name = "expansion_worklist_tests"
-path = "tests/v0/stage1/plan/expansion_worklist_tests.rs"
-
-# Stage 1 批次 B（r5：标准库最小集）
-[[test]]
-name = "stdlib_tests"
-path = "tests/v0/stage1/plan/stdlib_tests.rs"
-
-[[test]]
-name = "bootstrap_reader_tests"
-path = "tests/v0/stage1/plan/bootstrap_reader_tests.rs"
-
-# Stage 1 批次 C（r7：类型检查器 + 编译缓存）
-[[test]]
-name = "typecheck_tests"
-path = "tests/v0/stage1/plan/typecheck_tests.rs"
-
-[[test]]
-name = "cache_tests"
-path = "tests/v0/stage1/plan/cache_tests.rs"
-
-# Stage 1 批次 D（r8：能力 I/O 基础传递 + 内部效应/测试运行器）
-[[test]]
-name = "capability_tests"
-path = "tests/v0/stage1/plan/capability_tests.rs"
-
-[[test]]
-name = "test_runner_tests"
-path = "tests/v0/stage1/plan/test_runner_tests.rs"

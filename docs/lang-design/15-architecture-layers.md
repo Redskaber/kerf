@@ -270,3 +270,36 @@ debug_info_table（字节码地址 → 源码位置映射，编译时生成）�
 ### 4.9 编译器自调试工具（原 §14.9）
 
 四层调试：IR dump 接口、阶段跟踪、编译器内省 API、交互式调试器。已拆分至 [10-工具链 §2](./10-toolchain.md)。
+
+## 5. 四层正交架构对照与 IR 层级演进（v5.5 吸收自 next2.md）
+
+> 本节将 next2 讨论的「四层解耦 + 组合器」与「六 IR 层」最终设计对照到本设计的现有架构，验证一致性并登记 Stage 2 演进锚点。
+
+### 5.1 四层正交性对照（next2 设计 vs 本设计 crate/模块边界）
+
+next2 的四层：**语法层（CoreExpr 无语义标注）→ 类型层（独立推导）→ 效应层（执行/处理/传播）→ 能力层（线性资源追踪）**，层间无直接引用、仅组合器知全层——其六缺陷批判（type_hint 入语法层 / capability 入效应层 / effect_row 耦合类型层）正是对本设计架构原则的独立验证：
+
+| next2 四层 | 本设计对应 | 正交性证据 |
+|-----------|-----------|-----------|
+| 语法层 | kerf-core::expr（CoreExpr 无类型/效应/能力字段） | `VarRef` 无 type_hint；`Require` 为纯声明变体 |
+| 类型层 | kerf-compiler::typecheck（TcType 独立推导，E0005 家族） | 类型信息不回流语法 AST（诊断经 Span 关联，非节点字段） |
+| 效应层 | kerf-driver::effects（内部一次性逃逸，语言面 P3 隔离） | `InternalEffectSystem` 不触碰 CoreExpr/类型 |
+| 能力层 | kerf-driver::capability（IoGrant + R9 验证，E0006 家族） | 验证消费 CoreExpr 只读快照，不改写语法/类型 |
+| 组合器 | driver 前置管线 front（串联 read→expand→typecheck→R9→compile） | driver 是唯一知全层的组合根（§11 接口隔离的落地） |
+
+**结论**：本设计 r8 后的实现与 next2 最终修正版的四层解耦**架构同构**——差异仅在效应层位置（next2 规划语言级 Perform/Handle 原语；本设计当前为编译器内部机制 + 语言面 P3 预留，Stage 2 评估对照见 [01-核心原语 §7.3](./01-core-forms.md)）。
+
+### 5.2 IR 层级演进对照（当前 4 层 → Stage 2 六层）
+
+| IR 层级（next2 六层规划） | 本设计当前对应 | 演进裁定 |
+|--------------------------|---------------|---------|
+| AST（表面语法） | Stx 语法对象树（含 Span/ScopeSet） | ✅ 就位 |
+| CoreExpr（8 原语+类型标注） | CoreExpr + IrGraph（Arena 图 IR，字面量共享） | ✅ 就位（图 IR 超出树形规划——设计替代 §2.2 裁定） |
+| ANF+Closed（显式命名+显式环境） | 未实现（`Begin` 链承载顺序求值） | **Stage 2 主题**：ANF 转换 + 闭包转换（`Let` 引入——[01 §7.3](./01-core-forms.md)） |
+| AnnotatedANF（效应+能力标注） | 部分等价：typecheck（E0005）+ R9（E0006）在 CoreExpr 上独立验证 | Stage 2：随 ANF 层迁移标注 |
+| SSA | 未实现 | Stage 2（本地码后端前置） |
+| LLVM/QBE 目标码 | 未引入（LLVM 永不进自举链，Stage 2+ 可选 QBE/C 转译） | [08-后端演化](./08-backend-evolution.md) |
+
+**闭包表示（MLton 风格三种）**：`Toplevel`（无捕获→纯代码指针）/ `Flat`（少量捕获→环境内联）/ `Linked`（大量+共享→共享环境指针）——本设计 VM 当前为共享单元格捕获（[04-字节码 VM](./04-bytecode-vm.md)）；三种表示 + 捕获数决策算法（≤8 Flat / 共享子集>4 Linked）为 **Stage 2 优化锚点**（MLton 全程序优化达 ~1x C 的关键组件）。
+
+**效应消除四阶段（Koka 启发）**：纯函数检测（效应行为 ∅ 且无 Perform/Handle 逃逸）→ 效应重排（无数据依赖并行化）→ 单一处理器内联 → 已知状态消除——Stage 2 AnnotatedANF 层的优化 pass 清单登记。性能路径量化（next2 供参考）：树形解释 ~1/100 C → ANF ~1/20 C → 效应消除 ~1/10 C → SSA ~1/2 C → 目标码 ~1/1.2 C（MLton 实证 ~1/1.05 C）。

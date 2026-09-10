@@ -419,3 +419,21 @@ Effect 内部最小实现（编译器错误恢复用）+ 能力 I/O 基础传递
 
 Expander kerf 重写 + TD-004 scope-set 解析收口 + TD-021 hof 用户面
 注入（模块机制）→ Stage 1 门审查（§7.3 + §21.3 四条验收）。
+
+## v0.2.0-r9（2026-09-10）——next2.md 吸收轮 + 测试入口架构重构 + lang-design v5.5
+
+### 交付一：next2.md 五轮讨论增量吸收（lang-design v5.5）
+
+- 与 next.md 轮（零缺口）不同，本轮识别**实质缺口**（Perform/Handle/de Bruijn/四层正交/六 IR/MLton/Koka/comptime 于既有文档集零命中）并全量吸收至九文件：01 §7（核心原语 9 vs 8 vs 7 数量真相 + 命名精确性表 + 效应原语化 Stage 2 演进对照裁定——核心冻结不动摇）/ 14 §4（2026 前沿五维成熟度矩阵 + comptime 生产就绪档登记 + 批判审查史 + 可行性评分对照）/ 15 §5（四层正交 crate 对照——r8 实现与 next2 最终版架构同构实证 + IR 六层演进表 + MLton 闭包/Koka 效应消除锚点）/ 12 §2.4.1（S 表达式量化背书 300 vs 3000 行 + 皮肤骨架论）/ 17（六原则对照映射）/ 18 §3（八条术语）/ 19（六行参考）/ 13（comptime 注记）/ 00（v5.5 修订记录）
+
+### 交付二：测试入口架构重构（sop.md §8.4.6 v11.2——Cargo.toml 干净精要）
+
+- **`tests/runner.rs` 单一总入口**：cargo 自动发现（零 [[test]] 配置），`#[path]` mod 树挂载 v0/stage-N 全部 18 个测试文件——阶段/plan/gate 目录语义不变，仅入口收敛；**Cargo.toml 125 行 → 50 行**（[[test]] 18 块清零，仅保留 [[example]] 嵌套声明）
+- 共享辅助单实例化：`tests/common/` 由每文件 `mod common` 重复加载（clippy duplicate_mod）改为 runner 单实例 + `use crate::common`（10 个测试文件迁移；3 个未使用者清理）
+- sop.md v11.2：§8.4.6「测试入口架构意图」+ 强制规则 8（禁止 [[test]] 逐文件声明）+ §9.1 树更新 + §16.1 变更日志；testing-guide.md r9（运行命令与编写规范更新）
+- **测试总数 476 与逐模块计数完全不变**（组织收敛零语义变化）；选择性运行 `cargo test --test runner <module>::`（模块路径即过滤器）
+
+### 质量口径
+
+- §3.2 全绿：build 0 警告 / fmt 零 diff / clippy -D 0 / test **476:0:0**（runner 单二进制 301 + 单元 175）/ 审计集 41/41 EXIT 0
+- 集成测试单二进制运行时间 6.95s（18 二进制顺序执行 → 1 二进制并行——加速且零重复编译）

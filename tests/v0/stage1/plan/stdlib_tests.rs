@@ -6,8 +6,7 @@
 //! 显式推迟至 B3 Reader kerf 重写批次（用 kerf 源码 preamble 实现——
 //! 自举验证命题本体，§12 最优>最小：Rust 抢实现会移除 B3 验证内容）。
 
-#[path = "../../../common/mod.rs"]
-mod common;
+use crate::common;
 
 use kerf_driver::{run_source, Stage};
 

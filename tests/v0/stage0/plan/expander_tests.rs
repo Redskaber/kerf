@@ -3,9 +3,6 @@
 //! 覆盖：9 核心形式展开 / 语法糖推导（§3.2 表）/ 卫生宏 / 相位分离 /
 //! 内部 define 提升 / 展开深度上限。
 
-#[path = "../../../common/mod.rs"]
-mod common;
-
 use kerf_expander::{expand_program, phase::ModuleRegistry, ExpandCtxt};
 use kerf_reader::read_source;
 use kerf_syntax::SymbolTable;

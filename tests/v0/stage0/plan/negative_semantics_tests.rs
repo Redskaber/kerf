@@ -27,8 +27,7 @@
 //! - 未绑定变量：VM「未绑定的全局变量（…）」vs eval「未绑定变量」；
 //! - if 非布尔：VM「条件位置需要 bool」vs eval「if 条件需要 bool」。
 
-#[path = "../../../common/mod.rs"]
-mod common;
+use crate::common;
 
 use common::dual_path_agrees;
 use kerf_driver::{eval_source, run_source, Stage};

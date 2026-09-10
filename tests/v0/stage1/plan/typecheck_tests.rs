@@ -13,8 +13,7 @@
 //!   Run 阶段错（双向锚定——防「静态误报」与「静态漏报失真」）；
 //! - 多错误收集：单程序 N 错全量按 Span 次序返回。
 
-#[path = "../../../common/mod.rs"]
-mod common;
+use crate::common;
 
 use kerf_driver::{check_source, run_source, Stage};
 

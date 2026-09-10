@@ -1,8 +1,8 @@
 # 全局测试矩阵（覆盖率追踪）
 
 > **Author**: kerf-dev-agent（QA-A 角色）
-> **Date**: 2026-09-10（r8：Stage 1 批次 D「Effect 内部做实 + 能力 I/O 基础传递 + 用例运行器」交付后全量对账——`cargo test --workspace` 逐二进制实测复核 + r7 陈旧计数修正）
-> **Version**: v0.1.0-r8
+> **Date**: 2026-09-10（r8 批次 D 全量对账 + **r9 测试入口架构重构**：Cargo.toml [[test]] 18 块 → tests/runner.rs 单一总入口 mod 树，sop.md §8.4.6 v11.2——测试总数 476 与逐模块计数不变，仅组织方式收敛）
+> **Version**: v0.1.0-r9
 > **Status**: Active
 
 ## 总量
@@ -33,7 +33,9 @@
 | kerf-vm 单元 | crate 内联 | crates/kerf-vm/src/*.rs | 18 |
 | kerf-driver 单元 | crate 内联 | crates/kerf-driver/src/*.rs | **50（r8 +25：effects.rs 12 + capability.rs 13）** |
 
-### 集成测试（301 函数，tests/ 阶段树）
+### 集成测试（301 函数，tests/ 阶段树——r9 起经 runner.rs 单一总入口组织）
+
+> **入口口径（r9）**：`tests/runner.rs` 为唯一集成测试目标（cargo 自动发现，Cargo.toml 零 [[test]] 声明）；下表各「套件」现为 runner 内 `#[path]` mod 树的**模块**（选择性运行 `cargo test --test runner <module>::`）——逐模块计数与 r8 逐二进制口径完全一致（476 总数不变，组织收敛）。共享辅助 `tests/common/` 经 runner 单实例共享（`use crate::common`——替代原每文件 `mod common` 重复加载）。
 
 | 套件 | 文件 | 函数数 |
 |------|------|--------|

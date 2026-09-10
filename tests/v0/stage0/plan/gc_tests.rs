@@ -4,8 +4,7 @@
 //! 存活数据保护 / foreign ref 根 / 统计可观测。
 //! （环引用与深链防爆栈由 kerf-runtime 单元测试覆盖——见 crate 内联测试。）
 
-#[path = "../../../common/mod.rs"]
-mod common;
+use crate::common;
 
 use kerf_runtime::{mark_sweep_cycle, GcRef, Heap, RootSet};
 
