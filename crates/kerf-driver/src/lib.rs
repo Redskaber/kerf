@@ -1,5 +1,7 @@
 //! # kerf-driver
 //!
+//! **五正交轴定位（lang-design 15 §5.3，v6.0）**：**组合根**（唯一知全层，15 §5.1 组合器）——轴 3/4 桥接点（effects/capability）+ front 管线串联 read→expand→typecheck→R9→compile。
+//!
 //! 编译器入口（编排层）：`read → expand → lower → compile → run` 全管线。
 //!
 //! **管线**（sop.md §2.4.4 单向流动）：

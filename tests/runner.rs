@@ -44,6 +44,12 @@ mod gc_tests;
 #[path = "v0/stage0/plan/pipeline_tests.rs"]
 mod pipeline_tests;
 
+// 架构合规审计（v6.0——原则 29-31 形态审计：私有 ADT 冻结/Span 独立/
+// 表面-内部分离；01 §8.5 + 02 §8.1 锚点落地）
+
+#[path = "v0/stage0/plan/architecture_audit_tests.rs"]
+mod architecture_audit_tests;
+
 // 负向测试四文件（§9.4.3 正负比 ≥1:3 的主承载）
 
 #[path = "v0/stage0/plan/negative_reader_tests.rs"]

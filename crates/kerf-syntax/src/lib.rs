@@ -1,5 +1,7 @@
 //! # kerf-syntax
 //!
+//! **五正交轴定位（lang-design 15 §5.3，v6.0）**：表面语法的语法对象层（轴 1 可变侧的内边界）——`Stx`/`ScopeSet`/`Symbol` 承载表面形式，不含内部 AST。
+//!
 //! Symbol 内部化（interning）、作用域集与语法对象 `SyntaxObject`（stage0.md §3.3）。
 //!
 //! 语法对象是卫生宏系统的基础——它携带源位置、作用域集和相位信息，

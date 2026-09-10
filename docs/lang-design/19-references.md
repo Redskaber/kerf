@@ -1,8 +1,8 @@
 # 参考案例、代码量估算与参考文献
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-09
-> **Version**: v5.0（源自 stage0.md v5.0 拆分）
+> **Date**: 2026-09-10（v6.0：next3 讨论引用增补 §5（de Bruijn 1972 / Flanagan 1993 ANF / Plotkin & Pretnar 2009）；v5.5：next2 讨论引用增补 §4（Koka/MLton/Unison/CompCert/Zig comptime——该轮未回写版本号，本版一并修正）；v5.0：源自 stage0.md v5.0 拆分）
+> **Version**: v6.0
 > **Status**: Active
 
 > 本文件收录 stage0.md 附录 B（参考案例与关键数据）、附录 C（代码量估算）与附录 E（参考文献、规范与相关链接，按主题分类）。各条目的「文档引用位置」已从 stage0.md 的内部锚点改写为指向本目录对应设计文件的相对链接。术语表与术语源流考见 [18-术语文档](./18-terminology.md)。
@@ -324,3 +324,10 @@ Stage 0 合计：约 7,000-7,300 行 = 6,500 行核心实现 + 500-800 行接口
 - **CompCert**：https://compcert.org/ ——形式化验证编译器（Stage 3+ 安全目标参照）
 - **Zig comptime**：https://ziglang.org/documentation/master/#comptime ——编译期求值的生产实践（多阶段编程的务实前身）
 - **λ○▷ staging 演算**（研究跟踪）——let-splice 绑定机制（Stage 3+ 多阶段复杂度缓解候选）
+
+## 5. next3 讨论引用增补（v6.0 吸收）
+
+- **de Bruijn, N. G. (1972)**. *Lambda calculus notation with nameless dummies*. Indagationes Mathematicae, 34, 381-392. ——de Bruijn 索引原始论文（[01 §7.3](./01-core-forms.md) Stage 1/2 重写评估项的出处）
+- **Flanagan, C., Sabry, A., Duba, B. & Felleisen, M. (1993)**. *The Essence of Compiling with Continuations*. PLDI 1993. ——A-范式（ANF）来源论文（[15 §5.2](./15-architecture-layers.md) Stage 2 ANF 层规划的理论出处）
+- **Plotkin, G. D. & Pretnar, M. (2009)**. *Handlers of Algebraic Effects*. ESOP 2009. ——代数效应处理程序理论奠基（[14 §4.2](./14-design-alternatives.md) 批判审查史与 [01 §7.3](./01-core-forms.md) 效应原语化的理论锚点）
+- 注：Racket `racket/kernel`（8 形式口径）已在 §3.1 第 7 条；Koka/MLton/Unison/CompCert/Zig comptime 已在 §4（v5.5）——next3 第七轮的引用增量仅上列三条

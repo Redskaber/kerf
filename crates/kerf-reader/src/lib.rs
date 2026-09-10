@@ -1,5 +1,7 @@
 //! # kerf-reader
 //!
+//! **五正交轴定位（lang-design 15 §5.3，v6.0）**：轴 1（表面/内部语法）的**唯一桥接点**（原则 31）——产出 `Stx`，与 `CoreExpr` 类型级隔离（审计测试 architecture_audit_tests 锚定）。
+//!
 //! 类型化 Token 流 Reader（stage0.md §8.1 / §19.1，Layer 2）。
 //!
 //! **能力模型**：将字符流转为类型化 Token 流，再经递归下降语法器产出

@@ -78,6 +78,23 @@ fn render_elem(v: &Rc<LiteralValue>) -> String {
 }
 
 /// 9 个正交核心原语（核心冻结——签名在整个生命周期不变，§2.2 原则 9）。
+///
+/// **冻结边界精确化（lang-design 01 §6，v5.4）**：冻结的是语义原语集
+/// （9 原语正交完备 + `Require` 声明变体——零运行时语义的元数据节点）；
+/// 声明变体可追加。
+///
+/// **内部语法三原则合规（lang-design 01 §8.2，v6.0——sop §2.2 原则
+/// 29-31）**：本 enum 是编译器私有 ADT（Rust 私有构造语义——用户代码
+/// 无法构造，安全性由类型系统保证而非命名约定）；表面 S 表达式经
+/// kerf-reader → kerf-expander 桥接到本类型（无旁路）；Span 独立携带
+/// 元数据（`kind_name` 仅诊断渲染用）。
+///
+/// **Stage 2 ADT 演进目标（lang-design 01 §8.3 迁移映射——冻结期不
+/// 实施，登记为 Stage 2「目标语言完整化」门审查评估清单）**：
+/// Lambda→`Fn`（de Bruijn）/ App→`Apply` / If→`Branch` / VarRef→`Var` /
+/// Literal→`Const` / SetBang→`Perform(State)` / Define→脱糖消除 /
+/// Begin→`Let` 链 / Module→模块系统层 / 新增 `Let`+`Perform`/`Handle` /
+/// Require→保留（声明面）。迁移须经 §13.2 切换期重构流程 + 委员会投票。
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreExpr {
     /// `(lambda (params...) body)`

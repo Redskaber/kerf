@@ -1,8 +1,8 @@
 # 语法模型：类型化 Token 流、Span 与结构化诊断
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.4：Token 叶级计数 44→45 + Keyword 21→22——r8 require 声明关键字）
-> **Version**: v5.4（前版 v5.2：Token 计数更正 #17 + NFC 保守子集 #18）
+> **Date**: 2026-09-10（v6.0：新增 §8 表面语法决策与表面/内部语法分离——next3.md 第六/七轮吸收；v5.5：next2 讨论 S 表达式量化背书指针）
+> **Version**: v6.0
 > **Status**: Active
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-reader + kerf-span + kerf-syntax）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：查询式增量编译按 Span 细粒度失效（Stage 2，[15-架构分层 §3.1](./15-architecture-layers.md)）、编译缓存键与 Span 失效关系（接口预留，[13-能力矩阵 §3.1.4](./13-capability-matrix.md)）
 
@@ -238,3 +238,16 @@ fn parse_if(&mut self) -> Result<Stx, ParseError> {
 | 渲染形状（§3 诊断） | negative_reader_tests::reader_error_rendering_shape（error[E0001] + `-->` + 源摘录）/ reader_error_code_is_e0001（DiagnosticCode 结构化断言） | 诊断是数据（§8.7） |
 
 > 测试矩阵完整定义见 [11-测试基础设施 §3](./11-testing.md)；本表是其语法前端侧子集。
+
+## 8. 表面语法决策与表面/内部语法分离（v6.0 吸收自 next3.md 第六/七轮）
+
+**S 表达式 = Stage 0 工程捷径而非最终形态**：Reader 约 300 行 vs 中缀语法约 3000 行（Pratt parser + 递归下降 + 错误恢复）；S 表达式到核心形式的映射近恒等变换（脱糖零成本）；宏系统直接基于同像性实现（无需语法桥接层）——Stage 0 唯一目标（最短路径验证核心原语语义）因此从 4-6 周压缩到 2-3 周。分阶段语法策略与量化论证见 [12-路线图 §2.4.1](./12-roadmap.md)（v5.5 已收录：Stage 0 S-expr 宿主实现 → Stage 1 S-expr on VM（r6 批次 B3 已兑现）→ Stage 2 切换目标语法（两语法编译后 CoreExpr 全等——Racket `#lang` Rhombus/Hackett 先例）→ Stage 2+ 多语法共存）。
+
+**表面/内部语法严格分离（原则 31）**：表面语法是可替换的用户接口（皮肤——S 表达式/中缀/DSL 均可），内部语法是编译器私有不变量（骨架——CoreExpr 核心原语不变）；本文件 §1 的「表面语法层可替换」即此原则的落地蓝图——任何表面语法经 Reader 桥接产出相同 CoreExpr，语义验证与语法选择正交。内部语法的设计原则（类型安全 ADT 三原则：类型安全优于命名安全 / 语义化命名 / 零冗余）与当前实现合规核验、旧→新迁移映射见 [01-核心原语 §8](./01-core-forms.md)。
+
+### 8.1 测试锚点（§8 新增）
+
+| 锚点 | 验证方式 | 状态 |
+|------|---------|------|
+| 表面语法可替换性 | 设计审计：Reader trait 边界不泄漏表面语法细节到 CoreExpr（Stx→CoreExpr 单向） | ✅ r9 在位（kerf-reader → kerf-syntax → kerf-expander 单向流，[15 §1.3](./15-architecture-layers.md) 依赖规则） |
+| 两语法同核验证（Stage 2 前置） | Stage 2 目标语法 Reader 引入时：同一程序双 Reader 编译产物 CoreExpr 全等断言 | ⏸ Stage 2（登记于 [12 §2.5.1](./12-roadmap.md) 演进矩阵 Token 流行） |
