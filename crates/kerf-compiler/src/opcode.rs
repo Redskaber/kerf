@@ -6,7 +6,8 @@
 //! - **控制流**：JUMP / JUMP_IF_FALSE；
 //! - **数据构造**：MAKE_PAIR / CAR / CDR；
 //! - **变量访问**：LOAD_LOCAL / STORE_LOCAL / LOAD_GLOBAL / STORE_GLOBAL /
-//!   LOAD_CAPTURED / STORE_CAPTURED（闭包捕获转换，Stage 0 扩展）；
+//!   DEFINE_GLOBAL / LOAD_CAPTURED / STORE_CAPTURED（闭包捕获转换，
+//!   Stage 0 扩展；DEFINE_GLOBAL 为 D1/E6 语义的冻结契约）；
 //! - **算术与比较**：ADD / SUB / MUL / DIV / MOD / NUM_LT / NUM_GT / NUM_LE /
 //!   NUM_GE / NUM_EQ / EQ / NOT；
 //! - **谓词**：IS_NULL / IS_PAIR / IS_INT / IS_BOOL / IS_PROCEDURE；
@@ -167,6 +168,7 @@ impl Op {
             Op::Closure { proto, n_captures } => {
                 format!(" proto={} captures={}", proto, n_captures)
             }
+            // _ 臂理由：无操作数指令（PushNil/Pop/Dup/Ret/算术/比较/谓词/Car/Cdr/Halt 等）——无操作数后缀
             _ => String::new(),
         }
     }
@@ -178,8 +180,11 @@ mod tests {
 
     #[test]
     fn opcode_count_matches_spec() {
-        // §8.12：约 35 个操作码。逐一列举以保证计数稳定（41 个）。
+        // 冻结契约：40 个操作码（04-bytecode-vm §1 全枚举对齐）。
+        // 逐一列举以保证计数稳定——新增/删除任何变体都必须同步
+        // 04 文档与本清单（双向冻结：enum ↔ 测试 ↔ 文档三方一致）。
         let ops = [
+            // 栈操作（7）
             Op::PushConst(0),
             Op::PushNil,
             Op::PushTrue,
@@ -187,20 +192,25 @@ mod tests {
             Op::Pop,
             Op::Dup,
             Op::Swap,
+            // 变量访问（7）
             Op::LoadLocal(0),
             Op::StoreLocal(0),
             Op::LoadGlobal(0),
             Op::StoreGlobal(0),
+            Op::DefineGlobal(0),
             Op::LoadCaptured(0),
             Op::StoreCaptured(0),
+            // 控制流（2）
             Op::Jump(0),
             Op::JumpIfFalse(0),
+            // 函数操作（3）
             Op::Closure {
                 proto: 0,
                 n_captures: 0,
             },
             Op::Call(0),
             Op::Ret,
+            // 算术与比较（12）
             Op::Add,
             Op::Sub,
             Op::Mul,
@@ -213,17 +223,20 @@ mod tests {
             Op::NumEq,
             Op::Eq,
             Op::Not,
+            // 数据构造（3）
             Op::MakePair,
             Op::Car,
             Op::Cdr,
+            // 谓词（5）
             Op::IsNull,
             Op::IsPair,
             Op::IsInt,
             Op::IsBool,
             Op::IsProcedure,
+            // 终止（1）
             Op::Halt,
         ];
-        assert_eq!(ops.len(), 39, "操作码总数（Stage 0 冻结）");
+        assert_eq!(ops.len(), 40, "操作码总数（Stage 0 冻结契约）");
     }
 
     #[test]

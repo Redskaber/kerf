@@ -34,10 +34,10 @@
 ## 3. 验收标准（sop.md §21.3 Stage 0）
 
 1. 9 原语语义正确（`tests/v0/stage0/plan/vm_tests.rs::nine_primitives_semantics`）
-2. 50+ 快照测试通过（实际 200 项——见 docs/tests/matrix.md）
+2. 50+ 快照测试通过（实际 294 测试函数 / 290 全绿（r3 负测扩张后，含 4 忽略存档）——见 docs/tests/matrix.md）
 3. 自举测试：管线确定性（两次编译字节码一致）——Rust 宿主下的 Stage 0 形态
 4. Span 全管线传播（`pipeline_tests.rs::span_propagates_through_all_stages`）
-5. 性能基准基线建立（fib(25)：84.7ms/轮 release）
+5. 性能基准基线建立（fib(25)：84.4ms/轮 release——r3 复测口径，CLI bench）
 6. 四项接口预留冻结（`gate_review_r1.rs::gate_g7_to_g10_reserved_interfaces`）
 
 ## 4. 依赖（§18.5 DAG）

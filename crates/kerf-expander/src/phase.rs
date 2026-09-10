@@ -80,20 +80,38 @@ impl ModuleRegistry {
 
     /// visit：仅执行 Phase 1 部分（变换器加载）。
     /// 规则 3（传递依赖的相位传播）：先 visit 全部导入模块。
+    /// 环检测：DFS 灰标记——访问路径上的重入即循环依赖
+    /// （§7.1.1 类 6：结构化 Err，而非无限递归栈溢出）。
     pub fn visit(&mut self, name: Symbol) -> Result<(), String> {
-        let imports: Vec<Symbol> = self
-            .find(name)
-            .ok_or_else(|| format!("未声明的模块（Symbol {}）", name.0))?
-            .imports
-            .clone();
+        let mut path: Vec<Symbol> = Vec::new();
+        self.visit_inner(name, &mut path)
+    }
+
+    fn visit_inner(&mut self, name: Symbol, path: &mut Vec<Symbol>) -> Result<(), String> {
+        // 黑节点（已 visited）重入安全：幂等返回（菱形依赖合法）
+        if let Some(entry) = self.find(name) {
+            if entry.visited {
+                return Ok(());
+            }
+        } else {
+            return Err(format!("未声明的模块（Symbol {}）", name.0));
+        }
+        // 灰节点（当前 DFS 路径上）重入 = 循环依赖
+        if let Some(pos) = path.iter().position(|&n| n == name) {
+            let cycle: Vec<String> = path[pos..]
+                .iter()
+                .map(|n| format!("Symbol({})", n.0))
+                .chain(std::iter::once(format!("Symbol({})", name.0)))
+                .collect();
+            return Err(format!("模块循环依赖：{}", cycle.join(" → ")));
+        }
+        let imports: Vec<Symbol> = self.find(name).expect("上方已检查").imports.clone();
+        path.push(name);
         for dep in imports {
-            // 传递依赖先行（无环假设由 declare 侧 DAG 保证；环在此显式失败）
-            self.visit(dep)?;
+            self.visit_inner(dep, path)?;
         }
+        path.pop();
         let entry = self.find_mut(name).expect("上方已检查");
-        if entry.visited {
-            return Ok(()); // 幂等
-        }
         entry.visited = true;
         Ok(())
     }
@@ -155,6 +173,46 @@ mod tests {
         let mut reg = ModuleRegistry::new();
         reg.declare(Symbol(1), vec![], vec![]).unwrap();
         assert!(reg.declare(Symbol(1), vec![], vec![]).is_err());
+    }
+
+    #[test]
+    fn circular_dependency_detected() {
+        // §7.1.1 类 6：A imports B + B imports A → 结构化 Err
+        // （修复前：无限递归栈溢出 abort）
+        let mut reg = ModuleRegistry::new();
+        let a = Symbol(1);
+        let b = Symbol(2);
+        reg.declare(a, vec![b], vec![]).unwrap();
+        reg.declare(b, vec![a], vec![]).unwrap();
+        let err = reg.visit(a).unwrap_err();
+        assert!(err.contains("模块循环依赖"), "应报循环依赖：{}", err);
+        assert!(err.contains("Symbol(1)"), "环应含 A：{}", err);
+        assert!(err.contains("Symbol(2)"), "环应含 B：{}", err);
+    }
+
+    #[test]
+    fn self_import_cycle_detected() {
+        // 自环：A imports A
+        let mut reg = ModuleRegistry::new();
+        let a = Symbol(7);
+        reg.declare(a, vec![a], vec![]).unwrap();
+        assert!(reg.visit(a).unwrap_err().contains("模块循环依赖"));
+    }
+
+    #[test]
+    fn diamond_dependency_is_not_a_cycle() {
+        // 菱形依赖合法（D 依赖 B、C；B、C 各依赖 A）——黑节点重入幂等
+        let mut reg = ModuleRegistry::new();
+        let (a, b, c, d) = (Symbol(1), Symbol(2), Symbol(3), Symbol(4));
+        reg.declare(a, vec![], vec![]).unwrap();
+        reg.declare(b, vec![a], vec![]).unwrap();
+        reg.declare(c, vec![a], vec![]).unwrap();
+        reg.declare(d, vec![b, c], vec![]).unwrap();
+        reg.visit(d).unwrap();
+        assert!(reg.find(a).unwrap().visited);
+        assert!(reg.find(b).unwrap().visited);
+        assert!(reg.find(c).unwrap().visited);
+        assert!(reg.find(d).unwrap().visited);
     }
 
     #[test]

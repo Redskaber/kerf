@@ -1,8 +1,8 @@
 # 宏系统：相位分离与卫生宏
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-09（v5.1 增补：宏系统契约从 Stage 0 冻结实现回填）
-> **Version**: v5.1
+> **Date**: 2026-09-10（v5.2：instantiate Stage 0 简化改述（#9）+ visit 循环依赖检测已实现回填 + syntax-rules 单层省略号边界注记（#1）+ Transformer 接口标注（#4））
+> **Version**: v5.2
 > **Status**: Active
 > **处理程度**：P1（卫生保证与展开核心 Stage 0 已实现；syntax-parse 等宏组合机制推迟）｜ **所属 Stage**：Stage 0（骨架）→ Stage 1+（组合） ｜ **推迟项**：syntax-parse 类结构化宏 DSL、宏展开调试工具、迭代式工作表展开（TD-007）
 
@@ -46,7 +46,10 @@ impl ModuleRegistry {
     /// 登记模块（名称 / 导入表 / 导出表）。重复登记同名模块报错。
     pub fn declare(&mut self, name: Symbol, imports: Vec<Symbol>, exports: Vec<Symbol>) -> Result<(), String>;
     /// visit：仅执行 Phase 1 部分（宏变换器加载）；
-    /// 传递依赖的 visit 先行（递归展开，已访问则幂等跳过）。
+    /// 传递依赖的 visit 先行（已访问则幂等跳过）；
+    /// **循环依赖检测（v5.2 回填——已实现）**：DFS 灰标记——访问路径上的
+    /// 重入即循环，报结构化错误「模块循环依赖：Symbol(N) → …」
+    /// （调用链路径）；菱形依赖（共享前驱、无环）合法。
     pub fn visit(&mut self, name: Symbol) -> Result<(), String>;
     /// instantiate：执行模块体（Phase 0 实例化）；
     /// 传递依赖的 instantiate + visit 均先行。
@@ -57,9 +60,11 @@ impl ModuleRegistry {
 }
 ```
 
-**职责边界**：`ModuleRegistry` 只做相位簿记（声明依赖、登记完成态、保证先行次序），**不执行**任何展开或求值——展开由 `ExpandCtxt`（本文 §2.2）驱动，求值由 VM/Runtime 执行。这是「相位分离是共享上下文而非独立阶段」（本文 §3）在数据结构上的体现：registry 是 Expander 与 Compiler 共同查询的相位表。
+**职责边界**：`ModuleRegistry` 只做相位簿记（声明依赖、登记完成态、保证先行次序、检测循环依赖），**不执行**任何展开或求值——展开由 `ExpandCtxt`（本文 §2.2）驱动，求值由 VM/Runtime 执行。这是「相位分离是共享上下文而非独立阶段」（本文 §3）在数据结构上的体现：registry 是 Expander 与 Compiler 共同查询的相位表。
 
 **幂等性与先行次序不变式**：`visit`/`instantiate` 对已完成的模块幂等跳过（防循环依赖无限递归）；对传递依赖先递归调用自身——「传递依赖的相位传播」规则 3 的机械落实。
+
+**instantiate 的 Stage 0 简化（v5.2 契约改述，deep-review R1 偏差 #9）**：早期版本表述「instantiate 无传递依赖递归」曾被误读为缺陷——实际裁定为** Stage 0 单模块简化**：当前实现的 `instantiate` 只标记完成态并校验依赖的 visit 先行，**不递归执行传递依赖的模块体**。理由：Stage 0 是单模块世界（[06-操作语义 §2 R9](./06-operational-semantics.md)——模块体在全局环境直接求值），多模块实例化隔离推迟至 Stage 1+，故「不递归 instantiate 依赖」在单模块下**无可观测差异**；多模块世界落地时按「传递依赖先行」完整语义补齐（[12-路线图 §2.5](./12-roadmap.md) 演进矩阵）。
 
 ## 2. 基础宏系统（原 §8.10，v5.1 契约回填）
 
@@ -87,7 +92,7 @@ pub struct Transformer {
 }
 
 impl Transformer {
-    /// 应用变换器（语法 → 语法）。
+    /// 应用变换器（语法 → 语法）——**当前公共接口**。
     /// `self_name` 为宏自身符号——模板中对该符号的引用**不重命名**
     /// （自引用递归宏的正确性要求，Stage 0 裁定）。
     pub fn apply_named(
@@ -97,6 +102,10 @@ impl Transformer {
         table: &mut SymbolTable,
         use_site_scopes: &ScopeSet,
     ) -> Result<Stx, String>;
+
+    // 注：另有内部接口 `Transformer::apply`（旧形态——不携带 self_name，
+    // 供展开器内部调用与非自引用路径使用；v5.2 标注：非对外契约，
+    // 接口演进时以 apply_named 为准——deep-review R1 偏差 #4）。
 }
 ```
 
@@ -151,6 +160,8 @@ template ::= identifier                        ; 模式变量的引用（替换�
 ```
 
 **省略号深度规则**：模板中省略号后的子模板按对应模式省略号的绑定做笛卡尔展开（嵌套省略号允许，维度必须匹配，否则展开期报错）——`SyntaxRules::apply` 的核心循环（kerf-expander/src/macro_sys.rs）。
+
+**syntax-rules 的 Stage 0 裁定注记（v5.2 补，deep-review R1 偏差 #1）**：上文法是**完整设计文法**；Stage 0 实现为其骨架子集——**单层省略号边界**（模式/模板支持一层省略号展开）；**点对模式尾部**、**尾省略号 + 固定尾部**、**展开转义 `(… template)`**、**嵌套省略号（多维笛卡尔展开）**均未实现，推迟至 Stage 2 宏组合深化（**TD-005**：syntax-parse 级宏组合的同批演进项——[技术债登记册](../develop/v0/tech-debt-register.md)）。单层边界内的模式/字面量/模板实例化/维度不匹配报错已全部落地并有负测覆盖（negative_expander_tests::syntax_rules_misuse / macro_expansion_failures）。
 
 ### 2.4 卫生上下文契约
 
@@ -235,10 +246,21 @@ fn expand(stx: &Stx, ctx: &mut ExpandCtx) -> Result<Stx, ExpandError> {
 
 | 契约/不变式 | 测试锚点（tests/v0/stage0/） | 验证命题 |
 |-----------|------------------------------|---------|
-| 卫生性保证（§2.4 三重保证） | plan 套件卫生宏用例：宏内外同名不串扰（集成验证） | 引入隔离 + 自由穿透 |
-| syntax-rules 匹配（§2.3 文法） | examples/macros + 展开单测（模式/字面量/省略号/模板实例化） | 首匹配 + 维度匹配报错 |
-| 展开终止性（§4 不变式 1） | 深度上限负例：超限报错而非栈溢出 | TD-007 校准值 128 |
-| 相位簿记（§1.1 契约） | phase 单测：declare/visit/instantiate 幂等 + 先行次序 | 传递依赖相位传播 |
+| 卫生性保证（§2.4 三重保证） | plan 套件卫生宏用例：宏内外同名不串扰（集成验证）+ negative_semantics_tests::t1_regression_hygiene_fallback_dual_path（卫生回退双路径，v5.2 修复面） | 引入隔离 + 自由穿透 |
+| syntax-rules 匹配（§2.3 文法） | examples/usage/macros.krf + 展开单测（模式/字面量/省略号/模板实例化）+ negative_expander_tests::syntax_rules_misuse / macro_expansion_failures（模式不匹配/深度超限负例） | 首匹配 + 维度匹配报错 |
+| 展开终止性（§4 不变式 1） | 深度上限负例：超限报错而非栈溢出（negative_expander_tests 宏深度超限 case） | TD-007 校准值 128 |
+| 相位簿记（§1.1 契约） | phase 单测：declare/visit/instantiate 幂等 + 先行次序 + **模块循环依赖检测（DFS 灰标记 → 结构化 Err）+ 菱形依赖合法**（negative_expander_tests::module_cycle_dependency_errors / module_registry_phase_violations） | 传递依赖相位传播 + 无环不变式 |
+| 空应用（§7.1.1 类 3） | negative_expander_tests::empty_application_family（11 case——曾零测试的分类，v5.2 补齐） | `()` 展开期报错 |
+| 关键字误用矩阵（§2 核心形式卫式） | negative_expander_tests：lambda/if/set!/define/module/import/export/quote/let/letrec/let*/cond/else/define-syntax 等 21 关键字误用矩阵（96 case 覆盖） | 形式结构错误全部 E0002 |
 | 卫生量化观测（§2.4 renames） | HygieneCtx::renames 计数断言 | 一致性不变式 |
 
 > 测试矩阵完整定义见 [11-测试基础设施 §3](./11-testing.md)；本表是其宏系统侧子集。
+
+### 卫生穿透的回退实现（r3——D6 落地）
+
+宏模板**引入**的标识符经 α 重命名（`name$hyg$N`）。当该符号在变换器
+查找未命中且后缀为纯数字时，展开器按**基名**回退查变换器表
+（`hygienic_base_symbol`——与 driver 全局回退 `resolve_hygiene_fallbacks`
+同则）。这使得宏模板可以引用其他宏（宏调宏），对应 §2.4 卫生保证(2)
+「自由标识符穿透」的 Stage 0 近似。已注册变换器的基名先行注册即穿透；
+未定义名仍报 E3（回退不覆盖未注册名）。

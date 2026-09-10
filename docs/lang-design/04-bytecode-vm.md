@@ -1,8 +1,8 @@
 # 字节码虚拟机与编译器实现
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-09（v5.1 增补：操作码漂移注记 + CodeBuf/捕获契约 + 互查/预留链接）
-> **Version**: v5.1
+> **Date**: 2026-09-10（v5.2：操作码全 40 项显式枚举（八组）+ App 求值顺序修复后确认 + 基准锚点对齐）
+> **Version**: v5.2
 > **Status**: Active
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-compiler + kerf-vm）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：TCO 尾调用优化（Stage 1+，仅改 Compiler 不改 VM）、JIT/本地码后端（Stage 2+ 可选，[08-后端演化](./08-backend-evolution.md)）、ext1 槽的 Effect System 实装（接口预留档，[13-能力矩阵 §3.1.1](./13-capability-matrix.md)）
 
@@ -12,16 +12,20 @@
 
 ## 1. 字节码 VM（原 §8.12）
 
-switch-dispatch 循环，设计估算约 35 个操作码。完整操作码定义涵盖：
-- **栈操作**：PUSH, POP, DUP, SWAP
-- **函数操作**：CALL, RET, CLOSURE
-- **控制流**：JUMP, JUMP_IF_FALSE
-- **数据构造**：MAKE_PAIR, CAR, CDR
-- **变量访问**：LOAD_LOCAL, STORE_LOCAL, LOAD_GLOBAL, STORE_GLOBAL
-- **算术**：ADD, SUB, MUL, DIV
-- **终止**：HALT
+switch-dispatch 循环，设计估算约 35 个操作码（原 §8.12）；**Stage 0 冻结实现为 40 个操作码**（kerf-compiler/src/opcode.rs，enum 显式枚举 + 守护测试 `opcode_count_matches_spec` 逐项列举断言 40——「enum ↔ 测试 ↔ 文档」三方冻结）。**全 40 项显式枚举（八组，与 opcode.rs 模块头分组逐项一致）**：
 
-**操作码漂移注记（v5.1，设计 vs 实现对账）**：Stage 0 冻结实现为 **40 个操作码**（kerf-compiler/src/opcode.rs，接口契约已冻结）——超出设计估算的扩来自：闭包捕获的**读写双指令**（`LoadCaptured` / `StoreCaptured`——共享单元格捕获协议要求可变捕获，见本文 §1.1）、比较组扩充（`Lt/Gt/Eq/Ne` 等显式化而非复用算术）、`Nil` / `True` / `False` 的**零操作数快推**（避免常量池哈希查找的快路径）、以及 **`DefineGlobal`**（v5.1 依据 [06-操作语义 §2 R6/E6 与 §5 T1 定理](./06-operational-semantics.md) 新增的第 40 号冻结契约：define 与 set! 的全局存储语义分裂修复——`StoreGlobal` 收紧为 S1/E3 语义「只写已存在绑定，未绑定报错」；`DefineGlobal` 承载 D1/E6 语义「只新增绑定，同层重复报错」；Define 编译模式改为 `value; DUP; DefineGlobal` 使返回值 = v 与 eval 路径对齐）。全部扩落在既有分组内（五组分类不变）——[06-操作语义 §5.2 L1](./06-operational-semantics.md) 的指令组归纳覆盖全部 40 操作码。后续演进的正确路径：**新增操作码 = 冻结新契约 + 回填本文档**，禁止未注记的静默漂移。
+| 组 | 操作码（个数） |
+|----|----------------|
+| 栈操作（7） | `PUSH_CONST k` / `PUSH_NIL` / `PUSH_TRUE` / `PUSH_FALSE` / `POP` / `DUP` / `SWAP` |
+| 变量访问（7） | `LOAD_LOCAL i` / `STORE_LOCAL i` / `LOAD_GLOBAL k` / `STORE_GLOBAL k` / `DEFINE_GLOBAL k` / `LOAD_CAPTURED i` / `STORE_CAPTURED i` |
+| 控制流（2） | `JUMP t` / `JUMP_IF_FALSE t` |
+| 函数操作（3） | `CLOSURE proto, n_captures` / `CALL n` / `RET` |
+| 算术与比较（12） | `ADD` / `SUB` / `MUL` / `DIV` / `MOD` / `NUM_LT` / `NUM_GT` / `NUM_LE` / `NUM_GE` / `NUM_EQ` / `EQ` / `NOT` |
+| 数据构造（3） | `MAKE_PAIR` / `CAR` / `CDR` |
+| 谓词（5） | `IS_NULL` / `IS_PAIR` / `IS_INT` / `IS_BOOL` / `IS_PROCEDURE` |
+| 终止（1） | `HALT` |
+
+**操作码漂移注记（v5.2 重写，设计 vs 实现对账——早期版本「全部扩落在既有分组内」的表述不实，更正如下）**：超出原 §8.12 七组清单的扩是**真实存在的再分组**：(1) 原设计将 `=`/`<`/`>` 复用算术组并漏列 `<=`/`>=`/`mod`——实现扩为**算术与比较** 12 项显式指令（链式比较按序折叠）；(2) 原设计无**谓词组**——实现的 `IS_NULL/IS_PAIR/IS_INT/IS_BOOL/IS_PROCEDURE` 5 项是 **Stage 0 扩展分组**（`null?` 等内置的底层执行机制，[09-标准库 §2](./09-stdlib.md)）；(3) 零操作数快推 `PUSH_NIL/PUSH_TRUE/PUSH_FALSE`（避免常量池哈希查找的快路径）；(4) 闭包捕获**读写双指令** `LOAD_CAPTURED/STORE_CAPTURED`（共享单元格捕获协议要求可变捕获，本文 §1.1）；(5) **`DEFINE_GLOBAL`**（v5.1 依据 [06-操作语义 §2 R6/E6 与 §5 T1 定理](./06-operational-semantics.md) 新增的第 40 号冻结契约：define 与 set! 的全局存储语义分裂修复——`StoreGlobal` 收紧为 S1/E3 语义「只写已存在绑定，未绑定报错」；`DefineGlobal` 承载 D1/E6 语义「只新增绑定，同层重复报错」；Define 编译模式改为 `value; DUP; DefineGlobal` 使返回值 = v 与 eval 路径对齐）。另注：设计草稿中的 `Ne`（不等比较）**未实现**——不等由 `NOT` 组合 `=`/`NUM_EQ` 表达，冻结清单不含此项。分组数统一为**八组**（[06-操作语义 §5.2 L1](./06-operational-semantics.md) 的指令组归纳同步对齐）。后续演进的正确路径：**新增操作码 = 冻结新契约 + 回填本文档 + 同步守护测试枚举**，禁止未注记的静默漂移。
 
 **VM 状态包含**：代码、数据栈、调用栈、全局环境、常量池和调试信息表。
 
@@ -87,9 +91,9 @@ fn compile_expr(e: &CoreExpr, out: &mut CodeBuf) -> Result<(), CompileError> {
             out.patch_jump(j_end, out.here());                // 回填汇合点
         }
         App { fn_expr, args } => {
-            for a in args { compile_expr(a, out)?; }  // 求值顺序：参数从左到右
-            compile_expr(fn_expr, out)?;
-            out.emit(Op::CALL, &[args.len()]);
+            compile_expr(fn_expr, out)?;          // 求值顺序：**函数先**（06 §1.3/§2 A1 契约）
+            for a in args { compile_expr(a, out)?; }  // 实参从左到右入栈
+            out.emit(Op::CALL, &[args.len()]);   // CALL：弹 n 参后弹被调者
         }
         // Begin / SetBang / Define / Module 同构处理
     }
@@ -110,7 +114,7 @@ fn compile_expr(e: &CoreExpr, out: &mut CodeBuf) -> Result<(), CompileError> {
 
 ## 3. VM 执行循环（原 §19.5）
 
-switch-dispatch 循环，处理约 35 个操作码（设计估算；冻结实现为 40（含 v5.1 新增的 DefineGlobal）——见本文 §1 漂移注记；操作码按类分组：栈操作、函数、控制流、数据构造、变量访问、算术、终止）。运行时错误捕获含堆栈追踪生成。**迭代式主循环**：递归经调用帧栈承载，Rust 栈深度恒定（深递归程序不爆宿主栈——与 [05-运行时 §4](./05-runtime.md) 显式工作栈同构的防御）。
+switch-dispatch 循环，处理全部 **40 个操作码**（冻结实现，本文 §1 全枚举；操作码按**八组**分类：栈操作 7 / 变量访问 7 / 控制流 2 / 函数操作 3 / 算术与比较 12 / 数据构造 3 / 谓词 5 / 终止 1——设计估算约 35 的偏差见 §1 漂移注记）。运行时错误捕获含堆栈追踪生成（run_program 错误路径保留**最内 16 帧**调用点，渲染为 note 行——深递归下外层无信息量，防诊断爆炸；`VmError.trace` 的唯一生产者）。**迭代式主循环**：递归经调用帧栈承载，Rust 栈深度恒定（深递归程序不爆宿主栈——与 [05-运行时 §4](./05-runtime.md) 显式工作栈同构的防御；帧数上限 `MAX_FRAMES = 100_000`，超限报结构化「调用帧超过上限」错误）。
 
 **执行循环骨架**：
 
@@ -131,7 +135,7 @@ fn run(vm: &mut Vm) -> Result<Value, VmError> {
             Op::CLOSURE(p)     => vm.push(Value::closure(p, vm.capture_env())),
 
             Op::CALL(n) => {
-                let callee = vm.peek(n)?;             // 栈顶第 n 项是被调者
+                let callee = vm.peek(n)?;             // 被调者在栈顶第 n 项（函数先入栈）
                 vm.enter_frame(callee, n,
                     FrameExt::new());                 // 三扩展槽：continuation/异常表/调试帧
             }
@@ -156,7 +160,7 @@ fn run(vm: &mut Vm) -> Result<Value, VmError> {
 **核心不变式**：
 1. **帧格式冻结**：调用帧永远携带三个扩展槽（ext1 continuation / ext2 异常表 / ext3 调试帧，本文 §1），Stage 0 允许为空但格式锁定——这是 [13-能力矩阵 §4](./13-capability-matrix.md) 三个待定决策的前置约束
 2. **pc 单调性例外**：pc 只在 JUMP / RET / CALL / 异常路径改变；普通指令严格 pc += 1——违反会导致 debug_info_table 反查错位
-3. **求值顺序契约**：CALL 之前参数已完成求值并按序压栈（本文 §2 编译侧保证），VM 侧只按约定取用，两侧契约不得单独修改
+3. **求值顺序契约（v5.2 修复后确认）**：`App` 的被调函数**先**求值入栈，随后实参从左到右入栈（本文 §2 编译侧与 [06-操作语义 §1.3/§2 A1](./06-operational-semantics.md) 双侧同一契约）；VM 侧 `CALL n` 按「先弹 n 参、后弹被调者」的约定取用，两侧契约不得单独修改——曾存在的「eval 函数先 / 编译参数先」双路径分裂（deep-review R1 偏差 #13，T1 反例面）已于 Task 16 修复并加双路径负例回归（`app_evaluates_fn_then_args` / `app_evaluation_order_fn_first_dual_path`）
 
 **实现陷阱**：
 - **Forth 线程码是极限参照而非 Stage 0 目标**：NEXT/DOCOL/EXIT/LIT 四原语的间接线程码更快但调试困难；switch-dispatch 的可读性对 Stage 0 更重要（见本文 §1 的 Forth 注记）
@@ -168,9 +172,11 @@ fn run(vm: &mut Vm) -> Result<Value, VmError> {
 | 契约/不变式 | 测试锚点（tests/v0/stage0/） | 验证命题 |
 |-----------|------------------------------|---------|
 | 栈平衡（§2 不变式 1） | 编译器单测：每个原语编译产物的栈效应断言（SetBang DUP 后存储等边界 case） | 净变化 = 1 |
+| 冻结计数守护（§1 全枚举） | opcode 单测 `opcode_count_matches_spec`：逐项显式列举 40 项 + 断言总数 | enum ↔ 测试 ↔ 文档三方一致 |
 | 回填完备（§2 不变式 2） | CodeBuf 构造时占位队列断言（零占位交付） | 无悬空跳转 |
-| 双路径互查（[06 §5.3](./06-operational-semantics.md) T1 定理） | 全部 73 集成测试：eval 与 VM 结果逐字节一致 | L1–L4 实例化 |
-| fib(25) 性能基线 | benchmarks（含编译 84.7 ms/轮，release × 5） | 性能回归对账 |
+| 双路径互查（[06 §5.3](./06-operational-semantics.md) T1 定理） | 全部集成测试（eval 与 VM 结果逐字节一致，含 164 集成函数） | L1–L4 实例化 |
+| App 求值顺序（§3 不变式 3） | `app_evaluates_fn_then_args`（编译字节码序断言）+ `app_evaluation_order_fn_first_dual_path`（vm_tests 双路径 `((undefined-a) undefined-b)` 错误排序负例） | 函数先、参数左到右 |
+| fib(25) 性能基线 | CLI `kerf bench examples/usage/fib.krf`（含编译 84.4 ms/轮，release ×5——实测 84.443 ms 复现声称 84.7；[12-路线图 §1.1](./12-roadmap.md) 基准框架） | 性能回归对账 |
 | 帧三扩展槽格式（§3 不变式 1） | VM 帧构造单测（ext1/2/3 格式冻结） | [13 §4](./13-capability-matrix.md) 前置约束 |
 | 常量池去重（§2 陷阱 2） | 编译器单测（float 位键） | 无谓膨胀防御 |
 

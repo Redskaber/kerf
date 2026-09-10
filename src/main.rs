@@ -11,9 +11,7 @@
 use std::rc::Rc;
 
 use kerf_core::CodeValue;
-use kerf_driver::{compile_source, eval_source, run_source};
-use kerf_reader::lex_source;
-use kerf_syntax::{Symbol, SymbolTable};
+use kerf_driver::{compile_source, dump_stx, dump_tokens, eval_source, run_source};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
@@ -37,6 +35,7 @@ fn main() {
             eprintln!("错误：{} 需要文件参数", cmd);
             2
         }
+        // _ 臂理由：未知子命令或 dump/bench 类子命令缺文件参数——打印用法并以码 2 退出
         _ => {
             print_usage();
             2
@@ -136,24 +135,14 @@ fn cmd_tokens(path: &str) -> i32 {
         Ok(s) => s,
         Err(c) => return c,
     };
-    let mut table = SymbolTable::new();
-    match lex_source(&src, 0, &mut table) {
-        Ok(toks) => {
-            for t in &toks {
-                let name = match &t.kind {
-                    kerf_reader::TokenKind::Identifier(s) => table.name(*s).to_string(),
-                    kerf_reader::TokenKind::Keyword(k) => k.as_str().to_string(),
-                    kerf_reader::TokenKind::Operator(o, s) => {
-                        format!("{:?}({})", o, table.name(*s))
-                    }
-                    other => format!("{:?}", other),
-                };
-                println!("{:>4}..{:<4} {}", t.span.start, t.span.end, name);
-            }
+    // §11/§14.7.2 B4：reader 仅 driver 调用——CLI 经 dump_tokens 转发
+    match dump_tokens(&src, path) {
+        Ok(out) => {
+            print!("{}", out);
             0
         }
         Err(e) => {
-            eprintln!("read error：{}", e.message);
+            eprintln!("{}", e);
             1
         }
     }
@@ -164,16 +153,13 @@ fn cmd_stx(path: &str) -> i32 {
         Ok(s) => s,
         Err(c) => return c,
     };
-    let mut table = SymbolTable::new();
-    match kerf_reader::read_source(&src, 0, &mut table) {
-        Ok(forms) => {
-            for f in &forms {
-                println!("{}", f.render(&|s: Symbol| table.name(s).to_string()));
-            }
+    match dump_stx(&src, path) {
+        Ok(out) => {
+            print!("{}", out);
             0
         }
         Err(e) => {
-            eprintln!("read error：{}", e.message);
+            eprintln!("{}", e);
             1
         }
     }

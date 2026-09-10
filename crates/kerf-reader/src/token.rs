@@ -105,6 +105,7 @@ impl Delimiter {
         match open {
             Delimiter::OpenParen => Delimiter::CloseParen,
             Delimiter::OpenBracket => Delimiter::CloseBracket,
+            // _ 臂理由：关闭侧输入无「匹配关闭」语义（调用方仅传开放侧）——防御性默认 CloseParen
             _ => Delimiter::CloseParen,
         }
     }

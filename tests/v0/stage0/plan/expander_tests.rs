@@ -175,3 +175,23 @@ fn module_form_snapshot() {
     let out = expand("(module m (import a) (export f) (define f 1))").unwrap();
     assert!(out.starts_with("(module m (import a) (export f)"));
 }
+
+/// 糖推导正向锚点（01 §5 锚点表补齐——T15-b 差距项）：
+/// let*/when/unless 是核心形式之上的纯语法糖，推导目标可静态断言。
+#[test]
+fn derived_forms_sugar_expansion_anchors() {
+    // let* → 嵌套 lambda 应用（let 本身是 lambda 糖——01 §2 推导）
+    let out = expand("(let* ((a 1) (b 2)) (+ a b))").unwrap();
+    assert!(
+        out.contains("(lambda (a)"),
+        "let* 外层应展开为 lambda 应用：{}",
+        out
+    );
+    assert!(out.contains("(lambda (b)"), "let* 内层嵌套：{}", out);
+    // when → (if x (begin body…) nil)
+    let when_out = expand("(when x 1 2)").unwrap();
+    assert_eq!(when_out, "(if x (begin 1 2) nil)");
+    // unless → (if x nil (begin body…))
+    let unless_out = expand("(unless x 1)").unwrap();
+    assert_eq!(unless_out, "(if x nil (begin 1))");
+}

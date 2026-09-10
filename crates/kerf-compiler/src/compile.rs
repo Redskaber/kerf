@@ -254,11 +254,12 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
         }
         CoreExpr::Lambda { params, body, .. } => compile_lambda(ctx, params, body, span),
         CoreExpr::App { fn_expr, args, .. } => {
-            // 求值顺序契约（§19.3/§19.5）：参数从左到右，被调者最后
+            // 求值顺序契约（06 §1.3/§2 A1，与 eval 路径一致——T1 定理归纳基础）：
+            // 被调函数先求值，参数从左到右
+            compile_expr(ctx, fn_expr)?;
             for a in args {
                 compile_expr(ctx, a)?;
             }
-            compile_expr(ctx, fn_expr)?;
             ctx.emit(Op::Call(args.len() as u32), span);
             Ok(())
         }
@@ -296,6 +297,19 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
             // 顶层定义：求值 → DUP → 定义全局（Define 返回 v——R6/D1，
             // 与 eval 路径 `Env::define` 后返回 v 一致，T1 定理）。
             // DUP 留存返回值，DefineGlobal 弹出另一份写入全局（栈净 +1）。
+            //
+            // D1 修复（全局泄漏防护）：Define 仅允许出现在入口原型
+            // （顶层/模块体 inline）。函数体内经 begin/when 等表达式位置
+            // 漏入的 define（展开器体提升只匹配直接头部 define）在此
+            // 结构化拒绝——否则 DefineGlobal 会把局部名泄漏为全局，
+            // 与 eval 路径的词法 Env::define 分裂（违反 T1）。两路径
+            // 共享 compile_source，故双侧同报 E0003。
+            if ctx.current != 0 {
+                return Err(CompileError::new(
+                    "define 仅允许出现在顶层或函数体头部（begin/表达式位置包裹的 define 不合法——嵌套 define 请置于体头部）",
+                    span,
+                ));
+            }
             compile_expr(ctx, value)?;
             ctx.emit(Op::Dup, span);
             let gi = ctx.intern_global(*name);
@@ -546,10 +560,11 @@ mod tests {
         let closure_proto = &p.protos[1];
         assert_eq!(closure_proto.arity(), 1);
         assert!(closure_proto.capture_names.is_empty());
-        // 原型体：LOAD_LOCAL 0, LOAD_GLOBAL f, CALL 1, RET
+        // 原型体：LOAD_GLOBAL f, LOAD_LOCAL 0, CALL 1, RET
+        // （06 §2 A1：函数先求值，参数从左到右）
         assert_eq!(
             closure_proto.code,
-            vec![Op::LoadLocal(0), Op::LoadGlobal(0), Op::Call(1), Op::Ret]
+            vec![Op::LoadGlobal(0), Op::LoadLocal(0), Op::Call(1), Op::Ret]
         );
         // main：CLOSURE proto=1 captures=0, HALT
         assert_eq!(
@@ -593,11 +608,11 @@ mod tests {
                 Op::Ret
             ]
         );
-        // 原型 2：LOAD_LOCAL 0(y), LOAD_CAPTURED 0(x), CALL 1, RET
-        // （求值顺序契约 §19.3：参数先于被调者）
+        // 原型 2：LOAD_CAPTURED 0(x), LOAD_LOCAL 0(y), CALL 1, RET
+        // （06 §2 A1 求值顺序：被调者先于参数）
         assert_eq!(
             p.protos[2].code,
-            vec![Op::LoadLocal(0), Op::LoadCaptured(0), Op::Call(1), Op::Ret]
+            vec![Op::LoadCaptured(0), Op::LoadLocal(0), Op::Call(1), Op::Ret]
         );
     }
 
@@ -633,15 +648,15 @@ mod tests {
     }
 
     #[test]
-    fn app_evaluates_args_left_to_right() {
-        // (f a b) → a, b, f, CALL 2
+    fn app_evaluates_fn_then_args_left_to_right() {
+        // (f a b) → f, a, b, CALL 2（06 §2 A1：函数先，参数从左到右）
         let e = app(var(9), vec![var(1), var(2)]);
         let p = compile_ok(&[e]);
         let code = &p.entry_proto().code;
-        // LOAD_GLOBAL a(1), LOAD_GLOBAL b(2), LOAD_GLOBAL f, CALL 2, HALT
-        assert!(matches!(code[0], Op::LoadGlobal(_))); // a
-        assert!(matches!(code[1], Op::LoadGlobal(_))); // b
-        assert!(matches!(code[2], Op::LoadGlobal(_))); // f
+        // LOAD_GLOBAL f, LOAD_GLOBAL a(1), LOAD_GLOBAL b(2), CALL 2, HALT
+        assert!(matches!(code[0], Op::LoadGlobal(_))); // f
+        assert!(matches!(code[1], Op::LoadGlobal(_))); // a
+        assert!(matches!(code[2], Op::LoadGlobal(_))); // b
         assert_eq!(code[3], Op::Call(2));
     }
 }

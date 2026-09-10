@@ -1,8 +1,8 @@
 # 最小自举单元的能力模型：九个核心原语
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-09（v5.1 增补：Module 原语 spec 子类型定义与语义锚链）
-> **Version**: v5.1
+> **Date**: 2026-09-10（v5.2：糖推导示例「非穷举」注记（#5））
+> **Version**: v5.2
 > **Status**: Active（核心冻结对象，全生命周期不变）
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-core/src/expr.rs）｜ **所属 Stage**：Stage 0 定义、全生命周期冻结 ｜ **推迟项**：无（原语集合自身不变；周边能力的分级见 [13-能力矩阵](./13-capability-matrix.md)）
 
@@ -55,7 +55,7 @@ type export_spec = string        (* 被导出符号名——Stage 0 为裸符号
 
 该裁定的相位簿记落地见 [03-宏系统 §1.1 ModuleRegistry 契约](./03-macro-system.md)（`imports: Vec<Symbol>` / `exports: Vec<Symbol>`）；R9 模块归约规则见 [06-操作语义 §2](./06-operational-semantics.md)。
 
-**从 9 个原语推导的语法糖示例**：
+**从 9 个原语推导的语法糖示例**（**非穷举**——v5.2 注，deep-review R1 偏差 #5：下表仅为代表性示例；`when`/`unless`/`let*` 及嵌套 cond/and/or 多参形态的推导未列出，完整推导以展开器实现为准（kerf-expander，[03-宏系统 §2.2](./03-macro-system.md)），负测覆盖见 negative_expander_tests 的 21 关键字误用矩阵）：
 
 ```text
 let x = e in body        → ((lambda (x) body) e)

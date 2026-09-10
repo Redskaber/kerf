@@ -13,13 +13,14 @@ use std::rc::Rc;
 use kerf_compiler::{compile_module, disassemble_program, BcProgram};
 use kerf_core::{lower_program, CoreExpr, IrGraph};
 use kerf_expander::{expand_program, phase::ModuleRegistry, ExpandCtxt, ExpandError};
-use kerf_reader::{read_source, ReadError};
+use kerf_reader::{lex_source, read_source, ReadError, TokenKind};
 use kerf_runtime::Heap;
 use kerf_span::{render_diagnostic, Diagnostic, DiagnosticCode, Severity, SourceMap, Span};
 use kerf_syntax::{Symbol, SymbolTable};
 use kerf_vm::{run_program, Env, Value, VmError};
 
 use crate::builtins::{register_globals, resolve_hygiene_fallbacks};
+use std::collections::HashMap;
 
 /// 管线阶段标识。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,6 +171,7 @@ pub fn compile_source(source: &str, filename: &str) -> Result<CompileOutput, Dri
         .iter()
         .find_map(|e| match e.as_ref() {
             CoreExpr::Module { name, .. } => Some(*name),
+            // _ 臂理由：非 module 顶形式不参与查找（find_map 取首个 module 形式）
             _ => None,
         })
         .unwrap_or(main_sym);
@@ -179,6 +181,7 @@ pub fn compile_source(source: &str, filename: &str) -> Result<CompileOutput, Dri
             CoreExpr::Module {
                 imports, exports, ..
             } => Some((imports.clone(), exports.clone())),
+            // _ 臂理由：非 module 顶形式不参与查找（find_map 取首个 module 形式）
             _ => None,
         })
         .unwrap_or((vec![], vec![]));
@@ -265,6 +268,9 @@ pub fn eval_source(source: &str, filename: &str) -> Result<RunOutcome, DriverErr
     for (sym, v) in &globals {
         let _ = root.define(*sym, v.clone());
     }
+    // 卫生回退解析（eval 路径与 VM 路径一致——T1 定理：宏引入的
+    // 全局引用双路径必须同解；见 resolve_eval_hygiene_fallbacks）
+    resolve_eval_hygiene_fallbacks(&out.core, &mut table, &globals, &root);
     let mut heap = Heap::new();
     heap.set_gc_enabled(false); // eval 路径不触发回收（根集不完整，TD-009）
     let registry = out.registry;
@@ -292,11 +298,137 @@ fn instantiate_registry(mut registry: ModuleRegistry) {
     }
 }
 
+/// eval 路径的卫生回退解析（与 VM 路径的 `resolve_hygiene_fallbacks`
+/// 语义对齐——T1 定理：宏引入的全局引用双路径一致解析）。
+///
+/// VM 路径在字节码 `global_refs` 上解析（run_source）；eval 路径在核心
+/// 表达式树上解析：收集 VarRef/SetBang/Define 中的 `name$hyg$N` 符号
+/// （与编译器 intern_global 口径一致），基名命中全局（内置）时在根
+/// 环境预定义别名（宿主信任注入，不触发 E6——与 VM 路径静默别名
+/// 行为一致）。
+fn resolve_eval_hygiene_fallbacks(
+    core: &[Rc<CoreExpr>],
+    table: &mut SymbolTable,
+    globals: &HashMap<Symbol, Value>,
+    root: &Rc<Env>,
+) {
+    let mut refs: Vec<Symbol> = Vec::new();
+    for e in core {
+        collect_global_refs(e, &mut refs);
+    }
+    for sym in refs {
+        if globals.contains_key(&sym) {
+            continue;
+        }
+        let owned = table.name(sym).to_string();
+        if let Some((base, suffix)) = owned.rsplit_once("$hyg$") {
+            // 截取剩余后缀必须是数字（保守判定——与 VM 侧一致）
+            if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) {
+                let base_sym = table.intern(base);
+                if let Some(v) = globals.get(&base_sym).cloned() {
+                    let _ = root.define(sym, v);
+                }
+            }
+        }
+    }
+}
+
+/// 收集表达式树中的全局引用符号（VarRef + SetBang + Define 的名字，
+/// 与编译器 intern_global 的收集口径一致——两路径回退语义互为镜像）。
+fn collect_global_refs(e: &CoreExpr, out: &mut Vec<Symbol>) {
+    match e {
+        CoreExpr::VarRef { name, .. } => out.push(*name),
+        CoreExpr::Lambda { body, .. } => collect_global_refs(body, out),
+        CoreExpr::App { fn_expr, args, .. } => {
+            collect_global_refs(fn_expr, out);
+            for a in args {
+                collect_global_refs(a, out);
+            }
+        }
+        CoreExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_global_refs(cond, out);
+            collect_global_refs(then_branch, out);
+            collect_global_refs(else_branch, out);
+        }
+        CoreExpr::SetBang { name, value, .. } => {
+            out.push(*name);
+            collect_global_refs(value, out);
+        }
+        CoreExpr::Define { name, value, .. } => {
+            out.push(*name);
+            collect_global_refs(value, out);
+        }
+        CoreExpr::Begin { body, .. } => {
+            for item in body {
+                collect_global_refs(item, out);
+            }
+        }
+        CoreExpr::Module { body, .. } => {
+            for item in body {
+                collect_global_refs(item, out);
+            }
+        }
+        CoreExpr::Literal { .. } => {}
+    }
+}
+
 /// 运行源文本并渲染结果（CLI/Playground 便捷形态）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 pub fn run_source_rendered(source: &str, filename: &str) -> Result<String, DriverError> {
     let outcome = run_source(source, filename)?;
     Ok(kerf_vm::render_value(&outcome.value, &outcome.heap))
+}
+
+/// Token 流 dump（§16 人类可感知输出 / §14.9 编译器自调试）。
+///
+/// reader 是 driver 唯一合法调用者（§11 接口隔离 §14.7.2 B4）——
+/// 根 CLI 的 `tokens` 子命令经本入口转发，不直连 kerf-reader。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上方入口约定，错误体积可接受
+pub fn dump_tokens(source: &str, filename: &str) -> Result<String, DriverError> {
+    let mut sm = SourceMap::new();
+    let file_id = sm.add_file(filename, source);
+    let mut table = SymbolTable::new();
+    let toks =
+        lex_source(source, file_id, &mut table).map_err(|e| DriverError::from_read(&e, &sm))?;
+    let mut out = String::new();
+    for t in &toks {
+        let name = match &t.kind {
+            TokenKind::Identifier(s) => table.name(*s).to_string(),
+            TokenKind::Keyword(k) => k.as_str().to_string(),
+            TokenKind::Operator(o, s) => format!("{:?}({})", o, table.name(*s)),
+            other => format!("{:?}", other),
+        };
+        out.push_str(&format!(
+            "{:>4}..{:<4} {}\n",
+            t.span.start, t.span.end, name
+        ));
+    }
+    Ok(out)
+}
+
+/// 语法对象 dump（Stx 渲染——§14.9 编译器自调试）。
+///
+/// 同 [`dump_tokens`]：CLI `stx` 子命令经 driver 转发调用 reader。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上方入口约定，错误体积可接受
+pub fn dump_stx(source: &str, filename: &str) -> Result<String, DriverError> {
+    let mut sm = SourceMap::new();
+    let file_id = sm.add_file(filename, source);
+    let mut table = SymbolTable::new();
+    let forms =
+        read_source(source, file_id, &mut table).map_err(|e| DriverError::from_read(&e, &sm))?;
+    let mut out = String::new();
+    for f in &forms {
+        out.push_str(&format!(
+            "{}\n",
+            f.render(&|s: Symbol| table.name(s).to_string())
+        ));
+    }
+    Ok(out)
 }
 
 #[cfg(test)]

@@ -80,6 +80,10 @@ impl Value {
     }
 
     /// 通用相等（eq? 语义：即时值按值、堆值按引用、闭包按标识）。
+    ///
+    /// Str 为即时值（`Rc<str>` 载体）——按**内容**比较（D2 修复：
+    /// 原指针比较使 VM 常量池去重路径与 eval 独立分配路径分裂，
+    /// 违反 T1；且与本注释「即时值按值」的自述矛盾）。
     pub fn eq_value(&self, other: &Value) -> bool {
         match (self, other) {
             (Value::Unit, Value::Unit) => true,
@@ -87,7 +91,7 @@ impl Value {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
-            (Value::Str(a), Value::Str(b)) => Rc::ptr_eq(a, b),
+            (Value::Str(a), Value::Str(b)) => a == b,
             (Value::Pair(a), Value::Pair(b)) => a == b,
             (Value::Closure(a), Value::Closure(b)) => Rc::ptr_eq(a, b),
             (Value::Builtin(a), Value::Builtin(b)) => Rc::ptr_eq(a, b),

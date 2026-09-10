@@ -178,3 +178,39 @@ fn lambda_duplicate_params_rejected_at_expand() {
     let err = common::run("(lambda (x x) x)").unwrap_err();
     assert!(err.contains("参数重名"), "展开期应拒绝重名形参：{}", err);
 }
+
+/// T1 对账（[06-操作语义 §1.3/§2 A1]）：App 求值顺序 = 函数先、参数从左到右。
+/// 错误排序场景：((undefined-a) undefined-b) 双路径必须同报 fn 位置的
+/// 未绑定（span 指向 undefined-a），而非参数位置（修复前 VM 先求参数，
+/// 会报 undefined-b——T1 定理反例面）。
+#[test]
+fn app_evaluation_order_fn_first_dual_path() {
+    let src = "((undefined-a) undefined-b)";
+    // "undefined-a" 位于源 2..14；"undefined-b" 位于 16..28
+    let fn_pos = 2u32;
+    let arg_pos = 16u32;
+    // VM 路径（生产路径）
+    let vm_err = kerf_driver::run_source(src, "test.krf").expect_err("VM 路径应报错");
+    assert!(
+        vm_err.diagnostic.primary_span.start >= fn_pos
+            && vm_err.diagnostic.primary_span.start < arg_pos,
+        "VM 路径应报 fn 位置的未绑定（实际 span.start={}）：{}",
+        vm_err.diagnostic.primary_span.start,
+        vm_err.rendered
+    );
+    // eval 路径（参考路径）
+    let ev_err = kerf_driver::eval_source(src, "test.krf").expect_err("eval 路径应报错");
+    assert!(
+        ev_err.diagnostic.primary_span.start >= fn_pos
+            && ev_err.diagnostic.primary_span.start < arg_pos,
+        "eval 路径应报 fn 位置的未绑定（实际 span.start={}）：{}",
+        ev_err.diagnostic.primary_span.start,
+        ev_err.rendered
+    );
+    // 双侧同属 Run 阶段 E0004 载体（E3 语义经由运行时路径报告）
+    assert!(vm_err.rendered.contains("E0004"));
+    assert!(ev_err.rendered.contains("E0004"));
+    // 正例：函数先求值不改变正确程序的结果
+    assert!(dual_path_agrees("((lambda (x) (* x x)) 6)"));
+    assert!(dual_path_agrees("(define (f a b) (+ a b)) (f 1 2)"));
+}

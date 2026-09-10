@@ -152,9 +152,19 @@ fn expand_list(
     }
     let head = items[0].datum.as_symbol();
     // ---- 1. 用户宏（define-syntax 注册的变换器；可覆盖内置语法糖名） ----
+    // 卫生回退（D6 修复）：宏模板引入的变换器引用被 α 重命名
+    // （`name$hyg$N`）——精确符号未命中变换器表时按**基名**回退查表
+    // （03 §2.4 卫生保证(2)「自由标识符穿透」的 Stage 0 近似，与
+    // driver 的全局卫生回退同则；修复前宏调宏两路径均未绑定）。
     if let Some(sym) = head {
-        if ctx.lookup_transformer(sym).is_some() {
-            return expand_macro_call(stx, items, ctx);
+        let resolved = if ctx.lookup_transformer(sym).is_some() {
+            Some(sym)
+        } else {
+            hygienic_base_symbol(sym, &mut ctx.table)
+                .filter(|base| ctx.lookup_transformer(*base).is_some())
+        };
+        if let Some(sym) = resolved {
+            return expand_macro_call(stx, items, ctx, sym);
         }
     }
     // ---- 2. 语法糖内置变换器（let/letrec/cond/and/or/when/unless/while/let*） ----
@@ -162,7 +172,7 @@ fn expand_list(
         if is_sugar_symbol(sym, &ctx.table) {
             if let Some(t) = ctx.builtin_transformer(sym) {
                 ctx.register_transformer(sym, t);
-                return expand_macro_call(stx, items, ctx);
+                return expand_macro_call(stx, items, ctx, sym);
             }
         }
     }
@@ -190,8 +200,8 @@ fn expand_macro_call(
     stx: &Stx,
     items: &[Stx],
     ctx: &mut ExpandCtxt,
+    transformer_sym: Symbol,
 ) -> Result<Rc<CoreExpr>, ExpandError> {
-    let name = items[0].datum.as_symbol().expect("调用方已校验头为符号");
     // 展开终止性（§19.2 不变式 1）
     ctx.depth += 1;
     if ctx.depth > MAX_EXPANSION_DEPTH {
@@ -206,22 +216,33 @@ fn expand_macro_call(
     }
     let transformer = ctx
         .transformers
-        .get(&name)
+        .get(&transformer_sym)
         .cloned()
         .expect("调用方已校验变换器存在");
     let args: Vec<Stx> = items[1..].to_vec();
     let use_scopes = stx.scopes.clone();
     let expanded = transformer
-        .apply_named(name, &args, &mut ctx.table, &use_scopes)
+        .apply_named(transformer_sym, &args, &mut ctx.table, &use_scopes)
         .map_err(|e| {
             ExpandError::new(
-                format!("宏「{}」展开失败：{}", ctx.table.name(name), e),
+                format!("宏「{}」展开失败：{}", ctx.table.name(transformer_sym), e),
                 stx.span,
             )
         })?;
     let result = expand_form(&expanded, ctx);
     ctx.depth -= 1;
     result
+}
+
+/// 卫生基名解析：`name$hyg$N` → 基名 Symbol（后缀须为纯数字；
+/// 与 driver `resolve_hygiene_fallbacks` 的保守判定同则）。
+fn hygienic_base_symbol(sym: Symbol, table: &mut kerf_syntax::SymbolTable) -> Option<Symbol> {
+    let name = table.name(sym).to_string();
+    let (base, suffix) = name.rsplit_once("$hyg$")?;
+    if suffix.is_empty() || !suffix.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(table.intern(base))
 }
 
 fn expand_core_form(
@@ -561,6 +582,7 @@ fn expand_module(
                     body_start += 1;
                     continue;
                 }
+                // _ 臂理由：头部非 import/export（define 等体形式或非关键字符号头）——可选头部区结束，余下为模块体
                 _ => break,
             }
         }

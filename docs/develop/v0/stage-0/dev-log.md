@@ -59,3 +59,36 @@
 - 原则 16（人类可感知）：诊断渲染含摘录 + 反汇编含调试信息
 - 原则 6（横切早期内置）：Span/诊断/相位从第一行代码即贯穿
 - §2.3 原则 10（唯一可信源）：SymbolTable/ScopeStack/GC Heap 单点定义
+
+## 轮次 R6：深度审查修复 + 负测扩张（Task 16，r3——deep-review R1 → NEEDS REVISION 闭环）
+
+- 代码修复（P1×4 清零，§4 行动计划 A）：
+  1. **App 求值顺序统一「函数先」**（A1/偏差 #13）：compile.rs App 分支 fn 先入栈 +
+     vm.rs CALL 弹序对调——06 §1.3/§2 A1 契约双侧对齐（T1 反例面清零）；
+     回归：app_evaluates_fn_then_args（编译序断言）+ app_evaluation_order_fn_first_dual_path
+     （双路径错误排序负例）
+  2. **opcode.rs 冻结守护测试重写**（A2/偏差 #7）：40 项显式枚举（八组），模块头分组
+     注释补 DEFINE_GLOBAL——enum ↔ 测试 ↔ 文档三方冻结
+  3. **§7.3.1 门审计集**（A3）：examples/audit/stage0_gate_audit_r1.rs——41 case
+     （负向 32 + 恢复 6 + 正向 3），§7.1.1 七类全覆盖（含空应用与模块循环依赖）；
+     审计驱动三修复落地（见下）
+  4. **根 CLI reader 直调改走 driver**（A4）：driver 公共 API dump_tokens/dump_stx，
+     main.rs tokens/stx 子命令经 driver 转发（§14.7.2 B4 合规）
+- 审计集驱动修复（发现项 C03/C07/C08）：
+  - 模块循环依赖检测（phase.rs visit DFS 灰标记 → Err「模块循环依赖：Symbol(N) → …」；
+    菱形依赖合法）
+  - VM 堆栈追踪（run_program 错误路径最内 16 帧 note——VmError.trace 有生产者）
+  - eval 路径卫生回退接线（driver::resolve_eval_hygiene_fallbacks——与 VM 路径
+    resolve_hygiene_fallbacks 语义镜像，T1）
+- 负测扩张（行动计划 B，§9.4.3 1:3 门限达标）：四文件表格驱动负测
+  negative_reader（59 case）/ negative_expander（96）/ negative_vm（230）/
+  negative_semantics（98）= 483 case；正负比 1:0.24 → ≈1:3.2；
+  E1–E6 + E0001/E0002/E0004 直接断言；4 项 #[ignore] 文档化存档（守卫/元数/eval 栈/
+  i64::MIN mod）
+- 工程整理（行动计划 D）：examples/ 重组（usage/ 6 个 .krf + audit/ + README 索引，
+  §9.6.2）；catch-all 臂级注释（vm.rs GC 静默空臂等）
+- 文档对账（行动计划 C，Task 16-d）：lang-design v5.2（deep-review §6 偏差清单 26 项
+  回写）+ matrix/pipeline-test-coverage/negative-tests/TD 登记（TD-012/013/014 新增，
+  TD-001/006 断档存档）
+- 验收：**290 通过 / 0 失败 / 4 忽略**（294 函数）；审计集 41 case 全 PASS；
+  fib(25) 84.4ms/轮复现；GC 单轮 0.17s（更正 0.72s 陈旧口径）

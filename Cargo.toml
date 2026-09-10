@@ -64,6 +64,28 @@ path = "tests/v0/stage0/plan/gc_tests.rs"
 name = "pipeline_tests"
 path = "tests/v0/stage0/plan/pipeline_tests.rs"
 
+# 负向门审计集（sop.md §7.3.1 规则 3：examples/audit/ 可重运行，cargo 自动
+# 发现不覆盖嵌套目录，显式声明）
+[[example]]
+name = "stage0_gate_audit_r1"
+path = "examples/audit/stage0_gate_audit_r1.rs"
+
 [[test]]
 name = "gate_review_r1"
 path = "tests/v0/stage0/gate/gate_review_r1.rs"
+
+[[test]]
+name = "negative_reader_tests"
+path = "tests/v0/stage0/plan/negative_reader_tests.rs"
+
+[[test]]
+name = "negative_expander_tests"
+path = "tests/v0/stage0/plan/negative_expander_tests.rs"
+
+[[test]]
+name = "negative_vm_tests"
+path = "tests/v0/stage0/plan/negative_vm_tests.rs"
+
+[[test]]
+name = "negative_semantics_tests"
+path = "tests/v0/stage0/plan/negative_semantics_tests.rs"

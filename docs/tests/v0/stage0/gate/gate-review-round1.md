@@ -26,4 +26,4 @@
 | 能力模型 I/O 类型 | ✅（P2 冻结） |
 | 编译缓存接口 | ✅（P2 冻结） |
 
-结论：**PASS**——详见 [阶段门审查报告](../../../develop/v0/stage-0/gate-review.md)。
+结论：**PASS**——详见 [阶段门审查报告](../../../../develop/v0/stage-0/gate-review.md)。

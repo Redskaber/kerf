@@ -8,6 +8,7 @@
 //! （根集枚举不完整的既定 Stage 0 边界，TD-009）；GC 周期由 VM 路径
 //! 在指令边界安全点驱动（§19.4 陷阱 2）。
 
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -18,6 +19,48 @@ use kerf_span::Span;
 use kerf_syntax::Symbol;
 
 use crate::value::{ClosureValue, Value};
+use crate::vm::MAX_FRAMES;
+
+/// eval 参考路径的求值深度上限（D3 修复：原实现无防护 → Rust 栈溢出
+/// abort）。**实测标定**（debug 构建，每深度单元 ≈ 3 KiB 物理栈）：
+/// 8 MiB 主线程 ≈ 1100 程序层；2 MiB 测试线程 ≈ 275 层（≈ 690 深度
+/// 单位）。取 256 留 2.7× 裕度（最小可信栈 2 MiB 下结构化报错先于
+/// 物理溢出；release 帧更小、裕度更大）。
+/// 注：两路径上限数值不同（256 vs 100000）是参考路径的既定边界
+/// （与 TD-009 同类——eval 为语义基准非生产载体）；T1 定理在
+/// 常规程序域（深度 ≤ 256，含 fib(25)）内成立。
+const MAX_EVAL_DEPTH: usize = 256;
+
+thread_local! {
+    /// 求值深度计数（RAII 守卫维护——避免签名侵入式传参）。
+    static EVAL_DEPTH: Cell<usize> = const { Cell::new(0) };
+}
+
+/// 深度守卫：进入即 +1，退出（含 `?` 早退）自动 -1；超限报结构化错误。
+struct DepthGuard;
+
+impl DepthGuard {
+    fn enter(span: Span) -> Result<Self, EvalError> {
+        let next = EVAL_DEPTH.with(|c| c.get()) + 1;
+        if next > MAX_EVAL_DEPTH {
+            return Err(EvalError::new(
+                format!(
+                    "求值深度超过上限 {}（eval 参考路径；VM 生产路径为 {} 帧结构化上限）",
+                    MAX_EVAL_DEPTH, MAX_FRAMES
+                ),
+                span,
+            ));
+        }
+        EVAL_DEPTH.with(|c| c.set(next));
+        Ok(DepthGuard)
+    }
+}
+
+impl Drop for DepthGuard {
+    fn drop(&mut self) {
+        EVAL_DEPTH.with(|c| c.set(c.get().saturating_sub(1)));
+    }
+}
 
 /// 求值错误（`{ message, span }`——span 直接取自 CoreExpr 节点）。
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +78,10 @@ impl EvalError {
     }
 
     /// 从运行时错误提升（span 由求值位置回填——Layer 0 无位置信息）。
+    ///
+    /// D7 修复后主路径经 `apply_value` 的 `call_span` 回填；本入口保留
+    /// 给错误转换兼容场景。
+    #[allow(dead_code)]
     fn from_runtime(e: &RuntimeError, span: Span) -> Self {
         EvalError::new(e.message.clone(), span)
     }
@@ -116,6 +163,7 @@ pub fn eval_program(
 
 /// 求值单条 CoreExpr（入口函数，§10.1 规则 1）。
 pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, EvalError> {
+    let _depth = DepthGuard::enter(e.span())?;
     match e {
         CoreExpr::Literal { value, span } => eval_literal(value, heap, *span),
         CoreExpr::VarRef { name, span } => env
@@ -133,11 +181,12 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
         } => {
             let f = eval_expr(fn_expr, env, heap)?;
             let mut arg_vals = Vec::with_capacity(args.len());
-            // 求值顺序契约（§19.3/§19.5）：参数从左到右
+            // 求值顺序契约（06 §1.3/§2 A1）：被调函数先求值，参数从左到右
             for a in args {
                 arg_vals.push(eval_expr(a, env, heap)?);
             }
-            apply_value(f, arg_vals, heap).map_err(|e| EvalError::from_runtime(&e, *span))
+            // D7 修复：apply 错误保真透传（不再逐层包装前缀/覆盖 Span）
+            apply_value(f, arg_vals, heap, *span)
         }
         CoreExpr::If {
             cond,
@@ -196,7 +245,17 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
 }
 
 /// 应用函数值（apply 侧，§8.4 `apply`）。
-pub fn apply_value(f: Value, args: Vec<Value>, heap: &mut Heap) -> Result<Value, RuntimeError> {
+///
+/// D7 修复：错误以 `EvalError` 形态保真透传——Eval 闭包体的错误
+/// （消息 + 内层 Span）原样上抛，不再逐层包装「求值失败：」前缀
+/// （修复前 f→g→错 的报告会累积两层前缀且 Span 落最外调用点）；
+/// 无位置信息的错误（元数/不可调用/内置）以 `call_span` 回填。
+pub fn apply_value(
+    f: Value,
+    args: Vec<Value>,
+    heap: &mut Heap,
+    call_span: Span,
+) -> Result<Value, EvalError> {
     match &f {
         Value::Closure(rc) if matches!(rc.as_ref(), ClosureValue::Eval { .. }) => {
             let (params, body, env) = match rc.as_ref() {
@@ -204,27 +263,35 @@ pub fn apply_value(f: Value, args: Vec<Value>, heap: &mut Heap) -> Result<Value,
                 _ => unreachable!("上方已窄化"),
             };
             if params.len() != args.len() {
-                return Err(RuntimeError::new(format!(
-                    "过程参数数量不匹配：期望 {} 实际 {}",
-                    params.len(),
-                    args.len()
-                )));
+                return Err(EvalError::new(
+                    format!(
+                        "过程参数数量不匹配：期望 {} 实际 {}",
+                        params.len(),
+                        args.len()
+                    ),
+                    call_span,
+                ));
             }
             let call_env = env.child();
             for (p, a) in params.iter().zip(args) {
                 // A3 卫式：参数表重名报错（同名形参在同层只允许出现一次）。
                 if !call_env.define(*p, a) {
-                    return Err(RuntimeError::new("过程参数重名（lambda 形参表重复）"));
+                    return Err(EvalError::new(
+                        "过程参数重名（lambda 形参表重复）",
+                        call_span,
+                    ));
                 }
             }
+            // 保真透传：体求值错误（含 Span）不改写
             eval_expr(body, &call_env, heap)
-                .map_err(|e| RuntimeError::new(format!("求值失败：{}", e.message)))
         }
-        Value::Builtin(b) => b.call(heap, args),
-        other => Err(RuntimeError::new(format!(
-            "不可调用的值：{}",
-            other.type_name()
-        ))),
+        Value::Builtin(b) => b
+            .call(heap, args)
+            .map_err(|e| EvalError::new(e.message, call_span)),
+        other => Err(EvalError::new(
+            format!("不可调用的值：{}", other.type_name()),
+            call_span,
+        )),
     }
 }
 

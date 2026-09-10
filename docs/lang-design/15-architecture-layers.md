@@ -1,8 +1,8 @@
 # 架构分层与各层设计总览
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-09
-> **Version**: v5.0（源自 stage0.md v5.0 拆分）
+> **Date**: 2026-09-10（v5.2：§1.5 附「7 层 → 9 crate 映射表」+ workspace/定向裁定注记（#19））
+> **Version**: v5.2
 > **Status**: Active
 
 > 本文件收录架构分层与完整总览（原 §10：能力视角总图、分层视角总图、单向依赖规则、调用关系与数据流、层级依赖规则）以及基础设施层（原 §12）、工程支撑层与理论边界层（原 §13）、外围能力层与操作基础层（原 §14）的框架设计。其中已按主题拆出的小节（Span/诊断 → [02-语法模型](./02-syntax-model.md)、相位分离 → [03-宏系统](./03-macro-system.md)、内存管理 → [05-运行时](./05-runtime.md)、工具链/基准/自调试 → [10-工具链](./10-toolchain.md)、文档流程 → [09-标准库](./09-stdlib.md)、测试 → [11-测试](./11-testing.md)、操作语义 → [06-操作语义](./06-operational-semantics.md)）在本文件保留章节导引。12 个能力模型的定义见 [13-能力矩阵](./13-capability-matrix.md)。
@@ -172,6 +172,24 @@ Layer 6: 相位分离系统（依赖 Layer 4-5 用于协调）
 ```
 
 **规则**：上层可以依赖下层，反之禁止。同层之间通过显式接口交互。
+
+#### 1.5.1 「7 层 → 9 crate」映射表（v5.2 补——设计层级与实现裁定的对账，deep-review R1 偏差 #19）
+
+Stage 0 冻结实现为 Cargo Workspace 9 成员 crate（[12-路线图 §3.2](./12-roadmap.md) 目录蓝图 → 实际落地为 `crates/kerf-*`；实测 24 成员边 + 根 9 边 + 1 dev-dep，DAG 无环）。设计七层与实现 crate 的映射及裁定注记：
+
+| 设计层级 | 实现 crate | 裁定注记 |
+|---------|-----------|----------|
+| L0 最小 I/O Runtime | `kerf-runtime` | **零依赖双基座之一**（堆 + GC + I/O 通道，Layer 0 无依赖裁定满足） |
+| L1 Span + 诊断 | `kerf-span` | **零依赖双基座之二**（Span/Diagnostic 不依赖 runtime——诊断渲染自包含；层内「依赖 L0 用于输出」被简化为零依赖，实现更严格） |
+| （横切） | `kerf-syntax` | **无层槽位**：SymbolTable/ScopeSet/Stx 是 L1-L4 的横切数据基座（符号内化与作用域集被 Reader/Expander 共同消费），不占七层任一槽位 |
+| L2 Token/Reader | `kerf-reader` | 依赖 span + syntax（Span + 符号表） |
+| L3 Graph IR + CoreExpr | `kerf-core` | **简化裁定：core 不依赖 reader**（CoreExpr/图 IR/CodeValue 直接消费 Stx 数据结构而非 Token 流——设计上「依赖 L2 用于构造」在实现中降为共享 syntax 数据基座，依赖图更平） |
+| L4 CodeValue + 宏系统 | `kerf-expander` | 依赖 core + syntax（展开产物为 CoreExpr） |
+| L5 元循环求值器 / 编译器 | `kerf-vm`（eval）+ `kerf-compiler` | compiler 依赖 core（Op 定义于 compiler，vm 为消费者）；**vm → runtime 定向裁定**：§18.5 图 L6→L7 边按 §2.4.5「Layer 0 无依赖」裁定为 kerf-vm 依赖 kerf-runtime（Op 定义权归 compiler 的附带裁定），完整论述见 [管线数据流图](../graph/pipeline/data-flow.md) |
+| L6 相位分离协调 | （并入 `kerf-expander/src/phase.rs`） | 相位簿记不独立成 crate——它是 Expander/Compiler 的共享上下文（本文 §2/§2.3 横切属性的落地） |
+| 管线编排 | `kerf-driver` | 全依赖汇聚点（§14.7.2 B4：reader 仅 driver 调用；四项接口预留冻结于 driver 的 reserved.rs **单文件**——设计草案的 reserved/ 目录四文件裁定为单文件收敛） |
+
+**目录蓝图与实现的差异注记**：(1) 设计蓝图的 `src/layerN/` 单 crate 目录被裁定为 **Cargo workspace 多 crate** 结构（§8.4.6 两级结构——编译边界即接口冻结边界）；(2) `vm/`（C 实现）未落地——**Runtime/VM 以 C 为基座的口径改为「Rust 实现 + C 语义验证」**：Stage 0 全部 Rust 实现（零外部依赖），C 基座是 Stage 2+ 后端演化（[08-后端演化](./08-backend-evolution.md)）的选项而非 Stage 0 交付项；(3) `benchmarks/` 目录为空占位——实际基准载体是 CLI `bench` 子命令 + `examples/usage/`（见 [04 §4 测试锚点](./04-bytecode-vm.md)）。
 
 ---
 

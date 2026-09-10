@@ -1,8 +1,8 @@
 # Stage 0 能力矩阵与 12 个能力模型完整设计
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-09
-> **Version**: v5.0（源自 stage0.md v5.0 拆分）
+> **Date**: 2026-09-10（v5.2：§3.1 四项预留接口以 reserved.rs 冻结签名回填（#16）+ 能力模型 I/O 处理程度 P3→P2（#21））
+> **Version**: v5.2
 > **Status**: Active
 
 > 本文件是 12 个能力模型详细设计（原 §8）的**唯一完整副本**，同时收录 Stage 0 能力矩阵与职责边界（原 §7：三层分类矩阵与架构原则）、接口预留与完全推迟的能力（原 §9 全文）、以及三个待定决策的前置架构约束（原 §15）。其中 §8.1/§8.6/§8.7、§8.9/§8.10、§8.12、§8.8/§8.11 的正文同时收录于对应主题文件（[02-语法模型](./02-syntax-model.md) / [03-宏系统](./03-macro-system.md) / [04-字节码 VM](./04-bytecode-vm.md) / [05-运行时](./05-runtime.md)）以保证自包含；关键算法伪代码收口于 02-05 的「实现框架」章节。能力选型的批判性审视与 2026 现代方案见 [14-替代设计](./14-design-alternatives.md)；能力引入时机与处理程度（P0-P4）的进程视角见 [12-路线图 §2](./12-roadmap.md)。
@@ -388,71 +388,139 @@ switch-dispatch 循环，处理约 35 个操作码。完整操作码定义涵盖
 
 ### 3.1 接口预留的 4 个能力模型（原 §9.1）
 
+> **v5.2 签名权威声明（deep-review R1 偏差 #16）**：本节四项预留接口的**冻结签名权威是 `kerf-driver/src/reserved.rs`**（冻结性经 Probe 实现测试 `reserved_signatures_are_frozen` 证明——「测试实现体编译通过 = 契约冻结」）。早期版本的伪签名（如 `Self::Effect::Result` 关联类型路径、`splice(code) -> Self::Code::Inner` 等不可编译形态）仅为设计草稿，以下全部回填为可编译的真实冻结签名。
+
 #### 3.1.1 Effect Handlers（接口预留）（原 §9.1.1）
 
-**预留接口（不实现）**：
+**预留接口（Stage 0 冻结，P3——仅类型形状）**：
 
 ```rust
-// Stage 0 仅定义类型，不实现
+// reserved.rs 冻结签名（可编译）
+pub trait EffectFamily {
+    /// 执行该效应后的结果值（P3 形状：以 Value 具体化——Stage 2 可细化为泛型关联）。
+    type Result;
+}
+
+pub trait Effect {
+    /// 所属效应族。
+    type Family: EffectFamily<Result = Value>;
+}
+
 pub trait EffectSystem {
-    type Effect;
+    type Effect: Effect;
     type Handler;
     type Continuation;
-    
-    // 预留接口（Stage 2 实现）
-    fn perform(&self, effect: Self::Effect) -> Self::Effect::Result;
+
+    /// 执行效应：挂起并向上传递（Stage 2 实现；P3 形状：结果经 Value）。
+    fn perform(&self, effect: Self::Effect) -> Value;
+
+    /// 安装效应处理器并执行计算（Stage 2 实现）。
     fn handle(&self, handler: Self::Handler, computation: impl FnOnce() -> Value) -> Value;
-    
-    // 职责边界：Stage 0 仅定义类型签名
 }
 ```
+
+**行为规格**（完整语义见 stage0.md §6.4）：`perform` 挂起当前计算，向上查找匹配的 handler；`handle` 安装 handler 并执行计算——效应触发时以 continuation 恢复。Stage 0 裁定：传统闭包（§21.10 决策点 2）；Effects 于 Stage 2 语言级引入。
 
 **预留原因**：OCaml 5 的效应系统正在"实际使用于编译器基础设施"，但作为语言核心的求值器仍属前沿。
 
 #### 3.1.2 多阶段编程（接口预留）（原 §9.1.2）
 
-**预留接口**：
+**预留接口（Stage 0 冻结，P3——仅类型形状）**：
 
 ```rust
+// reserved.rs 冻结签名（可编译）
 pub trait MultiStage {
+    /// 代码值类型（Stage 2 具体化为 `CodeValue`）。
     type Code;
-    
-    // 预留（Stage 2 实现）
-    fn quote(expr: impl Expr) -> Self::Code;
-    fn splice(code: Self::Code) -> Self::Code::Inner;
-    fn run(code: Self::Code) -> Self::Code::Result;
+
+    /// 引号：表达式 → 代码值（Stage 2 实现）。
+    fn quote(&self, expr: &CoreExpr) -> Self::Code;
+
+    /// 拼接：代码值 → 当前阶段代码（Stage 2 实现）。
+    fn splice(&self, code: &Self::Code) -> Result<CoreExpr, RuntimeError>;
+
+    /// 执行代码值（Stage 2 实现）。
+    fn run(&self, code: &Self::Code) -> Result<Value, RuntimeError>;
 }
 ```
+
+**行为规格**（MetaOCaml 语义，stage0.md §6.1）：`quote` 将表达式提升为代码值（良构/良作用域保证）；`splice` 将代码值拼接进当前阶段语法；`run` 执行未来阶段代码（Stage 2 做实为编译期计算）。Stage 0 裁定：元循环求值器（§21.10 决策点 1）；多阶段于 Stage 2+ 替换。
 
 **预留原因**：MetaOCaml 虽然理论上成熟（"良构的、良类型的和良作用域的"），但"实际实现往往使用启发式方法"。
 
 #### 3.1.3 能力模型 I/O（接口预留）（原 §9.1.3）
 
-**预留接口**：
+**处理程度（v5.2 修订，deep-review R1 偏差 #21）**：**P2**（原记 P3）——reserved.rs 的 `CapabilityIO` 冻结签名附带**完整行为规格**（下述 4 条），满足 P2 判据「冻结类型签名与行为规格，无实现」（[12-路线图 §2.1.2](./12-roadmap.md) 五级标度）——与 [17-设计原则 §1 原则 26](./17-principles.md) 三级成熟度匹配规则的「研究前沿 → P3」裁定并不冲突：规则给出的是**上限**，实现策略上为Stage 1 直达预留了完整规格（超规格交付）。
+
+**预留接口（Stage 0 冻结，P2）**：
 
 ```rust
-// Stage 0 用传统 I/O，但预留能力模型的类型
+// reserved.rs 冻结签名（可编译）
+/// 读能力令牌（不可伪造——私有构造，经权限传递获得）。
 pub struct ReadCapability { _private: () }
+
+/// 写能力令牌（不可伪造）。
 pub struct WriteCapability { _private: () }
 
+/// 能力模型 I/O 错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IOError { pub message: String }
+
 pub trait CapabilityIO {
-    // Stage 1+ 实现
+    /// 读一行（需要读能力，Stage 1+ 实现）。
     fn read_line(cap: &mut ReadCapability) -> Result<String, IOError>;
+
+    /// 写一行（需要写能力，Stage 1+ 实现）。
     fn write_line(cap: &mut WriteCapability, s: &str) -> Result<(), IOError>;
 }
 ```
 
+**完整行为规格**（P2——Stage 1 可直接按规格实现）：
+1. `read_line` 仅在持有 `ReadCapability` 时可调用——令牌经线性传递，不可复制、不可伪造；
+2. `write_line` 同理（`WriteCapability`）；
+3. 无令牌的 I/O 调用为**编译期错误**（权限验证，非运行时检查）；
+4. 与 Stage 0 传统 I/O（kerf-runtime::io 全局函数）的替换关系：渐进替换原则 §28——driver 注册的内置函数改为能力参数化形态，全局函数逐步退役。
+
+Stage 0 裁定：传统 I/O（§21.10 决策点 3）；能力模型于 Stage 1 基础 / Stage 2 完整引入。
+
 #### 3.1.4 编译缓存（接口预留）（原 §9.1.4）
 
-**预留接口**：
+**预留接口（Stage 0 冻结，P2）**：
 
 ```rust
+// reserved.rs 冻结签名（可编译）
+/// 缓存键（源哈希 + 编译配置指纹——确定性编译的键）。
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CacheKey {
+    pub source_hash: u64,        // 源文本内容哈希（Stage 1：SHA-256 内容寻址）
+    pub config_fingerprint: u64, // 编译配置指纹（阶段版本 + 选项）
+}
+
+/// 缓存结果（编译产物——字节码 + 核心表达式 + 代码值）。
+#[derive(Debug, Clone)]
+pub struct CachedResult {
+    pub program: BcProgram,
+    pub core: Vec<Rc<CoreExpr>>,
+    pub code_value: Option<CodeValue>,
+}
+
 pub trait CompilationCache {
-    fn get_cached(&self, key: CacheKey) -> Option<CachedResult>;
+    /// 查询缓存。
+    fn get_cached(&self, key: &CacheKey) -> Option<CachedResult>;
+
+    /// 写入缓存。
     fn store(&mut self, key: CacheKey, result: CachedResult);
-    fn invalidate(&mut self, key: CacheKey);
+
+    /// 失效缓存项。
+    fn invalidate(&mut self, key: &CacheKey);
 }
 ```
+
+**完整行为规格**（P2——Stage 1 可直接按规格实现）：
+1. `get_cached`：键命中返回产物（内容寻址——源不变 + 配置不变 → 产物必然等价，可直接复用）；
+2. `store`：写入缓存（幂等——同键覆盖）；
+3. `invalidate`：显式失效（源变更由键哈希自然区分；此方法用于编译器升级等全量失效场景）；
+4. Stage 2 深化：查询式增量编译（salsa 风格依赖图），本三方法保持签名不变（渐进替换原则 §28）。
 
 ### 3.2 完全推迟的能力（原 §9.2）
 

@@ -47,7 +47,11 @@ pub struct Parser<'t, 'i> {
 }
 
 /// 最大嵌套深度（语法器栈保护；超深嵌套报结构化错误而非崩溃）。
-const MAX_NESTING_DEPTH: usize = 10_000;
+///
+/// 值域依据（FS-1 修复）：递归下降语法器在默认 2 MiB 测试线程栈上
+/// 约 600 层即溢出（实测）——取 256 留 >8× 裕度，同时覆盖下游
+/// expander/compile/eval 对同构树的递归（各栈帧同量级）。
+const MAX_NESTING_DEPTH: usize = 256;
 
 impl<'t, 'i> Parser<'t, 'i> {
     /// 构造。
@@ -134,6 +138,7 @@ impl<'t, 'i> Parser<'t, 'i> {
             TokenKind::Delimiter(Delimiter::CloseParen | Delimiter::CloseBracket) => {
                 let close = match token.kind {
                     TokenKind::Delimiter(d) => d,
+                    // _ 臂理由：不可达——外层模式已窄化为 Delimiter，此臂仅满足穷尽性
                     _ => Delimiter::CloseParen,
                 };
                 Err(ReadError::stray_closing_delimiter(close, token.span))
@@ -152,6 +157,7 @@ impl<'t, 'i> Parser<'t, 'i> {
         let (open_delim, is_vector) = match &open.kind {
             TokenKind::Delimiter(Delimiter::OpenParen) => (Delimiter::OpenParen, false),
             TokenKind::Delimiter(Delimiter::OpenBracket) => (Delimiter::OpenBracket, true),
+            // _ 臂理由：不可达——唯一调用点（parse_datum）已窄化为开放分隔符，按圆括号兜底
             _ => (Delimiter::OpenParen, false),
         };
         self.bump();
@@ -173,6 +179,7 @@ impl<'t, 'i> Parser<'t, 'i> {
                 TokenKind::Delimiter(Delimiter::CloseParen | Delimiter::CloseBracket) => {
                     let close_kind = match &t.kind {
                         TokenKind::Delimiter(d) => *d,
+                        // _ 臂理由：不可达——外层模式已窄化为 Delimiter，此臂仅满足穷尽性
                         _ => Delimiter::CloseParen,
                     };
                     let close_span = t.span;
@@ -203,6 +210,7 @@ impl<'t, 'i> Parser<'t, 'i> {
                     };
                     break Ok(stx);
                 }
+                // _ 臂理由：非 EOF/关闭分隔符的 token（原子与嵌套开放分隔符）即列表元素——递归解析
                 _ => match self.parse_datum() {
                     Ok(d) => items.push(d),
                     Err(e) => break Err(e),

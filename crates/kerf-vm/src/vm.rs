@@ -145,7 +145,6 @@ pub fn run_program(
     globals: &mut HashMap<Symbol, Value>,
     heap: &mut Heap,
 ) -> Result<Value, VmError> {
-    let mut stack: Vec<Value> = Vec::new();
     let mut frames: Vec<Frame> = vec![Frame {
         ret_proto: 0,
         ret_pc: 0,
@@ -155,6 +154,38 @@ pub fn run_program(
         ext: FrameExt::new(),
         call_span: Span::dummy(),
     }];
+    let outcome = execute(program, globals, heap, &mut frames);
+    outcome.map_err(|mut e| {
+        // 调用点追踪（§8.12 运行时错误捕获）：错误发生时的活跃帧链。
+        // 跳过主帧；保留最内 16 帧（深递归下外层无信息量，防诊断爆炸）；
+        // 帧序 = 调用时间序（外层→内层），与 render_trace 的
+        // "called from" 链一致。
+        if e.trace.is_empty() && frames.len() > 1 {
+            let start = frames.len().saturating_sub(MAX_TRACE_FRAMES).max(1);
+            e.trace = frames[start..]
+                .iter()
+                .map(|f| TraceFrame {
+                    proto_name: Some(program.protos[f.proto].name),
+                    span: f.call_span,
+                })
+                .collect();
+        }
+        e
+    })
+}
+
+/// 调用点追踪截断上限（深递归诊断防爆——仅保留最内 N 帧）。
+const MAX_TRACE_FRAMES: usize = 16;
+
+/// 主执行循环（run_program 内层——错误路径的 `return`/`?` 在此传播，
+/// 外层从 `frames` 快照附加堆栈追踪）。
+fn execute(
+    program: &BcProgram,
+    globals: &mut HashMap<Symbol, Value>,
+    heap: &mut Heap,
+    frames: &mut Vec<Frame>,
+) -> Result<Value, VmError> {
+    let mut stack: Vec<Value> = Vec::new();
     let mut pc: u32 = 0;
     let mut instructions: u64 = 0;
     let mut gc_cooldown: u64 = 0;
@@ -377,16 +408,17 @@ pub fn run_program(
             }
             Op::Call(n) => {
                 let n = *n as usize;
-                // 栈布局：[arg0..arg n-1, fn]（§19.3 求值顺序契约）
+                // 栈布局：[fn, arg0..arg n-1]（06 §2 A1 求值顺序契约：
+                // 函数先求值入栈，参数从左到右——与 eval 路径一致）
                 if stack.len() < n + 1 {
                     return Err(VmError::new("CALL 栈深度不足", span));
                 }
-                let callee = stack.pop().expect("上方已检查");
                 let mut args: Vec<Value> = Vec::with_capacity(n);
                 for _ in 0..n {
                     args.push(stack.pop().expect("上方已检查"));
                 }
                 args.reverse(); // arg0 在局部槽 0
+                let callee = stack.pop().expect("上方已检查");
                 match callee {
                     Value::Builtin(b) => match b.call(heap, args) {
                         Ok(v) => push!(v),
@@ -555,7 +587,7 @@ pub fn run_program(
             && gc_cooldown == 0
             && heap.should_collect()
         {
-            let roots = collect_roots(&stack, globals, &frames);
+            let roots = collect_roots(&stack, globals, frames);
             let stats = kerf_runtime::mark_sweep_cycle(heap, &roots);
             // 回收收益 < 25% → 冷却（存活根主导，降低扫描频率）
             if stats.total_freed as usize * 4 < stats.slots {
@@ -645,6 +677,7 @@ fn collect_value_roots(v: &Value, roots: &mut RootSet, visited: &mut HashSet<usi
                 }
             }
         }
+        // _ 臂理由：即时值（Unit/Nil/Bool/Int/Float/Str/Builtin）无堆子引用，无需入根集
         _ => {}
     }
 }

@@ -20,8 +20,8 @@ pub fn register_globals(table: &mut SymbolTable) -> HashMap<Symbol, Value> {
     let mut defs: Vec<(&'static str, Rc<BuiltinFn>)> = Vec::new();
     defs.push(("+", arith_builtin("+", Fold::Add, 0)));
     defs.push(("-", arith_builtin("-", Fold::Sub, 1)));
-    defs.push(("*", arith_builtin("*", Fold::Mul, 1)));
-    defs.push(("/", arith_builtin("/", Fold::Div, 1)));
+    defs.push(("*", arith_builtin("*", Fold::Mul, 0)));
+    defs.push(("/", arith_builtin("/", Fold::Div, 2)));
     defs.push(("mod", arith_builtin("mod", Fold::Mod, 2)));
     defs.push(("=", cmp_builtin("=", Cmp::Eq)));
     defs.push(("<", cmp_builtin("<", Cmp::Lt)));
@@ -227,6 +227,7 @@ fn two_args(name: &str, args: &[Value]) -> Result<(), RuntimeError> {
     Ok(())
 }
 
+#[derive(PartialEq)]
 enum Fold {
     Add,
     Sub,
@@ -237,11 +238,36 @@ enum Fold {
 
 fn arith_builtin(name: &'static str, fold: Fold, min_args: usize) -> Rc<BuiltinFn> {
     BuiltinFn::new(name, move |_, args| {
+        // 元数与单位元边界（D5/D9 修复，Scheme 惯例）：
+        // (+) → 0、(*) → 1（单位元）；(- x) → -x（一元取负）；
+        // / 与 mod 无单位元——空参/不足报元数错误（修复前 (+) 直接
+        // args[0] 越界 panic；(- 5) 错误地返回 5）。
+        if args.is_empty() {
+            return match fold {
+                Fold::Add => Ok(Value::Int(0)),
+                Fold::Mul => Ok(Value::Int(1)),
+                _ => Err(RuntimeError::new(format!(
+                    "{} 至少需要 {} 个参数",
+                    name, min_args
+                ))),
+            };
+        }
         if args.len() < min_args {
             return Err(RuntimeError::new(format!(
                 "{} 至少需要 {} 个参数",
                 name, min_args
             )));
+        }
+        if args.len() == 1 && fold == Fold::Sub {
+            // 一元取负（D9）：(- x) = 0 - x
+            return match &args[0] {
+                Value::Int(v) => v
+                    .checked_neg()
+                    .map(Value::Int)
+                    .ok_or_else(|| RuntimeError::new("整数减法溢出")),
+                Value::Float(v) => Ok(Value::Float(-v)),
+                _ => Err(RuntimeError::new(format!("{} 需要 int", name))),
+            };
         }
         let has_float = args.iter().any(|a| matches!(a, Value::Float(_)));
         if has_float {
@@ -287,13 +313,17 @@ fn arith_builtin(name: &'static str, fold: Fold, min_args: usize) -> Rc<BuiltinF
                         if v == 0 {
                             return Err(RuntimeError::new("整数除零"));
                         }
-                        acc / v
+                        // D4 修复：i64::MIN / -1 溢出 panic → 结构化错误
+                        acc.checked_div(v)
+                            .ok_or_else(|| RuntimeError::new("整数除法溢出"))?
                     }
                     Fold::Mod => {
                         if v == 0 {
                             return Err(RuntimeError::new("整数取模除零"));
                         }
-                        acc % v
+                        // D4 修复：i64::MIN % -1 溢出 panic → 结构化错误
+                        acc.checked_rem(v)
+                            .ok_or_else(|| RuntimeError::new("整数取模溢出"))?
                     }
                 };
             }
@@ -330,6 +360,7 @@ fn cmp_builtin(name: &'static str, cmp: Cmp) -> Rc<BuiltinFn> {
                         "字符串仅支持 = 比较（Stage 0 边界，TD-011）",
                     ))
                 }
+                // _ 臂理由：含 Float 或跨类型的组合——经 as_number 提升为 f64 统一比较，非数值在此报错
                 _ => {
                     let x = a
                         .as_number()

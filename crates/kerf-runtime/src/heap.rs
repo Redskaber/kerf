@@ -50,6 +50,7 @@ impl PartialEq for HeapObj {
             (HeapObj::Float(a), HeapObj::Float(b)) => a == b,
             (HeapObj::Bool(a), HeapObj::Bool(b)) => a == b,
             (HeapObj::Nil, HeapObj::Nil) => true,
+            // _ 臂理由：不同构造子的组合（跨类型装箱值）不相等——类型严格相等
             _ => false,
         }
     }
@@ -229,6 +230,7 @@ impl Heap {
     fn children(&self, r: GcRef) -> Vec<GcRef> {
         match &self.get(r).map(|s| &s.obj) {
             Some(HeapObj::Pair(a, b)) => vec![*a, *b],
+            // _ 臂理由：非序对堆对象（Str/Int/Float/Bool/Nil）与越界引用均无子引用——标记图遍历无出边
             _ => Vec::new(),
         }
     }

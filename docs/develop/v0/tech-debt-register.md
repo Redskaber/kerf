@@ -1,8 +1,8 @@
 # 综合技术债登记册
 
 > **Author**: kerf-dev-agent（ARCH-A 角色）
-> **Date**: 2026-09-09
-> **Version**: v0.1.0
+> **Date**: 2026-09-10（r3：TD-001/006 断档记录 + TD-005/008/011 详情补齐 + TD-012/013/014 新增 + TD-009 注记更新）
+> **Version**: v0.1.0-r3
 > **Status**: Active
 > **规则**: sop.md §6.2.1——新增已解决项/调整剩余项优先级（每子阶段必检）
 
@@ -10,23 +10,39 @@
 
 | TD ID | 标题 | 等级 | 状态 | 目标阶段 |
 |-------|------|------|------|---------|
+| TD-001 | （编号断档——不可考） | — | 断档存档 | — |
 | TD-002 | quote 符号/向量值类型缺失 | P3 | 开放 | Stage 1 |
 | TD-003 | 图 IR 复合节点 CSE 共享 | P3 | 开放 | Stage 2 |
 | TD-004 | 作用域集解析（Racket 式）替换名称基解析 | P2 | 开放 | Stage 1 |
 | TD-005 | syntax-parse 级宏组合 | P3 | 开放 | Stage 2 |
+| TD-006 | （编号断档——不可考） | — | 断档存档 | — |
 | TD-007 | 迭代式展开工作表（解除深度上限 128） | P2 | 开放 | Stage 1 |
 | TD-008 | 分代 GC / 堆压缩 | P3 | 开放 | Stage 2 |
 | TD-009 | eval 路径 GC 根集枚举 | P3 | 开放 | Stage 1 |
 | TD-010 | 闭包/内置函数装箱（pair 元素） | P3 | 开放 | Stage 1 |
 | TD-011 | 字符串全序比较 | P3 | 开放 | Stage 2 |
+| TD-012 | expander.rs 单文件拆分候选 | P3 | 开放 | Stage 1（切换期） |
+| TD-013 | 多错误收集 / Expander 恢复展开（单错误短路） | P2 | 开放 | Stage 1 |
+| TD-014 | 展开期错误消息归因失真（嵌套 define） | P3 | 开放 | Stage 1 |
 
 ## 详情
+
+### TD-001 / TD-006 编号断档记录（r3 登记）
+
+**编号断档：早期开发轮次消化，具体去向不可考——登记于 r3。** 考证过程（2026-09-10）：
+(1) 全库 git 历史（4 commits）与 worklog 全文检索「TD-001」「TD-006」零命中——两个编号
+**从未被登记过任何内容**；(2) 登记册于 worklog Task 6（工程文档树）创建时即自 TD-002
+起编（TD-005/TD-008/TD-011 同批仅索引行），推断为创建时的**编号跳号笔误**而非
+「已解决项消失」——不存在应留而未留的解决痕迹。**处置**：两个编号永久保留为断档占位
+（禁止复用），以满足 §6.2 规则 2「大阶段末全审须闭环『已解决项确实消失』」的审计要求；
+后续新增债一律从 TD-015 起编。
 
 ### TD-002 quote 符号/向量值类型缺失
 - **描述**：`LiteralValue` 无 Symbol/Vector 变体——`(quote sym)` 显式报错
 - **根因**：Stage 0 值模型最小化（§3.2 literal_value 定义如此）
 - **修复方案**：Stage 1 增加 `Value::Symbol`；quote 符号 datum → 符号值
 - **影响范围**：expander::datum_to_value / vm::value
+- **代码锚**：kerf-core（literal_value 定义）；负测锚点：negative_expander_tests::quote_misuse
 - **优先级依据**：符号值影响宏编程体验（P3——不影响语义验证闭环）
 
 ### TD-003 图 IR 复合节点 CSE 共享
@@ -41,17 +57,124 @@
 - **根因**：名称基 + 一致性卫生重命名已满足 P1 卫生保证；
   scope-set 解析是 Stage 1 语言级宏的前置
 - **修复方案**：编译器 resolve 按 (name, scopes ⊆) 匹配绑定
-- **卫生回退**：$hyg$ 后缀剥离（driver::resolve_hygiene_fallbacks）为
+- **卫生回退**：$hyg$ 后缀剥离（driver::resolve_hygiene_fallbacks +
+  **driver::resolve_eval_hygiene_fallbacks**——r3 已接线 eval 路径，双路径镜像）为
   名称基解析的显式近似
+- **测试锚点**：negative_semantics_tests::t1_regression_hygiene_fallback_dual_path（3 case）
+
+### TD-005 syntax-parse 级宏组合（r3 补详情）
+- **描述**：syntax-rules 为骨架子集——**单层省略号边界**；点对模式尾部、尾省略号 + 固定尾部、
+  展开转义 `(… template)`、嵌套省略号（多维笛卡尔展开）未实现（03 §2.3 v5.2 Stage 0 裁定注记）
+- **根因**：宏组合表达力非 Stage 0 语义验证闭环的必要项（deep-review R1 偏差 #1 的
+  「实现合理（Stage 0 骨架）」裁定）
+- **修复方案**：Stage 2 syntax-parse 类结构化宏 DSL + 文法全量实现
+- **代码锚**：kerf-expander/src/macro_sys.rs:4（显式推迟注记）
+- **workaround**：单层省略号 + Rust 内置变换器（§3.2 糖推导全表）覆盖 Stage 0 全部需求
+- **测试锚点**：negative_expander_tests::syntax_rules_misuse / macro_expansion_failures
 
 ### TD-007 迭代式展开
 - **描述**：展开深度上限 128（rustc 默认对齐）；文档示例 10_000 需迭代式
 - **修复方案**：展开工作表化（显式队列替代递归下降）
+- **测试锚点**：negative_expander_tests 宏深度超限负例（超限报错而非栈溢出）
 
-### TD-009 eval 路径 GC 根集
+### TD-008 分代 GC / 堆压缩（r3 补详情）
+- **描述**：slot-Vec + 空闲表（free 表）方案**不移动对象、不压缩**——长运行程序的堆碎片
+  治理缺位（05 §4 v5.2 对齐：清除阶段全量重建空闲表，句柄稳定但空间不回收整理）
+- **根因**：Stage 0 程序短生命周期 + mark-sweep 最小复杂度裁定（避免分代/增量/并发的复杂度）
+- **修复方案**：Stage 2 分代 GC / 堆压缩（05 §4 陷阱 3 的既定推迟路径）
+- **代码锚**：kerf-runtime/src/lib.rs:19（推迟注记）
+- **workaround**：Stage 0 测试与示例程序分配量有界（gc_tests 10^6 / gc_stress 3×10^5 均堆有界）
+
+### TD-009 eval 路径 GC 根集（r3 注记更新）
 - **描述**：元循环求值器关闭 GC 触发（根集枚举需遍历 Rc 环境链）
 - **修复方案**：Stage 1 根集遍历或（按 §21.9 演进矩阵）eval 被编译器替换
+- **代码锚**：driver.rs（eval 路径 `heap.set_gc_enabled(false)`）+ eval.rs:8
+- **r3 关联注记**：eval 路径的**卫生回退解析已接线**（driver::resolve_eval_hygiene_fallbacks，
+  Task 16 修复双路径全局引用分裂，TD-004 的 eval 侧镜像）——但该路径 **GC 仍禁用**：
+  卫生回退是符号解析层修复，与根集枚举（Rc 环境链/闭包可达图遍历）**无耦合**，属两个
+  独立边界；GC 触发仍仅由 VM 路径承担（安全点轮询 + 五来源根集），L-GC 不可观测性不受影响
 
 ### TD-010 闭包装箱
 - **描述**：序对元素为闭包/内置时以标记字符串占位（不可达路径）
 - **修复方案**：Stage 1 HeapObj::Foreign(Rc<dyn Any>)
+- **代码锚**：heap.rs（BoxedInput 显式限制）/ vm.rs:626（占位注记）；05 §3.1 v5.2（HeapObj 六变体对齐——早期文档误写 Boxed 变体的更正出处）
+
+### TD-011 字符串全序比较（r3 补详情）
+- **描述**：比较操作符（`<` `<=` `>` `>=`）仅支持数值塔——字符串操作数报
+  「字符串仅支持 = 比较」（`= `可判等字符串；`eq?` 即时值按值/堆值按引用）
+- **根因**：字符串全序语义（Unicode 码点序 vs 本地化序）裁定推迟——Stage 0 避免隐式语义承诺
+- **修复方案**：Stage 2 实现字符串序比较（数值塔之外的比较路径分流）
+- **代码锚**：kerf-driver/src/builtins.rs:330（报错消息注记）
+- **测试锚点**：negative_vm_tests::comparison_string_ordering_rejected（4 case 断言报错形态）
+
+### TD-012 expander.rs 单文件拆分候选（r3 新增）
+- **描述**：kerf-expander 2276 LOC 占 crates 22.2%，其中 expander.rs 单文件 1350 行
+  （deep-review R1 D1 风险项②）——职责仍单一（9 核心形式 + 糖推导 + 相位驱动）但认知负担
+  已达拆分阈值
+- **等级**：P3（非性能、非语义——纯可维护性）
+- **目标时机**：Stage 1 切换期（前端重写时顺带拆分：核心形式/糖推导/相位驱动三模块）；
+  拆分前禁止向该文件继续新增职责（防 1500+ 失控）
+- **关联**：worklog Task 14-a（D1 架构审查）；TD-007（迭代式展开重写时自然触碰）
+
+### TD-013 多错误收集 / Expander 恢复展开未实现（r3 新增）
+- **描述**：stage0.md §8.7 / 02 §5 承诺「单次运行报告多个错误 + Expander 错误恢复后继续
+  展开后续形式（IDE 增量反馈）」——实现为**单错误短路**（首个错误终止管线，后续形式不再
+  展开/求值）。deep-review R1 存档确认，negative_semantics_tests::error_recovery_* 锚定
+  当前事实行为（4 case）
+- **等级**：P2（设计承诺与实现存在可观测差距——诊断吞吐量面）
+- **目标时机**：Stage 1（与效应处理时机（§6.4）联动裁定：多错误收集的错误恢复策略与
+  handler continuation 语义同批设计，避免两套恢复机制）
+- **代码锚**：driver.rs（管线短路返回）；negative_semantics_tests.rs:433（存档注记）
+
+### TD-014 展开期错误消息归因失真（r3 新增）
+- **描述**：嵌套 define 重复（`(define (f) (define x 1) (define x 2))` 类形态）在**展开期**
+  被体内部提升机制拒绝，但消息为「lambda 参数重名」——**归因失真**（语义上等价 E6 的
+  提前防御，消息误导排查方向）。同批存档：eval 路径错误诊断保真度弱于 VM（错误包装
+  前缀「求值失败：」+ Span 指向差异——双路径消息分裂面，见 negative_semantics_tests 头注）
+- **等级**：P3（消息质量——不影响 Err 事实与双路径一致性）
+- **目标时机**：Stage 1（消息质量专项：展开期错误归因到「嵌套 define 重复」；eval 错误
+  包装对齐 VM 诊断形状）
+- **代码锚**：expander.rs（parse_params 重名检查——两路径共同上游）；06 §5.3 v5.2（错误路径
+  互查口径补注）
+
+## TD-015：IrGraph 无条件计算旁路丢弃（P3）
+
+- **等级**：P3（不影响正确性，恒定开销）
+- **状态**：开放
+- **目标阶段**：Stage 1 切换期（与 TD-012 expander 拆分同批）
+- **描述**：`compile_source` 在 run/eval 生产路径无条件计算 `IrGraph` 后
+  旁路丢弃（仅 `kerf ir` 子命令与 CodeValue 检查消费）。发现于 §14.6.2
+  重构最优性审查（O-1）。
+- **偿还计划**：按消费方拆分编译入口（`compile_source_lowered` /
+  `compile_source_fast`），或延迟到 IrGraph 消费点。
+
+## TD-016：链式比较短路语义待静态收紧（P3）
+
+- **等级**：P3（语义已显式裁定，行为稳定）
+- **状态**：开放
+- **目标阶段**：Stage 1（类型检查器联动）
+- **描述**：比较链在首对判定终止时后续操作数不做类型检查
+  （FS-5，09-stdlib §2 显式裁定段）。Stage 1 类型检查引入后统一为
+  全操作数静态检查。
+- **偿还计划**：builtins.rs 比较族前置全参数数值校验 + 语义文档更新。
+
+## TD-017：eval 参考路径深度上限不对称（P3）
+
+- **等级**：P3（已结构化+文档化，语义边界非缺陷）
+- **状态**：开放
+- **目标阶段**：Stage 1（判定是否大栈线程化）
+- **描述**：eval 参考路径 `MAX_EVAL_DEPTH=256`（2 MiB 线程栈实测标定）
+  vs VM 生产路径 `MAX_FRAMES=100_000`（D3 修复引入——修复前 eval 深递归
+  为 Rust 栈溢出 abort）。T1 定理在深度 ≤ 256 的常规程序域成立。
+- **偿还计划**：eval_source 在大栈专用线程（32 MiB）执行 + 上限对齐
+  MAX_FRAMES；或维持参考路径边界声明。
+
+## TD-018：双路径错误消息文本分裂（P3）
+
+- **等级**：P3（Err 事实与阶段一致，仅文本不同）
+- **状态**：开放
+- **目标阶段**：Stage 1（消息质量批——与 TD-014 同批）
+- **描述**：未绑定变量/if 非布尔等错误 VM 与 eval 文本不同（D8——
+  T17-a 深挖发现）。E 码/阶段/Span 三要素一致，文本常量分散于
+  vm.rs/eval.rs。
+- **偿还计划**：共享消息常量模块（kerf-span 或 kerf-vm 公共层）。

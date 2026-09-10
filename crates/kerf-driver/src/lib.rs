@@ -25,8 +25,8 @@ pub mod reserved;
 // 显式 re-export（§10.1 规则 4：禁止 glob re-export）。
 // 约定：本 crate 暴露驱动层全部公共类型与入口。
 pub use driver::{
-    compile_source, eval_source, run_source, run_source_rendered, CompileOutput, DriverError,
-    RunOutcome, Stage,
+    compile_source, dump_stx, dump_tokens, eval_source, run_source, run_source_rendered,
+    CompileOutput, DriverError, RunOutcome, Stage,
 };
 pub use reserved::{
     CacheKey, CachedResult, CapabilityIO, CompilationCache, Effect, EffectFamily, EffectSystem,

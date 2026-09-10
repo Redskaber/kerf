@@ -7,7 +7,7 @@
 
 ## 1. 测试目标
 
-对应代码文件 [`tests/v0/stage0/plan/compiler_tests.rs`](../../../../tests/v0/stage0/plan/compiler_tests.rs)
+对应代码文件 [`tests/v0/stage0/plan/compiler_tests.rs`](../../../../../tests/v0/stage0/plan/compiler_tests.rs)
 的双向印证文档（sop.md §9.2 规则 1）。
 
 ## 2. 覆盖场景
