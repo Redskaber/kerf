@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use kerf_core::CoreExpr;
 use kerf_runtime::{GcRef, Heap, RuntimeError};
-use kerf_syntax::Symbol;
+use kerf_syntax::{ScopeSet, Symbol};
 
 use crate::eval::Env;
 
@@ -107,9 +107,11 @@ impl Value {
 /// 闭包值（双路径形态）。
 #[derive(Debug)]
 pub enum ClosureValue {
-    /// 元循环求值器路径：参数 + 体表达式 + 定义处环境。
+    /// 元循环求值器路径：参数 + 参数绑定作用域集（TD-004/r13，
+    /// 与 `params` 平行等长）+ 体表达式 + 定义处环境。
     Eval {
         params: Vec<Symbol>,
+        param_scopes: Vec<ScopeSet>,
         body: Rc<CoreExpr>,
         env: Rc<Env>,
     },

@@ -368,10 +368,12 @@ mod tests {
         let exprs = vec![
             Rc::new(CoreExpr::VarRef {
                 name: Symbol(1),
+                scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
             }),
             Rc::new(CoreExpr::VarRef {
                 name: Symbol(2),
+                scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
             }),
         ];

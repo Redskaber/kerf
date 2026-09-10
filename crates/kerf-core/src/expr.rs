@@ -19,7 +19,7 @@
 use std::rc::Rc;
 
 use kerf_span::Span;
-use kerf_syntax::Symbol;
+use kerf_syntax::{ScopeSet, Symbol};
 
 /// 核心层字面量值（§3.2 `literal_value`）。
 #[derive(Debug, Clone, PartialEq)]
@@ -97,9 +97,12 @@ fn render_elem(v: &Rc<LiteralValue>) -> String {
 /// Require→保留（声明面）。迁移须经 §13.2 切换期重构流程 + 委员会投票。
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreExpr {
-    /// `(lambda (params...) body)`
+    /// `(lambda (params...) body)`——`param_scopes[i]` = 第 i 个形参的
+    /// **绑定作用域集**（绑定器符号的作用域集，TD-004；与 `params`
+    /// 平行等长，由展开器在绑定形式 fresh scope 注入后捕获）。
     Lambda {
         params: Vec<Symbol>,
+        param_scopes: Vec<ScopeSet>,
         body: Rc<CoreExpr>,
         span: Span,
     },
@@ -116,13 +119,23 @@ pub enum CoreExpr {
         else_branch: Rc<CoreExpr>,
         span: Span,
     },
-    /// `name`（自由或绑定引用）
-    VarRef { name: Symbol, span: Span },
+    /// `name`（自由或绑定引用）。
+    ///
+    /// `scopes` = 引用处作用域集（TD-004，r13）：编译器/eval 按
+    /// `(name, scopes ⊆)` 匹配绑定（Racket 式集合作用域解析——空集
+    /// 绑定 ⊆ 任意引用集，故全局/内置天然充当名称基兜底路径）。
+    VarRef {
+        name: Symbol,
+        scopes: ScopeSet,
+        span: Span,
+    },
     /// 字面量（含 quote 产物的点对结构）
     Literal { value: LiteralValue, span: Span },
-    /// `(set! name value)`
+    /// `(set! name value)`——`scopes` = 赋值目标符号的引用处作用域集
+    /// （与 VarRef 同一解析口径，TD-004）。
     SetBang {
         name: Symbol,
+        scopes: ScopeSet,
         value: Rc<CoreExpr>,
         span: Span,
     },
@@ -269,11 +282,25 @@ impl CoreExpr {
 
     /// 自由变量计算（多重主体按序遍历；绑定屏蔽）。
     /// CodeValue 与编译器闭包捕获分析共用此语义（唯一可信数据源）。
+    /// 名称投影自 [`CoreExpr::free_var_occurrences`]（同一遍历的单一定义）。
     pub fn free_variables(&self, bound: &mut Vec<Symbol>, out: &mut Vec<Symbol>) {
+        let mut occ: Vec<(Symbol, ScopeSet)> = Vec::new();
+        self.free_var_occurrences(bound, &mut occ);
+        out.extend(occ.iter().map(|(s, _)| *s));
+    }
+
+    /// 自由变量出现（含首次出现的作用域集——TD-004/r13：编译器捕获
+    /// 分析需要对每个自由名判定 `(name, scopes ⊆)` 归属，故携带首次
+    /// 出现的引用作用域集作为该名的代表；同名多次出现经展开器注入
+    /// 不变式保证归同一绑定，Stage 0 规模下无歧义）。
+    ///
+    /// 遍历语义与名称版完全一致（绑定屏蔽、letrec* 序）；去重按名
+    /// 首现优先。
+    pub fn free_var_occurrences(&self, bound: &mut Vec<Symbol>, out: &mut Vec<(Symbol, ScopeSet)>) {
         match self {
-            CoreExpr::VarRef { name, .. } => {
-                if !bound.contains(name) && !out.contains(name) {
-                    out.push(*name);
+            CoreExpr::VarRef { name, scopes, .. } => {
+                if !bound.contains(name) && !out.iter().any(|(s, _)| s == name) {
+                    out.push((*name, scopes.clone()));
                 }
             }
             CoreExpr::Literal { .. } => {}
@@ -284,15 +311,15 @@ impl CoreExpr {
                         bound.push(*p);
                     }
                 }
-                body.free_variables(bound, out);
+                body.free_var_occurrences(bound, out);
                 for _ in 0..shadowed {
                     bound.pop();
                 }
             }
             CoreExpr::App { fn_expr, args, .. } => {
-                fn_expr.free_variables(bound, out);
+                fn_expr.free_var_occurrences(bound, out);
                 for a in args {
-                    a.free_variables(bound, out);
+                    a.free_var_occurrences(bound, out);
                 }
             }
             CoreExpr::If {
@@ -301,37 +328,50 @@ impl CoreExpr {
                 else_branch,
                 ..
             } => {
-                cond.free_variables(bound, out);
-                then_branch.free_variables(bound, out);
-                else_branch.free_variables(bound, out);
+                cond.free_var_occurrences(bound, out);
+                then_branch.free_var_occurrences(bound, out);
+                else_branch.free_var_occurrences(bound, out);
             }
-            CoreExpr::SetBang { name, value, .. } => {
-                if !bound.contains(name) && !out.contains(name) {
-                    out.push(*name);
+            CoreExpr::SetBang {
+                name,
+                scopes,
+                value,
+                ..
+            } => {
+                if !bound.contains(name) && !out.iter().any(|(s, _)| s == name) {
+                    out.push((*name, scopes.clone()));
                 }
-                value.free_variables(bound, out);
+                value.free_var_occurrences(bound, out);
             }
             CoreExpr::Define { name, value, .. } => {
                 // 定义引入新绑定：先求值再绑定（letrec* 序）
-                value.free_variables(bound, out);
+                value.free_var_occurrences(bound, out);
                 if !bound.contains(name) {
                     bound.push(*name);
                 }
             }
             CoreExpr::Begin { body, .. } => {
                 for e in body {
-                    e.free_variables(bound, out);
+                    e.free_var_occurrences(bound, out);
                 }
             }
             CoreExpr::Module { body, .. } => {
                 for e in body {
-                    e.free_variables(bound, out);
+                    e.free_var_occurrences(bound, out);
                 }
             }
             // _ 臂理由：require 不含变量引用（零运行时语义——能力声明
             // 不进入作用域分析）
             CoreExpr::Require { .. } => {}
         }
+    }
+
+    /// 便捷封装：本表达式的自由变量出现（名 + 首现作用域集）。
+    pub fn free_var_occurrence_list(&self) -> Vec<(Symbol, ScopeSet)> {
+        let mut out = Vec::new();
+        let mut bound = Vec::new();
+        self.free_var_occurrences(&mut bound, &mut out);
+        out
     }
 
     /// 便捷封装：本表达式的自由变量列表。
@@ -354,6 +394,7 @@ mod tests {
     fn var(n: u32) -> Rc<CoreExpr> {
         Rc::new(CoreExpr::VarRef {
             name: sym(n),
+            scopes: ScopeSet::new(),
             span: Span::dummy(),
         })
     }
@@ -368,6 +409,7 @@ mod tests {
         });
         let lam = CoreExpr::Lambda {
             params: vec![sym(0)],
+            param_scopes: vec![ScopeSet::new()],
             body,
             span: Span::dummy(),
         };
@@ -380,6 +422,7 @@ mod tests {
         // (lambda (x) (lambda (y) (x y z))) → 自由变量 {z}
         let inner = CoreExpr::Lambda {
             params: vec![sym(1)],
+            param_scopes: vec![ScopeSet::new()],
             body: Rc::new(CoreExpr::App {
                 fn_expr: var(0),
                 args: vec![var(1), var(2)],
@@ -389,6 +432,7 @@ mod tests {
         };
         let outer = CoreExpr::Lambda {
             params: vec![sym(0)],
+            param_scopes: vec![ScopeSet::new()],
             body: Rc::new(inner),
             span: Span::dummy(),
         };

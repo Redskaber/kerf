@@ -13,7 +13,8 @@
 | 07 | r10 next3 七轮吸收·收敛裁定（9 冻结/8 原语 Stage 2）·原则 29-31·架构审计·480 | file | r10 · Task 29-x | e+s | active |
 | 08 | r11 三源复核零缺口·核心原语三面同步·web 区块·r11 tar.gz | file | r11 · Task 30-x | e+s | active |
 | 09 | r12 next4 第八轮·接口预留 4→14 项·原则 32 预留留白·reserved/ 模块·worklog 树机制·500 全绿·r12 包交付 | file | r12 · Task 31-a~f | e+s+p | active |
+| 10 | r13 批次 E 启动·TD-004 作用域集解析收口·(name, scopes ⊆) 双路径·max-cardinality·509 全绿·r13 包交付 | file | r13 · Task 32-a/32-b | e+s+p | active |
 
-**状态**：active（Stage 1 进行中——批次 E 未收口）。
-**溯源**：详录 = docs/worklog.md 对应 Task 节 + RELEASE_NOTES r4-r12 节。
-**未压实区间**：无——flat 与树均压实至 r12 终态（Task 31-f，2026-09-11）。
+**状态**：active（Stage 1 进行中——批次 E TD-004 已收口，E1 Expander kerf 重写 + TD-021 + 门审查待推进）。
+**溯源**：详录 = docs/worklog.md 对应 Task 节 + RELEASE_NOTES r4-r13 节。
+**未压实区间**：无——flat 与树均压实至 r13 终态（Task 32-b，2026-09-11）。

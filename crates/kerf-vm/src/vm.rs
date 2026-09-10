@@ -866,6 +866,7 @@ mod tests {
     use kerf_compiler::{compile_module, BcProto};
     use kerf_core::{CoreExpr, LiteralValue};
     use kerf_runtime::RuntimeError;
+    use kerf_syntax::ScopeSet;
     use kerf_syntax::Symbol;
     use std::rc::Rc as StdRc;
 
@@ -923,15 +924,18 @@ mod tests {
         let body = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(100),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![
                 StdRc::new(CoreExpr::VarRef {
                     name: Symbol(0),
+                    scopes: ScopeSet::new(),
                     span: Span::dummy(),
                 }),
                 StdRc::new(CoreExpr::VarRef {
                     name: Symbol(1),
+                    scopes: ScopeSet::new(),
                     span: Span::dummy(),
                 }),
             ],
@@ -939,6 +943,7 @@ mod tests {
         });
         let lam = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0), Symbol(1)],
+            param_scopes: vec![ScopeSet::new()],
             body,
             span: Span::dummy(),
         });
@@ -997,8 +1002,10 @@ mod tests {
         // 闭包存在但参数数量不匹配
         let lam = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(0),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             span: Span::dummy(),
@@ -1029,8 +1036,10 @@ mod tests {
         // 跨程序闭包：原型索引指向别的 program → 显式拒绝（P3 否决的运行时面）
         let lam = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(0),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             span: Span::dummy(),
@@ -1064,6 +1073,7 @@ mod tests {
         let body = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(0),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![],
@@ -1071,6 +1081,7 @@ mod tests {
         });
         let lam = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body,
             span: Span::dummy(),
         });
@@ -1123,6 +1134,7 @@ mod tests {
         // (define f (lambda (x) (+ x 1))) (f 41) → 42
         let plus = StdRc::new(CoreExpr::VarRef {
             name: Symbol(100),
+            scopes: ScopeSet::new(),
             span: Span::dummy(),
         });
         let body = StdRc::new(CoreExpr::App {
@@ -1130,6 +1142,7 @@ mod tests {
             args: vec![
                 StdRc::new(CoreExpr::VarRef {
                     name: Symbol(0),
+                    scopes: ScopeSet::new(),
                     span: Span::dummy(),
                 }),
                 lit(1),
@@ -1138,6 +1151,7 @@ mod tests {
         });
         let lam = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body,
             span: Span::dummy(),
         });
@@ -1149,6 +1163,7 @@ mod tests {
         let call = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(200),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![lit(41)],
@@ -1170,14 +1185,17 @@ mod tests {
         // 程序：((lambda (n) (lambda () n)) 5) → 闭包；此处验证捕获值经 LOAD_CAPTURED
         let inner = StdRc::new(CoreExpr::Lambda {
             params: vec![],
+            param_scopes: vec![ScopeSet::new()],
             body: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(0),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             span: Span::dummy(),
         });
         let outer = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body: inner,
             span: Span::dummy(),
         });
@@ -1286,8 +1304,10 @@ mod tests {
         // (define f (lambda (x) x)) (f 1 2) → 参数数量不匹配
         let lam = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(0),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             span: Span::dummy(),
@@ -1300,6 +1320,7 @@ mod tests {
         let call = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(200),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![lit(1), lit(2)],
@@ -1329,6 +1350,7 @@ mod tests {
         let e = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(100),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![lit(1), lit(0)],
@@ -1388,6 +1410,7 @@ mod tests {
             StdRc::new(CoreExpr::App {
                 fn_expr: StdRc::new(CoreExpr::VarRef {
                     name: Symbol(200),
+                    scopes: ScopeSet::new(),
                     span: Span::dummy(),
                 }),
                 args: vec![lit(n as i64 - 1)],
@@ -1411,10 +1434,12 @@ mod tests {
         let test_expr = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(101),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![StdRc::new(CoreExpr::VarRef {
                 name: Symbol(0),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             })],
             span: Span::dummy(),
@@ -1422,16 +1447,19 @@ mod tests {
         let recurse = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(200),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![StdRc::new(CoreExpr::App {
                 fn_expr: StdRc::new(CoreExpr::VarRef {
                     name: Symbol(102),
+                    scopes: ScopeSet::new(),
                     span: Span::dummy(),
                 }),
                 args: vec![
                     StdRc::new(CoreExpr::VarRef {
                         name: Symbol(0),
+                        scopes: ScopeSet::new(),
                         span: Span::dummy(),
                     }),
                     lit(1),
@@ -1448,6 +1476,7 @@ mod tests {
         });
         let lam = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body,
             span: Span::dummy(),
         });
@@ -1459,6 +1488,7 @@ mod tests {
         let call = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(200),
+                scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![lit(1000)],
@@ -1478,6 +1508,7 @@ mod tests {
         let e = StdRc::new(CoreExpr::App {
             fn_expr: StdRc::new(CoreExpr::VarRef {
                 name: Symbol(100),
+                scopes: ScopeSet::new(),
                 span: Span::new(0, 10, 20),
             }),
             args: vec![lit(1)],

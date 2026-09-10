@@ -469,6 +469,28 @@ Expander kerf 重写 + TD-004 scope-set 收口 + TD-021 hof 用户面注入 → 
 
 ---
 
+## v0.3.0-r13（2026-09-11）——批次 E 启动：TD-004 作用域集解析收口（Racket 式 (name, scopes ⊆) 双路径 + 509 全绿）
+
+### 交付一：TD-004 作用域集解析（P2 清偿——E1 Expander kerf 重写的前置语义基座）
+
+- **展开器**：`ExpandCtxt` 作用域分配器（fresh_scope 单调递增）+ 绑定形式（lambda）fresh scope 深注入——绑定器与全体体形式（`Stx::add_scope_to_all`，新 kerf-syntax 公共 API）；注入先于体展开 ⇒ 宏产物作用域 ⊇ use-site ⊇ {fresh}，自由标识符穿透保持；α 重命名（$hyg$N）保留为第二道卫生保险
+- **核心层**：`CoreExpr::VarRef/SetBang` 携带引用作用域集（`scopes`）+ `Lambda.param_scopes` 携带绑定作用域集（与 params 平行）；`free_var_occurrences`（名 + 首现作用域集）——闭包捕获分析与名称版共用单一定义（名称版 = 其投影）
+- **编译器**：`ScopeFrame` 绑定项化（名 + 作用域集）+ `resolve_var(name, scopes)` 帧序 + 帧内 max-cardinality 子集匹配；捕获描述符携带命中绑定的绑定作用域集（内层原型经同一子集匹配命中捕获槽）
+- **eval 双路径**：`Env` 绑定项化 + `lookup/set` 同一子集匹配口径（T1 一致）；`ClosureValue::Eval` 携带 param_scopes，`apply_value` 经 `define_scoped` 绑定；**空作用域集绑定 ⊆ 任意引用集** ⇒ driver 根环境全局/内置天然兜底，`$hyg$` 基名回退（双侧）降级为回退路径
+- **语义判别点**（与旧名称基差异）：名称匹配但作用域不匹配 ≠ 解析命中——按 Racket 语义判为未绑定（VM → 全局兜底后「未绑定的全局变量」；eval → 「未绑定变量」）
+
+### 交付二：质量口径
+
+- **509:0:0**（500 基线零回归 + 9 锚点新增；单元 183 + 集成 326）；§3.2 六命令全绿（clean 起步实测）；审计集 §7.3.1 配比满足 EXIT 0；CLI 冒烟 fib 75025 + test 2/2
+- 锚点 = tests/v0/stage1/plan/scope_set_tests.rs（正例 5 双路径：shadowing/嵌套 shadowing/闭包捕获/set! 词法命中/子集对照；负例 4：作用域不匹配未绑定 VM/eval/set! + 宏引入不捕获）+ docs/tests/v0/stage1/plan/scope-set.md 测试计划
+- 文档同步：tech-debt-register TD-004 → 已解决（r13）+ matrix 509 对账 + 03-macro-system 实现状态注记 + stage-1/plan.md 批次 E 行更新
+
+### 下一步（批次 E 续）
+
+Expander kerf 重写（E1——scope-set 语义基座就绪后重写，Rust 实现保留为 parity oracle）+ TD-021 hof 用户面注入（随模块系统设计）→ Stage 1 门审查（§7.3 + §21.3 四条验收）。
+
+---
+
 ## v0.3.0-r12（2026-09-11）——接口预留完整性扩展轮（next4 第八轮：docs 三层 + 预留层代码冻结 + 500 全绿）
 
 ### 交付一：next4.md 第八轮三层吸收（stage0 v6.1 + lang-design v6.1 + sop v11.4）

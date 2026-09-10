@@ -13,7 +13,7 @@
 | TD-001 | （编号断档——不可考） | — | 断档存档 | — |
 | TD-002 | quote 符号/向量值类型缺失 | P3 | **已解决（符号——r5）** | Stage 1 |
 | TD-003 | 图 IR 复合节点 CSE 共享 | P3 | 开放 | Stage 2 |
-| TD-004 | 作用域集解析（Racket 式）替换名称基解析 | P2 | 开放 | Stage 1 |
+| TD-004 | 作用域集解析（Racket 式）替换名称基解析 | P2 | **已解决（r13——编译器/eval 双路径 (name, scopes ⊆) + max-cardinality；锚点 9 测试）** | Stage 1 |
 | TD-005 | syntax-parse 级宏组合 | P3 | 开放 | Stage 2 |
 | TD-006 | （编号断档——不可考） | — | 断档存档 | — |
 | TD-007 | 迭代式展开工作表（深度上限解除：128→500） | P2 | **部分解决**（残留：10_000 完整口径） | Stage 1 前端重写（批次 B） |
@@ -63,11 +63,12 @@
 - **workaround**：字面量共享已满足「公共子表达式」演示与验收
 
 ### TD-004 作用域集解析
+- **状态（r13，批次 E 首个 MUV）**：**已解决**——展开器绑定形式 fresh scope 深注入（`Stx::add_scope_to_all`）+ `CoreExpr::VarRef/SetBang` 携带引用作用域集 + `Lambda.param_scopes` 携带绑定作用域集 + 编译器 `resolve_var` 与 eval `Env::lookup/set` 双路径切换为 `(name, scopes ⊆)` 子集匹配 + max-cardinality；空作用域集全局绑定 ⊆ 任意引用集——全局/内置天然兑底，`$hyg$` 基名回退（driver 双侧）降级为回退路径；α 重命名保留为第二道卫生保险（作用域注入不变式下两层同解）。锚点 = tests/v0/stage1/plan/scope_set_tests.rs（9 测试：双路径正例 5 + 作用域不匹配负例 3 + 宏引入不捕获 1）；500 基线零回归（r13 实测 509:0:0）。
 - **描述**：标识符解析为名称基（编译期 slot 查找 + 运行期全局名）；
   Racket 式 scope-set 子集匹配未实现（ScopeSet 已在数据结构中全程携带）
 - **根因**：名称基 + 一致性卫生重命名已满足 P1 卫生保证；
   scope-set 解析是 Stage 1 语言级宏的前置
-- **修复方案**：编译器 resolve 按 (name, scopes ⊆) 匹配绑定
+- **修复方案**：编译器 resolve 按 (name, scopes ⊆) 匹配绑定（✅ r13 落地）
 - **卫生回退**：$hyg$ 后缀剥离（driver::resolve_hygiene_fallbacks +
   **driver::resolve_eval_hygiene_fallbacks**——r3 已接线 eval 路径，双路径镜像）为
   名称基解析的显式近似

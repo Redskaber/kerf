@@ -64,13 +64,16 @@ fn nested_closure_capture_descriptors() {
     let y = kerf_syntax::Symbol(2);
     let inner = Rc::new(CoreExpr::Lambda {
         params: vec![y],
+        param_scopes: vec![kerf_syntax::ScopeSet::new()],
         body: Rc::new(CoreExpr::App {
             fn_expr: Rc::new(CoreExpr::VarRef {
                 name: x,
+                scopes: kerf_syntax::ScopeSet::new(),
                 span: Default::default(),
             }),
             args: vec![Rc::new(CoreExpr::VarRef {
                 name: y,
+                scopes: kerf_syntax::ScopeSet::new(),
                 span: Default::default(),
             })],
             span: Default::default(),
@@ -79,6 +82,7 @@ fn nested_closure_capture_descriptors() {
     });
     let outer = Rc::new(CoreExpr::Lambda {
         params: vec![x],
+        param_scopes: vec![kerf_syntax::ScopeSet::new()],
         body: inner,
         span: Default::default(),
     });

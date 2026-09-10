@@ -2161,3 +2161,89 @@ Stage Summary:
   viewport）；console/页面错误 0；VLM 双截图审查全 PASS（桌面 4/4 +
   移动 3/3——卡片对齐/文字完整/表格可读/无溢出）
 
+
+---
+Task ID: 32-a
+Agent: Super Z (main) — ARCH-A/PM-A 定调 + DEV-A 实施（L3 多角色会话，批次 E 首个 MUV）
+Task: MUV 32-a：TD-004 作用域集解析收口（Racket 式 (name, scopes ⊆) 双路径——E1 Expander kerf 重写前置语义基座）
+
+Work Log:
+- 启动协议执行：§1 路由 + 7 项自我定位声明（L3：LOC ≥500 跨 5 crate /
+  中枢类型变更）；worklog 树冷启动（根 l + flat 尾部）确认 r12 终态、
+  批次 E 为登记的下一步、无冲突；用户任务 1（worklog 机制迁移）复核
+  = 已完成（31-e 交付，树文法/路由/未压实区间零/by-topic 全在位）
+- 设计（§2.3-11 边界先行 + §12 最优>最小）：scope-set 语义权威 +
+  空作用域集全局兜底（空集 ⊆ 任意引用集 ⇒ 全局/内置/`$hyg$` 基名
+  回退自动降级为回退路径）+ α 重命名保留为第二道卫生保险；注入
+  不变式（绑定形式 fresh scope 深注入绑定器+全体体形式 ⇒ 内层绑定
+  作用域集严格包含外层 ⇒ max-cardinality 与帧序在良构程序上同解）
+- 实施（跨 5 crate）：
+  - kerf-syntax：`Stx::add_scope_to_all` 深注入公共 API
+  - kerf-expander：`ExpandCtxt` 作用域分配器（fresh_scope 单调
+    递增）+ `expand_lambda` 注入（先于体展开——宏产物作用域 ⊇
+    use-site ⊇ {fresh}，自由标识符穿透保持）+ VarRef 发射携带
+    scopes + SetBang 目标携带 scopes + parse_params 返回
+    (Symbol, ScopeSet)
+  - kerf-core：`VarRef/SetBang.scopes` + `Lambda.param_scopes` +
+    `free_var_occurrences`（捕获分析数据源；名称版 = 其投影——
+    单一定义防双体系漂移）
+  - kerf-compiler：ScopeFrame 绑定项化 + `resolve_var(name, scopes)`
+    帧序 + 帧内 max-cardinality 子集匹配 + 捕获描述符携带命中绑定
+    作用域集（内层原型经同一子集匹配命中捕获槽）
+  - kerf-vm：`ClosureValue::Eval.param_scopes` + `Env` 绑定项化 +
+    `lookup/set` 同一子集口径 + `define_scoped`（apply 绑定形参）
+- 测试：新增 tests/v0/stage1/plan/scope_set_tests.rs（9 锚点：双路径
+  正例 5——shadowing/嵌套 shadowing/闭包捕获/set! 词法命中/子集
+  对照；负例 4——作用域不匹配未绑定 VM/eval/set! + 宏引入不捕获）
+  + runner.rs 批次 E 分组注册；构造点批量补齐（vm.rs/capability.rs/
+  code_value.rs/ir.rs/tests 树 perl 批处理）
+- 文档同步（§8）：tech-debt-register TD-004 → 已解决（r13）+ matrix
+  500→509 对账（总量/历史链/集成 317→326/套件行）+ 03-macro-system
+  实现状态注记（ctx.resolve 伪代码处）+ stage-1/plan.md 批次 E 行
+  更新 + docs/tests/v0/stage1/plan/scope-set.md 测试计划 + RELEASE_NOTES
+  r13 节
+
+Stage Summary:
+- TD-004 P2 清偿闭环：设计 → 跨 5 crate 实施 → 500 基线零回归 +
+  9 锚点（509:0:0）→ 文档六处同步；语义判别点落地 = 名称匹配但
+  作用域不匹配按 Racket 语义判未绑定（旧名称基会误命中）
+- 遵循：§2.3-10（唯一可信数据源——free_variables 投影自单一定义）、
+  §2.3-11（确定性边界先行——注入不变式先证明后实施）、§11（接口
+  隔离——解析留在编译器/eval 消费侧，IR/字节码零变化）、§9.4
+  （设计-测试锚定——每个语义判别点一个锚点测试）
+- 下一步：32-b 交付环（§3.2 全绿 + r13 tar.gz + web 同步 + E2E +
+  树压实）
+
+---
+Task ID: 32-b
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，交付轮；含 r13 树压实）
+Task: MUV 32-b：§3.2 全绿 + r13 tar.gz 打包（包内自举验证）+ web 同步 + E2E + r13 树压实
+
+Work Log:
+- §3.2 六命令实跑全绿（clean 起步）：build --release 零告警 → check
+  0/0 → fmt --check 零 diff → clippy --all-targets -D warnings 0 →
+  test --release --workspace **509:0:0**（单元 183 + 集成 326——500
+  基线零回归 + r13 锚点 9）
+- 审计集 §7.3.1 配比满足 EXIT 0（七类全覆盖）；CLI 冒烟：fib 75025
+  + ⇒ 144 + kerf test 2/2（clean 重编后复跑）
+- r13 tar.gz 打包（§19.4 命令整目录；根 worklog.md 排除 ✓；
+  docs/worklog/ rec 树 + docs/worklog.md 镜像入包 ✓）+ 包内自举
+  验证（解压 → 509:0:0 + CLI 一致）
+- web 同步：kerf-data（ROADMAP Stage 1 批次 E 行——r13 TD-004 收口 +
+  509 基线；PACKAGE_CONTENTS 509/r13）+ site-footer 版本链 + download/
+  README.md r13 节 + 动态面（stats 509 + r13 包 / docs / download 流）
+- agent-browser E2E：页面加载零错误零 console 异常；r13 新内容渲染
+  核对（footer 版本 509/批次 E）；Playground 金路径复跑
+- r13 树压实（§8.6.5）：10_r13 条目（32-a/32-b + 溯源指针）+ 层 l
+  行更新 + 根 l 未压实区间清零 + by-topic 增「scope-set 解析」行
+- lint exit 0（web 工程）
+
+Stage Summary:
+- r13 交付闭环：TD-004 收口（509:0:0）→ 打包（包内自举验证 + rec
+  树）→ web 同步 → E2E → 树压实（第二次完整实操——冷启动即见 r13）
+- 遵循：§3.2（六命令逐条实测——clean 全量重编）、§19（打包 + 包内
+  验证 + README 归档）、§8.6.5（压实规则——时机挂 §19 打包轮）、
+  §8.4.5（文档对账——matrix 509 分项）
+- 下一步（批次 E 续）：Expander kerf 重写（E1——Rust 实现保留为
+  parity oracle）+ TD-021 hof 用户面注入（随模块系统设计）→ Stage 1
+  门审查（§7.3 + §21.3 四条验收）

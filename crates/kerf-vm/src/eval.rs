@@ -10,13 +10,12 @@
 
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use kerf_core::{CoreExpr, LiteralValue};
 use kerf_runtime::{GcRef, Heap, RuntimeError};
 use kerf_span::Span;
-use kerf_syntax::Symbol;
+use kerf_syntax::{ScopeSet, Symbol};
 
 use crate::value::{ClosureValue, Value};
 use crate::vm::MAX_FRAMES;
@@ -87,11 +86,24 @@ impl EvalError {
     }
 }
 
+/// 词法环境绑定项（TD-004/r13：名 + 绑定作用域集 + 值）。
+#[derive(Debug)]
+struct Binding {
+    name: Symbol,
+    scopes: ScopeSet,
+    value: Value,
+}
+
 /// 词法环境（链式；§8.4 `Env = Rc<RefCell<HashMap<Symbol, Value>>>` 的
 /// 链式扩展——闭包捕获定义处环境）。
+///
+/// **作用域集解析（TD-004/r13）**：绑定携带绑定作用域集；查找/赋值按
+/// `(name, scopes ⊆)` 子集匹配 + max-cardinality（Racket 集合作用域）。
+/// 空作用域集绑定 ⊆ 任意引用集——全局/内置（driver 根环境注入）天然
+/// 充当名称基兑底；`$hyg$` 基名回退仍由 driver 在全局层完成（回退路径）。
 #[derive(Debug)]
 pub struct Env {
-    bindings: RefCell<HashMap<Symbol, Value>>,
+    bindings: RefCell<Vec<Binding>>,
     parent: Option<Rc<Env>>,
 }
 
@@ -99,7 +111,7 @@ impl Env {
     /// 空环境。
     pub fn new() -> Rc<Env> {
         Rc::new(Env {
-            bindings: RefCell::new(HashMap::new()),
+            bindings: RefCell::new(Vec::new()),
             parent: None,
         })
     }
@@ -107,42 +119,77 @@ impl Env {
     /// 子环境（当前环境成为父）。
     pub fn child(self: &Rc<Env>) -> Rc<Env> {
         Rc::new(Env {
-            bindings: RefCell::new(HashMap::new()),
+            bindings: RefCell::new(Vec::new()),
             parent: Some(Rc::clone(self)),
         })
     }
 
-    /// 定义绑定（同层新增；同层已存在返回 false——D1/E6 语义：
-    /// 重复定义报错而非静默覆盖，与 VM 路径 `DefineGlobal` 对齐）。
-    /// 跨层 shadowing 合法（词法作用域：子层可定义与父层同名的新绑定）。
+    /// 定义全局式绑定（空作用域集——兑底语义；driver 根环境注入用）。
+    /// 同层同名重复返回 false（D1/E6 口径）。
     pub fn define(&self, name: Symbol, value: Value) -> bool {
+        self.define_scoped(name, ScopeSet::new(), value)
+    }
+
+    /// 定义带作用域集的绑定（TD-004：lambda 形参绑定等）。同层同名
+    /// （不论作用域）重复返回 false——与编译器 A3/展开器重复形参
+    /// 检查同一口径；跨层 shadowing 合法。
+    pub fn define_scoped(&self, name: Symbol, scopes: ScopeSet, value: Value) -> bool {
         let mut b = self.bindings.borrow_mut();
-        if b.contains_key(&name) {
+        if b.iter().any(|e| e.name == name) {
             return false;
         }
-        b.insert(name, value);
+        b.push(Binding {
+            name,
+            scopes,
+            value,
+        });
         true
     }
 
-    /// 查找（沿父链——词法作用域）。
-    pub fn lookup(&self, name: Symbol) -> Option<Value> {
-        if let Some(v) = self.bindings.borrow().get(&name) {
-            return Some(v.clone());
+    /// 子集匹配解析（单环境层内）：同名且 `binder.scopes ⊆ ref_scopes`
+    /// 的绑定中取 max-cardinality；基数并列时先注册优先（同层同名
+    /// 经 define_scoped 已拒绝，并列仅理论可能）。返回索引。
+    /// 跨层由 [`Env::lookup`] 的链序（内层先查）消解——与注入不变式
+    /// 下「内层绑定基数严格更大」等价（良构程序上与旧名称基链序同解）。
+    fn match_index(&self, name: Symbol, ref_scopes: &ScopeSet) -> Option<usize> {
+        let b = self.bindings.borrow();
+        let mut best: Option<usize> = None;
+        let mut best_rank = 0usize;
+        for (i, e) in b.iter().enumerate() {
+            if e.name != name || !e.scopes.is_subset_of(ref_scopes) {
+                continue;
+            }
+            let rank = e.scopes.len();
+            if best.is_none() || rank > best_rank {
+                best = Some(i);
+                best_rank = rank;
+            }
+        }
+        best
+    }
+
+    /// 查找（沿父链——内层先查；TD-004：按 `(name, scopes ⊆)` 匹配，
+    /// 层内 max-cardinality；链序 + 注入不变式 ⇒ 与 Racket 全局
+    /// max-cardinality 在良构程序上同解）。
+    pub fn lookup(&self, name: Symbol, ref_scopes: &ScopeSet) -> Option<Value> {
+        if let Some(i) = self.match_index(name, ref_scopes) {
+            return Some(self.bindings.borrow()[i].value.clone());
         }
         match &self.parent {
-            Some(p) => p.lookup(name),
+            Some(p) => p.lookup(name, ref_scopes),
             None => None,
         }
     }
 
-    /// 修改绑定（沿父链；未定义报 None——set! 未定义变量为错误）。
-    pub fn set(&self, name: Symbol, value: Value) -> bool {
-        if self.bindings.borrow().contains_key(&name) {
-            self.bindings.borrow_mut().insert(name, value);
+    /// 修改绑定（沿父链；TD-004：与 lookup 同一匹配口径——set! 目标
+    /// 必须命中同解析的绑定，未命中报 None）。
+    pub fn set(&self, name: Symbol, ref_scopes: &ScopeSet, value: Value) -> bool {
+        if let Some(i) = self.match_index(name, ref_scopes) {
+            self.bindings.borrow_mut()[i].value = value;
             return true;
         }
         match &self.parent {
-            Some(p) => p.set(name, value),
+            Some(p) => p.set(name, ref_scopes, value),
             None => false,
         }
     }
@@ -166,11 +213,17 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
     let _depth = DepthGuard::enter(e.span())?;
     match e {
         CoreExpr::Literal { value, span } => eval_literal(value, heap, *span),
-        CoreExpr::VarRef { name, span } => env
-            .lookup(*name)
+        CoreExpr::VarRef { name, scopes, span } => env
+            .lookup(*name, scopes)
             .ok_or_else(|| EvalError::new("未绑定变量", *span)),
-        CoreExpr::Lambda { params, body, .. } => Ok(Value::Closure(Rc::new(ClosureValue::Eval {
+        CoreExpr::Lambda {
+            params,
+            param_scopes,
+            body,
+            ..
+        } => Ok(Value::Closure(Rc::new(ClosureValue::Eval {
             params: params.clone(),
+            param_scopes: param_scopes.clone(),
             body: Rc::clone(body),
             env: Rc::clone(env),
         }))),
@@ -207,9 +260,14 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
                 )),
             }
         }
-        CoreExpr::SetBang { name, value, span } => {
+        CoreExpr::SetBang {
+            name,
+            scopes,
+            value,
+            span,
+        } => {
             let v = eval_expr(value, env, heap)?;
-            if env.set(*name, v.clone()) {
+            if env.set(*name, scopes, v.clone()) {
                 Ok(v)
             } else {
                 Err(EvalError::new("set! 未绑定变量", *span))
@@ -264,8 +322,13 @@ pub fn apply_value(
 ) -> Result<Value, EvalError> {
     match &f {
         Value::Closure(rc) if matches!(rc.as_ref(), ClosureValue::Eval { .. }) => {
-            let (params, body, env) = match rc.as_ref() {
-                ClosureValue::Eval { params, body, env } => (params, body, env),
+            let (params, param_scopes, body, env) = match rc.as_ref() {
+                ClosureValue::Eval {
+                    params,
+                    param_scopes,
+                    body,
+                    env,
+                } => (params, param_scopes, body, env),
                 _ => unreachable!("上方已窄化"),
             };
             if params.len() != args.len() {
@@ -279,9 +342,10 @@ pub fn apply_value(
                 ));
             }
             let call_env = env.child();
-            for (p, a) in params.iter().zip(args) {
+            for ((p, ps), a) in params.iter().zip(param_scopes.iter()).zip(args) {
                 // A3 卫式：参数表重名报错（同名形参在同层只允许出现一次）。
-                if !call_env.define(*p, a) {
+                // 绑定携带参数绑定作用域集（TD-004：体内引用按子集匹配命中）。
+                if !call_env.define_scoped(*p, ps.clone(), a) {
                     return Err(EvalError::new(
                         "过程参数重名（lambda 形参表重复）",
                         call_span,

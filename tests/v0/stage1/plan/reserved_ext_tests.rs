@@ -41,6 +41,7 @@ fn p0_lsp_position_every_core_node_carries_span() {
     };
     let vr = CoreExpr::VarRef {
         name: Symbol(0),
+        scopes: kerf_syntax::ScopeSet::new(),
         span: Span::dummy(),
     };
     let app = CoreExpr::App {

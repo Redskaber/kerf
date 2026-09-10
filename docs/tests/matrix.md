@@ -3,13 +3,14 @@
 > **Author**: kerf-dev-agent（QA-A 角色）
 > **Date**: 2026-09-10（**r10 架构合规审计**：+4 architecture_audit_tests（sop §2.2 原则 29-31 形态审计——lang-design 01 §8.5/02 §8.1 锚点落地：十变体穷尽 match 冻结证明/Span 独立/Reader-Stx 类型隔离/Expander 唯一桥/同源同核确定性）——476 → 480；r9 测试入口架构重构：Cargo.toml [[test]] 18 块 → tests/runner.rs 单一总入口 mod 树，sop.md §8.4.6 v11.2）
 > **r12 增量**（2026-09-11）：+20 接口预留扩展测试（单元 8：reserved/ Probe 冻结——toolchain 3 + ffi 3 + codegen 2；集成 12：reserved_ext_tests——P0 位置跨 crate 断言 + 14 项 API 可达性 + 形状行为含负向）——480 → **500**。
+> **r13 增量**（2026-09-11，批次 E 首个 MUV——TD-004 作用域集解析收口）：+9 集成（scope_set_tests——Racket 式 `(name, scopes ⊆)` 双路径语义锚点：嵌套 shadowing/闭包捕获/set! 词法命中 4 正 + 作用域不匹配未绑定 VM/eval/set! 3 负 + 宏引入不捕获 + 子集对照）——500 → **509**。
 > **Version**: v0.1.0-r10
 > **Status**: Active
 
 ## 总量
 
-**500 通过 / 0 失败 / 0 忽略**（500 个测试函数 = 单元 183 + 集成 317，逐二进制实测汇总；r10 +4 架构审计 + r12 +20 预留扩展）。
-§3.2 release 验收基线 204（r2）→ r3 负向测试扩张 + 审计集就位 + FS-1 守卫修复 + 糖正向锚点 + T17-a 六缺陷修复回归后 297 → r4（Stage 1 批次 A）304 → r5（批次 B TD-002 符号值 + 标准库最小集）324 → r6（批次 B 收官 B3 自举 Reader）356 → r7（批次 C 类型检查器 + 编译缓存 + TD-016）408 → **r8（批次 D 能力 I/O + 内部效应 + 用例运行器）476** → **r10（架构合规审计 +4）480**：+24 capability_tests（require 声明面 + E0006 三路径门控 + 豁免/形状/令牌 + EOF 子进程探针）+ +18 test_runner_tests（前置切分 + PASS 判定 + 短路/恢复/隔离 + front 错误面）+ +25 kerf-driver 单元（effects.rs 12：逃逸层/最近匹配/载荷保真/穿透契约 + capability.rs 13：R9 验证/豁免/编组）+ +1 negative_vm_tests（read_line_arity 自 ignore 激活——**FS-4 修复**，能力参数化重写时补齐元数校验）→ **r12（接口预留完整性扩展 +20）500**：+8 单元（reserved/ 模块 Probe 冻结——「测试实现体编译通过 = 契约冻结」先例沿用）+ +12 集成 reserved_ext_tests（P0 数据结构位置六项断言 + 预留 API 跨 crate 可达 + 负向形状：空目标拒绝/空片段类型检查失败/rename 错误面）。**全套件继续经自举 Reader（kerf 源码，VM 上运行）执行——含全部既有负向消息断言。**
+**509 通过 / 0 失败 / 0 忽略**（509 个测试函数 = 单元 183 + 集成 326，逐二进制实测汇总；r10 +4 架构审计 + r12 +20 预留扩展 + r13 +9 作用域集锚点）。
+§3.2 release 验收基线 204（r2）→ r3 负向测试扩张 + 审计集就位 + FS-1 守卫修复 + 糖正向锚点 + T17-a 六缺陷修复回归后 297 → r4（Stage 1 批次 A）304 → r5（批次 B TD-002 符号值 + 标准库最小集）324 → r6（批次 B 收官 B3 自举 Reader）356 → r7（批次 C 类型检查器 + 编译缓存 + TD-016）408 → **r8（批次 D 能力 I/O + 内部效应 + 用例运行器）476** → **r10（架构合规审计 +4）480**：+24 capability_tests（require 声明面 + E0006 三路径门控 + 豁免/形状/令牌 + EOF 子进程探针）+ +18 test_runner_tests（前置切分 + PASS 判定 + 短路/恢复/隔离 + front 错误面）+ +25 kerf-driver 单元（effects.rs 12：逃逸层/最近匹配/载荷保真/穿透契约 + capability.rs 13：R9 验证/豁免/编组）+ +1 negative_vm_tests（read_line_arity 自 ignore 激活——**FS-4 修复**，能力参数化重写时补齐元数校验）→ **r12（接口预留完整性扩展 +20）500**：+8 单元（reserved/ 模块 Probe 冻结——「测试实现体编译通过 = 契约冻结」先例沿用）+ +12 集成 reserved_ext_tests（P0 数据结构位置六项断言 + 预留 API 跨 crate 可达 + 负向形状：空目标拒绝/空片段类型检查失败/rename 错误面）→ **r13（批次 E·TD-004 作用域集解析收口 +9）509**：+9 集成 scope_set_tests（双路径语义锚点 + 作用域不匹配负例——见 docs/tests/v0/stage1/plan/scope-set.md）。**全套件继续经自举 Reader（kerf 源码，VM 上运行）执行——含全部既有负向消息断言。**
 
 > **r7 计数修正**（r8 对账发现，§8.4.5 规则 2——以实测为准）：r7 版本矩阵的分套件表存在陈旧数（头部「集成 173 函数」为 r3 时代口径；单元表 130 实为 150——driver 14→25 / expander 26→28 / compiler 12→15 的 r4-r7 增长未回写；cache_tests 13 实为 14；negative_vm 29 为排除 ignore 的口径）。r7 实际 = 150 单元 + 260 集成函数（259 通过 + 1 ignore）= 408:0:1 ✓（总量正确、分项陈旧）。r8 起全部逐二进制实测。
 >
@@ -34,7 +35,7 @@
 | kerf-vm 单元 | crate 内联 | crates/kerf-vm/src/*.rs | 18 |
 | kerf-driver 单元 | crate 内联 | crates/kerf-driver/src/*.rs | **58（r8 +25：effects.rs 12 + capability.rs 13；r12 +8：reserved/ Probe 冻结——toolchain 3 + ffi 3 + codegen 2）** |
 
-### 集成测试（317 函数，tests/ 阶段树——r9 起经 runner.rs 单一总入口组织；r10 +4 审计；r12 +12 预留扩展）
+### 集成测试（326 函数，tests/ 阶段树——r9 起经 runner.rs 单一总入口组织；r10 +4 审计；r12 +12 预留扩展；r13 +9 作用域集锚点）
 
 > **入口口径（r9）**：`tests/runner.rs` 为唯一集成测试目标（cargo 自动发现，Cargo.toml 零 [[test]] 声明）；下表各「套件」现为 runner 内 `#[path]` mod 树的**模块**（选择性运行 `cargo test --test runner <module>::`）——逐模块计数与 r8 逐二进制口径完全一致（476 总数不变，组织收敛）。共享辅助 `tests/common/` 经 runner 单实例共享（`use crate::common`——替代原每文件 `mod common` 重复加载）。
 
@@ -60,6 +61,7 @@
 | **capability_tests（r8，批次 D）** | tests/v0/stage1/plan/capability_tests.rs | **24** |
 | **test_runner_tests（r8，批次 D）** | tests/v0/stage1/plan/test_runner_tests.rs | **18** |
 | **reserved_ext_tests（r12，预留扩展）** | tests/v0/stage1/plan/reserved_ext_tests.rs | **12**（P0 位置断言 4 + API 可达 1 + 形状行为 7——含负向：空目标拒绝/空片段类型检查失败/rename 错误面） |
+| **scope_set_tests（r13，批次 E·TD-004）** | tests/v0/stage1/plan/scope_set_tests.rs | **9**（双路径正例 5：shadowing/嵌套 shadowing/闭包捕获/set! 词法命中/子集对照；负例 4：作用域不匹配未绑定 VM/eval/set! 三锚 + 宏引入不捕获） |
 
 ### 负向测试规模与正负比（§9.4.3 对账）
 

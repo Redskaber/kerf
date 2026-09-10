@@ -235,6 +235,8 @@ fn expand(stx: &Stx, ctx: &mut ExpandCtx) -> Result<Stx, ExpandError> {
 }
 ```
 
+> **实现状态（r13，TD-004 收口）**：上文 `ctx.resolve(sym, stx.scopes())` 的作用域集解析已落地——编译器 `resolve_var` 与 eval `Env::lookup/set` 均按 `(name, scopes ⊆)` 子集匹配 + max-cardinality（帧序/链序消解 shadowing）；`CoreExpr::VarRef/SetBang` 携带引用作用域集、`Lambda.param_scopes` 携带绑定作用域集（展开器绑定形式 fresh scope 深注入产出）。空作用域集全局绑定 ⊆ 任意引用集——名称基解析成为显式兜底路径（`$hyg$` 基名回退 = driver 全局层的回退近似）。锚点测试 = tests/v0/stage1/plan/scope_set_tests.rs（9 项双路径 + 负例）。
+
 **核心不变式**：
 1. **展开终止性**：每次宏调用产生的语法对象携带"展开代次 + 1"的 expansion_id（[02-语法模型 §2 的 Span 定义](./02-syntax-model.md)）；超过上限报错而非栈溢出（实现取值 500——TD-007 部分解除：trampoline 工作表迭代化后实测标定，见本文 §2.2）
 2. **卫生性保持**：宏引入的标识符作用域集 ≠ 用户代码作用域集，二者在 SyntaxObject 中永不合并为一个集合

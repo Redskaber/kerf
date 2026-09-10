@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use kerf_core::{CoreExpr, LiteralValue};
-use kerf_syntax::{Keyword, ScopeSet, Stx, StxDatum, StxLiteral, Symbol, SymbolTable};
+use kerf_syntax::{Keyword, ScopeId, ScopeSet, Stx, StxDatum, StxLiteral, Symbol, SymbolTable};
 
 use crate::core_forms::expand_core_form;
 use crate::macro_sys::{BuiltinTransformers, Transformer, TransformerKind};
@@ -80,6 +80,9 @@ pub struct ExpandCtxt {
     transformers: HashMap<Symbol, Transformer>,
     /// 当前宏展开深度。
     depth: u32,
+    /// 作用域分配器（TD-004/r13：绑定形式 fresh scope 唯一发放处——
+    /// 全局单调递增，保证 ScopeId 在一次展开内不重号）。
+    next_scope: ScopeId,
 }
 
 impl ExpandCtxt {
@@ -91,7 +94,16 @@ impl ExpandCtxt {
             table,
             transformers: HashMap::new(),
             depth: 0,
+            next_scope: 1,
         }
+    }
+
+    /// 分配 fresh scope（TD-004：绑定形式注入用；0 保留给「无作用域」语义——
+    /// 空集 = 全局/内置兑底，不占用）。
+    pub fn fresh_scope(&mut self) -> ScopeId {
+        let s = self.next_scope;
+        self.next_scope += 1;
+        s
     }
 
     /// 登记变换器（define-syntax 的 Phase 1 效果）。
@@ -161,6 +173,7 @@ pub fn expand_form(stx: &Stx, ctx: &mut ExpandCtxt) -> Result<Rc<CoreExpr>, Expa
         })),
         StxDatum::Symbol(name) => Ok(Rc::new(CoreExpr::VarRef {
             name: *name,
+            scopes: current.scopes.clone(),
             span: current.span,
         })),
         StxDatum::List(items) => expand_list(&current, items, ctx),

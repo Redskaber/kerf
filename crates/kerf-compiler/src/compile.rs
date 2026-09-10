@@ -15,7 +15,7 @@ use std::rc::Rc;
 
 use kerf_core::{CoreExpr, LiteralValue};
 use kerf_span::Span;
-use kerf_syntax::Symbol;
+use kerf_syntax::{ScopeSet, Symbol};
 
 use crate::bytecode::{BcConst, BcProgram, BcProto, CaptureSource, ConstPool};
 use crate::opcode::Op;
@@ -43,15 +43,53 @@ enum VarSource {
     Local(u32),
     /// 当前闭包捕获槽。
     Captured(u32),
-    /// 全局（按名）。
+    /// 全局（按名——空作用域全局绑定 ⊆ 任意引用集，由 VM/eval 全局层承接）。
     Global,
+}
+
+/// 完整解析结果（含命中绑定的绑定作用域集——捕获描述符需要它
+/// 注入新帧的 captures，使内层原型的体内引用经同一子集匹配命中）。
+#[derive(Debug, Clone)]
+struct ResolvedVar {
+    source: VarSource,
+    binder_scopes: ScopeSet,
+}
+
+/// 词法绑定项（编译期）：名 + 绑定作用域集（TD-004/r13）。
+#[derive(Debug, Clone)]
+struct Binding {
+    name: Symbol,
+    scopes: ScopeSet,
+}
+
+/// 帧内子集匹配解析：同名且 `binder.scopes ⊆ ref_scopes` 的绑定中取
+/// max-cardinality（并列先注册优先——同层同名经展开器/define_scoped
+/// 已拒绝，并列仅理论可能）；返回（槽位，绑定作用域集）。
+fn match_bindings(
+    bindings: &[Binding],
+    name: Symbol,
+    ref_scopes: &ScopeSet,
+) -> Option<(u32, ScopeSet)> {
+    let mut best: Option<(u32, ScopeSet)> = None;
+    let mut best_rank = 0usize;
+    for (i, b) in bindings.iter().enumerate() {
+        if b.name != name || !b.scopes.is_subset_of(ref_scopes) {
+            continue;
+        }
+        let rank = b.scopes.len();
+        if best.is_none() || rank > best_rank {
+            best = Some((i as u32, b.scopes.clone()));
+            best_rank = rank;
+        }
+    }
+    best
 }
 
 /// 词法作用域栈帧（编译期）。
 #[derive(Debug, Default)]
 struct ScopeFrame {
-    locals: Vec<Symbol>,
-    captures: Vec<Symbol>,
+    locals: Vec<Binding>,
+    captures: Vec<Binding>,
 }
 
 /// 编译上下文（§10.1 规则 2：`Ctxt` 后缀）。
@@ -85,24 +123,45 @@ impl CompileCtxt {
         }
     }
 
-    /// 解析变量来源（栈自顶向下——内层绑定优先）。
-    fn resolve_var(&self, name: Symbol) -> VarSource {
+    /// 解析变量来源（TD-004/r13：Racket 集合作用域）。
+    ///
+    /// 规则：帧栈自顶（内层）向下；帧内 locals 先于 captures，同名绑定
+    /// 中 `binder.scopes ⊆ ref_scopes` 者取 max-cardinality；首个含
+    /// 子集匹配的帧胜出（链序）。无任何子集候选 → Global（空作用域
+    /// 全局/内置承接名称基解析；`$hyg$` 基名回退 = 已降级的回退路径，
+    /// 与 eval 路径 `Env::lookup` 同一口径——T1 双路径一致）。
+    /// 良构程序上（注入不变式：内层绑定作用域集严格包含外层）与旧
+    /// 名称基栈序同解；差异仅在引用作用域集不含绑定作用域集时——
+    /// 旧实现误命中同名绑定，新实现按 Racket 语义判为未绑定→全局。
+    fn resolve_var(&self, name: Symbol, ref_scopes: &ScopeSet) -> ResolvedVar {
         for (fi, frame) in self.scopes.iter().enumerate().rev() {
             if fi == 0 {
                 // main 原型帧：局部槽存在但不构成闭包语义——仅局部
-                if let Some(i) = frame.locals.iter().position(|l| *l == name) {
-                    return VarSource::Local(i as u32);
+                if let Some((i, bs)) = match_bindings(&frame.locals, name, ref_scopes) {
+                    return ResolvedVar {
+                        source: VarSource::Local(i),
+                        binder_scopes: bs,
+                    };
                 }
                 continue;
             }
-            if let Some(i) = frame.locals.iter().position(|l| *l == name) {
-                return VarSource::Local(i as u32);
+            if let Some((i, bs)) = match_bindings(&frame.locals, name, ref_scopes) {
+                return ResolvedVar {
+                    source: VarSource::Local(i),
+                    binder_scopes: bs,
+                };
             }
-            if let Some(i) = frame.captures.iter().position(|c| *c == name) {
-                return VarSource::Captured(i as u32);
+            if let Some((i, bs)) = match_bindings(&frame.captures, name, ref_scopes) {
+                return ResolvedVar {
+                    source: VarSource::Captured(i),
+                    binder_scopes: bs,
+                };
             }
         }
-        VarSource::Global
+        ResolvedVar {
+            source: VarSource::Global,
+            binder_scopes: ScopeSet::new(),
+        }
     }
 
     /// 当前帧引用计数（原型索引）。
@@ -242,8 +301,8 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
             ctx.emit(Op::PushConst(idx), span);
             Ok(())
         }
-        CoreExpr::VarRef { name, .. } => {
-            match ctx.resolve_var(*name) {
+        CoreExpr::VarRef { name, scopes, .. } => {
+            match ctx.resolve_var(*name, scopes).source {
                 VarSource::Local(i) => ctx.emit(Op::LoadLocal(i), span),
                 VarSource::Captured(i) => ctx.emit(Op::LoadCaptured(i), span),
                 VarSource::Global => {
@@ -253,7 +312,12 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
             }
             Ok(())
         }
-        CoreExpr::Lambda { params, body, .. } => compile_lambda(ctx, params, body, span),
+        CoreExpr::Lambda {
+            params,
+            param_scopes,
+            body,
+            ..
+        } => compile_lambda(ctx, params, param_scopes, body, span),
         CoreExpr::App { fn_expr, args, .. } => {
             // 求值顺序契约（06 §1.3/§2 A1，与 eval 路径一致——T1 定理归纳基础）：
             // 被调函数先求值，参数从左到右
@@ -279,12 +343,17 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
             ctx.patch_jump(j_end);
             Ok(())
         }
-        CoreExpr::SetBang { name, value, .. } => {
+        CoreExpr::SetBang {
+            name,
+            scopes,
+            value,
+            ..
+        } => {
             // 栈平衡（§19.3 不变式 1）：set! 表达式的值为被赋值——
-            // 值入栈后 DUP 再存储，栈净 +1
+            // 值入栈后 DUP 再存储，栈净 +1（目标解析与 VarRef 同一口径，TD-004）
             compile_expr(ctx, value)?;
             ctx.emit(Op::Dup, span);
-            match ctx.resolve_var(*name) {
+            match ctx.resolve_var(*name, scopes).source {
                 VarSource::Local(i) => ctx.emit(Op::StoreLocal(i), span),
                 VarSource::Captured(i) => ctx.emit(Op::StoreCaptured(i), span),
                 VarSource::Global => {
@@ -396,34 +465,47 @@ fn compile_literal_value(
 /// Lambda 编译：闭包捕获转换（§8.5 基础闭包 + §19.3 CLOSURE 指令）。
 ///
 /// 步骤：
-/// 1. 计算 Lambda 的自由变量（CoreExpr::free_variable_list）；
-/// 2. 对每个自由变量解析当前作用域：Local/Captured → 捕获槽；Global → 原型内全局引用；
+/// 1. 计算 Lambda 的自由变量出现（名 + 首现引用作用域集，TD-004）；
+/// 2. 对每个自由变量按 `(name, scopes ⊆)` 解析当前作用域栈：
+///    Local/Captured → 捕获槽（携带命中绑定的绑定作用域集）；Global → 原型内全局引用；
 /// 3. 压入捕获值（与捕获表顺序一致），发射 CLOSURE；
-/// 4. 压入新帧作用域，编译原型体（参数 = 局部槽 0..n）。
+/// 4. 压入新帧作用域（形参绑定携带绑定作用域集；捕获绑定携带原绑定
+///    作用域集——体内引用经同一子集匹配命中），编译原型体（参数 = 局部槽 0..n）。
 fn compile_lambda(
     ctx: &mut CompileCtxt,
     params: &[Symbol],
+    param_scopes: &[ScopeSet],
     body: &Rc<CoreExpr>,
     span: Span,
 ) -> Result<(), CompileError> {
-    // 自由变量（排除参数屏蔽）
+    // 自由变量出现（排除参数屏蔽；携带首现引用作用域集——捕获判定数据源）
     let mut bound: Vec<Symbol> = params.to_vec();
-    let mut free: Vec<Symbol> = Vec::new();
-    body.free_variables(&mut bound, &mut free);
+    let mut free: Vec<(Symbol, ScopeSet)> = Vec::new();
+    body.free_var_occurrences(&mut bound, &mut free);
 
     // 捕获解析：可解析为局部/捕获的自由变量（编译期定型捕获描述符）
     let mut capture_names: Vec<Symbol> = Vec::new();
+    let mut capture_bindings: Vec<Binding> = Vec::new();
     let mut capture_srcs: Vec<CaptureSource> = Vec::new();
     let mut free_vars_all: Vec<Symbol> = Vec::new();
-    for f in &free {
+    for (f, f_scopes) in &free {
         free_vars_all.push(*f);
-        match ctx.resolve_var(*f) {
+        let r = ctx.resolve_var(*f, f_scopes);
+        match r.source {
             VarSource::Local(i) => {
                 capture_names.push(*f);
+                capture_bindings.push(Binding {
+                    name: *f,
+                    scopes: r.binder_scopes,
+                });
                 capture_srcs.push(CaptureSource::Local(i));
             }
             VarSource::Captured(i) => {
                 capture_names.push(*f);
+                capture_bindings.push(Binding {
+                    name: *f,
+                    scopes: r.binder_scopes,
+                });
                 capture_srcs.push(CaptureSource::Captured(i));
             }
             VarSource::Global => {} // 原型内按全局引用
@@ -444,10 +526,19 @@ fn compile_lambda(
         free_vars: free_vars_all,
     });
 
-    // 新作用域帧
+    // 新作用域帧（形参绑定携带绑定作用域集；缺失时容错为空集——
+    // 手工构造的 CoreExpr/旧序列化路径不携带作用域即名称基语义）
+    let local_bindings: Vec<Binding> = params
+        .iter()
+        .enumerate()
+        .map(|(i, n)| Binding {
+            name: *n,
+            scopes: param_scopes.get(i).cloned().unwrap_or_default(),
+        })
+        .collect();
     ctx.scopes.push(ScopeFrame {
-        locals: params.to_vec(),
-        captures: capture_names.clone(),
+        locals: local_bindings,
+        captures: capture_bindings,
     });
 
     // 体编译（尾部 RET 保证返回语义）——切入新原型
@@ -485,6 +576,7 @@ mod tests {
     fn var(n: u32) -> Rc<CoreExpr> {
         Rc::new(CoreExpr::VarRef {
             name: Symbol(n),
+            scopes: ScopeSet::new(),
             span: Span::dummy(),
         })
     }
@@ -565,6 +657,7 @@ mod tests {
         let body = app(var(5), vec![var(0)]);
         let lam = Rc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body,
             span: Span::dummy(),
         });
@@ -597,11 +690,13 @@ mod tests {
         // (lambda (x) (lambda (y) (x y)))——内层捕获 x
         let inner = Rc::new(CoreExpr::Lambda {
             params: vec![Symbol(1)],
+            param_scopes: vec![ScopeSet::new()],
             body: app(var(0), vec![var(1)]),
             span: Span::dummy(),
         });
         let outer = Rc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
+            param_scopes: vec![ScopeSet::new()],
             body: inner,
             span: Span::dummy(),
         });

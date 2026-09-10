@@ -43,6 +43,7 @@ fn core_expr_variant_set_frozen_exhaustive() {
     let instances: Vec<CoreExpr> = vec![
         CoreExpr::Lambda {
             params: vec![s0],
+            param_scopes: vec![kerf_syntax::ScopeSet::new()],
             body: Rc::new(lit.clone()),
             span: sp,
         },
@@ -57,16 +58,29 @@ fn core_expr_variant_set_frozen_exhaustive() {
             else_branch: Rc::new(lit.clone()),
             span: sp,
         },
-        CoreExpr::VarRef { name: s0, span: sp },
+        CoreExpr::VarRef {
+            name: s0,
+            scopes: kerf_syntax::ScopeSet::new(),
+            span: sp,
+        },
         lit,
         CoreExpr::SetBang {
             name: s0,
-            value: Rc::new(CoreExpr::VarRef { name: s0, span: sp }),
+            scopes: kerf_syntax::ScopeSet::new(),
+            value: Rc::new(CoreExpr::VarRef {
+                name: s0,
+                scopes: kerf_syntax::ScopeSet::new(),
+                span: sp,
+            }),
             span: sp,
         },
         CoreExpr::Define {
             name: s0,
-            value: Rc::new(CoreExpr::VarRef { name: s0, span: sp }),
+            value: Rc::new(CoreExpr::VarRef {
+                name: s0,
+                scopes: kerf_syntax::ScopeSet::new(),
+                span: sp,
+            }),
             span: sp,
         },
         CoreExpr::Begin {

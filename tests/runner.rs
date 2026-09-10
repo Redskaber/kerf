@@ -109,3 +109,9 @@ mod test_runner_tests;
 
 #[path = "v0/stage1/plan/reserved_ext_tests.rs"]
 mod reserved_ext_tests;
+
+// 批次 E（r13：TD-004 作用域集解析收口——Racket 式 (name, scopes ⊆)
+// 匹配的双路径语义锚点 + 作用域不匹配负例）
+
+#[path = "v0/stage1/plan/scope_set_tests.rs"]
+mod scope_set_tests;

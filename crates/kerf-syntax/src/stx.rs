@@ -139,6 +139,22 @@ impl Stx {
         }
     }
 
+    /// 深注入作用域（TD-004/r13，Racket 集合作用域模型）：本语法对象与
+    /// 全部子项的作用域集并入 `scope`。绑定形式（lambda 等）在展开时
+    /// 对绑定器与全体体形式执行本注入——体内引用因此「看见」绑定作用域，
+    /// 供 `(name, scopes ⊆)` 子集匹配解析。
+    pub fn add_scope_to_all(&mut self, scope: crate::scope::ScopeId) {
+        self.scopes.add(scope);
+        match &mut self.datum {
+            StxDatum::List(items) | StxDatum::Vector(items) => {
+                for item in items {
+                    item.add_scope_to_all(scope);
+                }
+            }
+            StxDatum::Symbol(_) | StxDatum::Literal(_) => {}
+        }
+    }
+
     /// 数据化渲染（调试/dump：`(if x 1 2)` 形式，符号名由调用方传入解析表）。
     pub fn render(&self, resolve: &dyn Fn(Symbol) -> String) -> String {
         match &self.datum {

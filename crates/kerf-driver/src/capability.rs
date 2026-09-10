@@ -270,7 +270,7 @@ fn verify_refs(
     table: &SymbolTable,
 ) -> Option<Diagnostic> {
     match e {
-        CoreExpr::VarRef { name, span } => {
+        CoreExpr::VarRef { name, span, .. } => {
             let raw = table.name(*name).to_string();
             let base = hygienic_base(&raw).to_string();
             if takeover.contains(&raw) || takeover.contains(&base) {
@@ -300,7 +300,9 @@ fn verify_refs(
         } => verify_refs(cond, declared, takeover, table)
             .or_else(|| verify_refs(then_branch, declared, takeover, table))
             .or_else(|| verify_refs(else_branch, declared, takeover, table)),
-        CoreExpr::SetBang { name, value, span } => {
+        CoreExpr::SetBang {
+            name, value, span, ..
+        } => {
             // set! 目标：若名字是门控内置且未被接管 → 内置状态写入（无此
             // 形态——门控内置无 set! 语义）；此处按引用口径检查值侧
             let _ = (name, span);
@@ -417,6 +419,7 @@ mod tests {
         let print = t.intern("print");
         let core = vec![Rc::new(CoreExpr::VarRef {
             name: print,
+            scopes: kerf_syntax::ScopeSet::new(),
             span: Span::new(fid, 1, 6),
         })];
         let err = verify_io_capabilities(&core, &t, &sm).unwrap_err();
@@ -438,6 +441,7 @@ mod tests {
             }),
             Rc::new(CoreExpr::VarRef {
                 name: print,
+                scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
             }),
         ];
@@ -456,6 +460,7 @@ mod tests {
             }),
             Rc::new(CoreExpr::VarRef {
                 name: rl,
+                scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
             }),
         ];
@@ -480,6 +485,7 @@ mod tests {
             }),
             Rc::new(CoreExpr::VarRef {
                 name: print,
+                scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
             }),
         ];
@@ -498,6 +504,7 @@ mod tests {
             name: my,
             value: Rc::new(CoreExpr::VarRef {
                 name: print,
+                scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
             }),
             span: Span::dummy(),
@@ -513,6 +520,7 @@ mod tests {
         let print_hyg = t.intern("print$hyg$3");
         let core = vec![Rc::new(CoreExpr::VarRef {
             name: print_hyg,
+            scopes: kerf_syntax::ScopeSet::new(),
             span: Span::dummy(),
         })];
         let sm = SourceMap::new();
@@ -523,6 +531,7 @@ mod tests {
         let not_hyg = t2.intern("print$hyg$x");
         let core2 = vec![Rc::new(CoreExpr::VarRef {
             name: not_hyg,
+            scopes: kerf_syntax::ScopeSet::new(),
             span: Span::dummy(),
         })];
         let sm2 = SourceMap::new();

@@ -82,16 +82,30 @@ fn expand_lambda(
             stx.span,
         ));
     }
-    let params = parse_params(&items[1])?;
-    let body = expand_body(&items[2..], ctx)?;
+    // TD-004/r13（Racket 集合作用域）：绑定形式分配 fresh scope 并深注入
+    // 绑定器与全体体形式——体内引用因此携带绑定作用域，供编译器/eval
+    // 按 (name, scopes ⊆) 子集匹配解析（max-cardinality 消解 shadowing）。
+    // 注入先于体展开：宏产物作用域 ⊇ use-site ⊇ {fresh}，自由标识符穿透
+    // 保持（03 §2.4）；α 重命名（$hyg$N）保留为第二道卫生保险。
+    let fresh = ctx.fresh_scope();
+    let mut param_stx = items[1].clone();
+    param_stx.add_scope_to_all(fresh);
+    let mut body_forms: Vec<Stx> = items[2..].to_vec();
+    for b in &mut body_forms {
+        b.add_scope_to_all(fresh);
+    }
+    let params = parse_params(&param_stx)?;
+    let (names, param_scopes): (Vec<_>, Vec<_>) = params.into_iter().unzip();
+    let body = expand_body(&body_forms, ctx)?;
     Ok(Rc::new(CoreExpr::Lambda {
-        params,
+        params: names,
+        param_scopes,
         body,
         span: stx.span,
     }))
 }
 
-fn parse_params(param_stx: &Stx) -> Result<Vec<kerf_syntax::Symbol>, ExpandError> {
+fn parse_params(param_stx: &Stx) -> Result<Vec<(kerf_syntax::Symbol, ScopeSet)>, ExpandError> {
     let list = param_stx
         .datum
         .as_list()
@@ -102,13 +116,17 @@ fn parse_params(param_stx: &Stx) -> Result<Vec<kerf_syntax::Symbol>, ExpandError
             Some(s) => {
                 // A3 卫式（[06-操作语义 §2]）：同名形参在同层只允许出现一次。
                 // 展开期检查是两执行路径（eval/VM）的共同上游——单点防御。
-                if params.contains(&s) {
+                if params
+                    .iter()
+                    .any(|(n, _): &(kerf_syntax::Symbol, ScopeSet)| *n == s)
+                {
                     return Err(ExpandError::new(
                         "lambda 参数重名（同名形参只允许出现一次）",
                         p.span,
                     ));
                 }
-                params.push(s);
+                // 绑定作用域集 = 注入后的绑定器符号作用域（TD-004）。
+                params.push((s, p.scopes.clone()));
             }
             None => {
                 return Err(ExpandError::new(
@@ -232,6 +250,7 @@ fn expand_setbang(
     let value = expand_form(&items[2], ctx)?;
     Ok(Rc::new(CoreExpr::SetBang {
         name,
+        scopes: items[1].scopes.clone(),
         value,
         span: stx.span,
     }))

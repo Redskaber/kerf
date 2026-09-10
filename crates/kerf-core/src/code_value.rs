@@ -232,6 +232,7 @@ mod tests {
     fn var(n: u32) -> CoreExpr {
         CoreExpr::VarRef {
             name: Symbol(n),
+            scopes: ScopeSet::new(),
             span: Span::dummy(),
         }
     }
@@ -239,6 +240,7 @@ mod tests {
     fn lam(param: u32, body: CoreExpr) -> CoreExpr {
         CoreExpr::Lambda {
             params: vec![Symbol(param)],
+            param_scopes: vec![ScopeSet::new()],
             body: Rc::new(body),
             span: Span::dummy(),
         }
