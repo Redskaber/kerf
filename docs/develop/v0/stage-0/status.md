@@ -1,21 +1,21 @@
 # Stage 0 阶段状态报告
 
 > **Author**: kerf-dev-agent（QA-A 角色）
-> **Date**: 2026-09-10（r5：Stage 1 批次 B TD-002 符号值交付 + §3.2 复验全绿）
-> **Version**: v0.1.0-r5
-> **Status**: Active（Stage 0 终态保持；Stage 1 增量见 stage-1/plan.md 与 RELEASE_NOTES r4/r5）
+> **Date**: 2026-09-10（r6：Stage 1 批次 B 收官 B3 自举 Reader 交付 + §3.2 复验全绿）
+> **Version**: v0.1.0-r6
+> **Status**: Active（Stage 0 终态保持；Stage 1 增量见 stage-1/plan.md 与 RELEASE_NOTES r4–r6）
 
 ## 1. 交付概览
 
 | 指标 | 值 |
 |------|-----|
 | 代码规模（Rust 生产代码，crates + src，不含 tests/examples） | 见 RELEASE_NOTES（r3 末实测口径 `wc -l`） |
-| 测试总数 | **324 全绿**（单元 132 + 集成 193 函数 = 325，其中 1 个 #[ignore] 文档化存档；0 失败——r5 批次 B 增量 +20：TD-002 符号值 5 + 标准库最小集 15） |
-| 负向测试 | 四文件 87 函数 / **489 case** + stdlib 172 case + 审计集 41 case（负 32）——正负比 **≈1:3.1**（§9.4.3 门限达标，r1 时 1:0.24） |
+| 测试总数 | **356 全绿**（r6 批次 B 收官增量 +32：VM call_closure 4 + bootstrap parity 28——**全套件经自举 Reader（kerf 源码）执行**；r5 324 基线 +20：TD-002 符号值 5 + 标准库最小集 15） |
+| 负向测试 | 四文件 87 函数 / **489 case** + stdlib 172 case + bootstrap parity 307 case + 审计集 41 case（负 32）——正负比 **≈1:3.2**（§9.4.3 门限达标，r1 时 1:0.24） |
 | 门审计集 | examples/audit/stage0_gate_audit_r1.rs：41 case（§7.3.1 配比全满足） |
 | crates | 9 成员 + 1 根 crate（零外部依赖，DAG 无环） |
 | 操作码 | **40 个**（八组显式枚举：栈 7/变量访问 7/控制流 2/函数 3/算术比较 12/数据 3/谓词 5/终止 1；守护测试逐项列举） |
-| 内置函数 | 24 项（语言层 read-line/print；通道层 read_line_stdin/write_line_stdout） |
+| 内置函数 | 52 项（48 用户面 + 4 自举 Reader 原语 r6——str->pos-chars/char-whitespace?/char-alphabetic?/str-int-valid?） |
 | 验收 | §3.2 全绿（build/check/test/fmt/clippy） |
 
 ## 2. 12（10+2）能力模型交付状态

@@ -195,3 +195,29 @@
   T17-a 深挖发现）。E 码/阶段/Span 三要素一致，文本常量分散于
   vm.rs/eval.rs。
 - **偿还计划**：共享消息常量模块（kerf-span 或 kerf-vm 公共层）。
+
+## TD-021：高阶函数用户面注入缺载体（P3）
+
+- **等级**：P3（hofs 已以 kerf 源码交付并直测——仅用户程序不可见）
+- **状态**：开放
+- **目标阶段**：Stage 1 批次 E（Expander kerf 重写时随模块系统一并设计）
+- **描述**：map/filter/foldl/for-each 已实现于 reader.krf 序章（r6/B3，
+  经 bootstrap 桥直测——「用 kerf 源码 preamble 实现」的自举验证命题
+  本体已交付），但用户程序引用报未绑定变量。三方案已否决（r5 裁定）：
+  P1 源码拼接（Span 诊断污染 = P1 缺陷）、P3 跨程序全局合并
+  （SymbolTable id 不可比 + 原型索引程序局部——call_closure 运行时
+  显式拒绝）、P5 builtin 调闭包（VM 递归 re-entry 越界 §11）。
+- **偿还计划**：模块/import 机制承载 preamble（批次 E Expander 重写
+  时设计）——正确 > 妥协：不做看起来像但不是的半吊子注入。
+
+## TD-022：自举 Reader 帧消耗 O(源字符数)（P3）
+
+- **等级**：P3（语言无 TCO 的既定边界；测试语料全部远低于上限）
+- **状态**：开放
+- **目标阶段**：Stage 2（TCO 决策点——12-roadmap §2.5）
+- **描述**：reader.krf 的词法/语法主循环按 Token/字符递归（尾调用链
+  形态），无 TCO 下每步消耗一 VM 帧（MAX_FRAMES=10^5）：约 10^5 字符
+  以上源文件将以「调用帧超过上限」终止（非读语义错误）。种子 Reader
+  无此限制（Rust 循环）。Stage 1 验收语料（≤ 数 KB）不受影响。
+- **偿还计划**：Stage 2 TCO 裁定时一并评估（帧复用或迭代式驱动）；
+  若 TCO 继续推迟，评估分块驱动协议（宿主侧步进）。

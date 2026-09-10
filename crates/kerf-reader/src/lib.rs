@@ -21,6 +21,6 @@ pub mod token;
 
 // 显式 re-export（§10.1 规则 4：禁止 glob re-export）。
 // 约定：本 crate 暴露 Reader 域全部公共类型与入口。
-pub use lexer::{lex_source, Lexer};
+pub use lexer::{lex_source, operator_of, Lexer};
 pub use parser::{parse_tokens, read_program, read_source, Parser};
 pub use token::{Delimiter, Operator, ReadError, Token, TokenKind};

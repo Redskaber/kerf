@@ -1,14 +1,14 @@
 # 全局测试矩阵（覆盖率追踪）
 
 > **Author**: kerf-dev-agent（QA-A 角色）
-> **Date**: 2026-09-10（r5：Stage 1 批次 B TD-002 交付后全量对账——`cargo test --release --workspace` 实测复核）
-> **Version**: v0.1.0-r5
+> **Date**: 2026-09-10（r6：Stage 1 批次 B 收官 B3「Reader kerf 重写」交付后全量对账——`cargo test --workspace` 实测复核）
+> **Version**: v0.1.0-r6
 > **Status**: Active
 
 ## 总量
 
-**324 通过 / 0 失败 / 1 忽略**（325 个测试函数；忽略项均为文档化存档，见下）。
-§3.2 release 验收基线 204（r2）→ r3 负向测试扩张 + 审计集就位 + FS-1 守卫修复 + 糖正向锚点 + T17-a 六缺陷（D1-D7/D9）修复回归后 297 → r4（Stage 1 批次 A）304：+1 TD-015 分流守护 + +2 TD-007 单元（500 层链正例/501 超限负例）+ +4 TD-007 集成（expansion_worklist_tests：端到端/双路径/自指宏报错/糖交错）→ **r5（批次 B TD-002 符号值 + 标准库最小集）324**：+2 expander（符号 datum 正例/宏模板卫生剥离）+ +3 vm（符号值语义/构造与提取/双路径一致）+ +1 negative_vm（符号值语义误用 6 case）+ +15 stdlib_tests（批次 B 标准库最小集：列表 8/字符串 10/I/O 6 函数——正例 59 断言 + 负例 172 case，元数/类型/边界三维矩阵）。
+**356 通过 / 0 失败 / 1 忽略**（357 个测试函数；忽略项均为文档化存档，见下）。
+§3.2 release 验收基线 204（r2）→ r3 负向测试扩张 + 审计集就位 + FS-1 守卫修复 + 糖正向锚点 + T17-a 六缺陷（D1-D7/D9）修复回归后 297 → r4（Stage 1 批次 A）304 → r5（批次 B TD-002 符号值 + 标准库最小集）324 → **r6（批次 B 收官 B3 自举 Reader）356**：+4 kerf-vm 单元（call_closure 宿主调用：带参调用/元数与类型错/跨程序拒绝/错误传播）+ +28 bootstrap_reader_tests（B3 parity 套件：正例 87 case + 负例 307 case——Stx 树与错误消息/Span 双实现逐字节等价、双错误次序、Unicode/NFC、深度边界 256/257、高阶函数直测、Reader 原语误用）。**全套件 356 项经自举 Reader（kerf 源码，VM 上运行）执行——含全部既有负向消息断言，即整体行为等价的实证。**
 
 > 1 个 `#[ignore]`（实测确认的行为边界存档，不计 case 数，文件内注释说明理由）：
 > - negative_vm_tests::read_line_arity_ignored（read-line 元数不校验——语义发现 FS-4）
@@ -30,7 +30,7 @@
 | kerf-expander 单元 | crate 内联 | crates/kerf-expander/src/*.rs | 26 |
 | kerf-compiler 单元 | crate 内联 | crates/kerf-compiler/src/*.rs | 12 |
 | kerf-runtime 单元 | crate 内联 | crates/kerf-runtime/src/*.rs | 9 |
-| kerf-vm 单元 | crate 内联 | crates/kerf-vm/src/*.rs | 14 |
+| kerf-vm 单元 | crate 内联 | crates/kerf-vm/src/*.rs | 18（r6 +4 call_closure） |
 | kerf-driver 单元 | crate 内联 | crates/kerf-driver/src/*.rs | 14 |
 
 > r2 基线 127 → r3 130：span +1（守卫）、core 11→10 / expander 23→26（含守护测试重写与循环依赖检测）、
@@ -54,6 +54,7 @@
 | negative_vm_tests | tests/v0/stage0/plan/negative_vm_tests.rs | 31 | 31 | 0 |
 | negative_semantics_tests | tests/v0/stage0/plan/negative_semantics_tests.rs | 20 | 20 | 0 |
 | stdlib_tests（r5） | tests/v0/stage1/plan/stdlib_tests.rs | 15 | 15 | 0 |
+| bootstrap_reader_tests（r6） | tests/v0/stage1/plan/bootstrap_reader_tests.rs | 28 | 28 | 0 |
 
 ### 负向测试规模与正负比（§9.4.3 对账）
 
@@ -65,11 +66,13 @@
 | negative_semantics_tests.rs | 20 | 98 |
 | **四文件合计** | **87** | **489** |
 | stdlib_tests（r5，tests/v0/stage1） | 15 | 172（元数 25/类型 86/边界 12/语义 31/双参扫描 18） |
+| bootstrap_reader_tests（r6，tests/v0/stage1） | 28 | 307（负例语料 28 + 次序 5 + 深度 2 + 原语 6 + 系统化矩阵 266：括号 65/转义 42/数字 101/非法字符 32/双错误 9/注释与 EOF 16） |
 | 审计集（examples/audit/stage0_gate_audit_r1.rs） | — | 41（负向 32 + 恢复 6 + 正向 3） |
 
-- **全局正负比（case 口径）≈ 1:3.1**：负向 case 489（四文件）+ 172（stdlib r5）+ 32（审计集负向）
-  = 693 vs 正向 ≈ 224（正向/快照/双路径断言估算，r5 +符号 16 断言 + stdlib 59 断言）——
-  **§9.4.3 的 ≥1:3 门限维持达标**（r1 审查时为 1:0.24）。
+- **全局正负比（case 口径）≈ 1:3.2**：负向 case 489（四文件）+ 172（stdlib r5）+ 307（bootstrap r6）
+  + 32（审计集负向）= 1000 vs 正向 ≈ 311（r5 224 + r6 正例 87 case：parity 语料/hof/原语/管线）——
+  **§9.4.3 的 ≥1:3 门限维持达标**（r1 审查时为 1:0.24）。r6 负例全部经
+  `assert_negative_parity`（种子确实报错断言——防语料误收正例）。
 - 逐分类负测非零：reader/expander/compiler/vm/gc/pipeline/gate/driver 全部含负向 case
   （r1 审查时 7 个分类为零）。
 - §7.1.1 七类负向矩阵 7/7（含空应用与模块循环依赖）；E 码直接断言：E1–E6 全部

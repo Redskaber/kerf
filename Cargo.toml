@@ -99,3 +99,7 @@ path = "tests/v0/stage1/plan/expansion_worklist_tests.rs"
 [[test]]
 name = "stdlib_tests"
 path = "tests/v0/stage1/plan/stdlib_tests.rs"
+
+[[test]]
+name = "bootstrap_reader_tests"
+path = "tests/v0/stage1/plan/bootstrap_reader_tests.rs"

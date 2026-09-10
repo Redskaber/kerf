@@ -835,3 +835,188 @@ Stage Summary:
   校准 + 正负比维持）、§8.4.6（write_stdout 落 kerf-runtime 通道层
   ——语言层 kerf-driver 注册的双层表面架构一致性）、§11（Builtin
   无 VM re-entry 的边界尊重——高阶函数不走 builtins 通道）
+
+---
+Task ID: 23
+Agent: Super Z (main) — QA-A/REC-A
+Task: §3.2 终验全绿 + web 同步 + §19 打包 r5（Stage 1 批次 B 交付闭环）
+
+Work Log:
+- §3.2 六命令实测全绿（硬性门 1，cargo clean 起步）：
+  (1) cargo clean ✅（4890 文件 829.5MiB）
+  (2) cargo build --release：0 警告 ✅
+  (3) cargo check --workspace --all-targets：0 errors / 0 warnings ✅
+  (4) cargo fmt --check：零 diff ✅
+  (5) cargo clippy --workspace --all-targets -- -D warnings：0 ✅
+  (6) cargo test --release --workspace：**324 通过 / 0 失败 / 1 忽略** ✅
+      （304 基线 + 20：TD-002 符号值 5 + 标准库最小集 15）
+- 审计集复跑（release）：41/41 PASS / XFAIL-WARN 0 / EXIT 0；
+  §7.3.1 配比与七类覆盖全部满足
+- web 同步（Next.js / 路由 / 唯一用户可见面）：
+  - kerf-data：roadmap Stage 1 →「进行中（批次 A/B 已交付）」+ 批次 B
+    要点（TD-002 全链 + 48 内置 + 阶段门条件 3）；Stage 0 卡片 324；
+    PACKAGE_CONTENTS 324；capabilities I/O 行 write_stdout；playground
+    文案 48 内置
+  - **stats API 包名正则修复**：`/kerf-stage0-*.tar.gz/` 只匹配 stage0
+    前缀——r4 的 stage1 包从未被正确显示（r4 会话 web 同步遗漏，
+    本次发现即修 §8.4.5 文档-代码一致性同型）；改通用 `/kerf-*.tar.gz/`
+    + mtime 降序选最新
+- Agent Browser 端到端自验证：
+  - 页面渲染：测试计数 324（stats API 从 matrix.md 自动）+ Stage 1
+    批次 A/B 状态徽章 + 48 内置文本 ✅
+  - Playground 执行（web → API → kerf run 全链路）：quote 符号 →
+    hello-symbol（TD-002 语义经 web 实证）/ str-length "héllo wörld"
+    → 11（Unicode）/ str-upcase → AÉ / length → 4 / reverse → (3 2 1) /
+    append → (a b c d) / assoc → (b 2) / member → (3 4)；
+    API 直连：(eq? (string->symbol "foo") 'foo) → ⇒ true / str-index-of
+    → 6 / list-tail → (c d) / last-pair → (3)
+  - 负例：(+ 1 'a) → E0004 结构化报错 + Span 源码摘录渲染（exit 1）
+  - 响应式 390×844：无横向滚动、无 undefined、console 零错误
+  - 桌面 1440×900：footer 正常 + 截图存档
+- git commit：feat(stage1-batchB) TD-002（22-a）+ stdlib（22-c）两条
+- §19 打包 r5：kerf-stage1-v0.2.0-batchB-td002-symbolvalue-stdlib48-
+  324tests-r5.tar.gz（489,485 B / 194 文件；exclude target/.git/
+  download/tool-results）；**包内解压全 workspace 自举验证 324:0:1
+  与交付环境一致**
+
+Stage Summary:
+- Stage 1 批次 B 交付闭环：TD-002 符号值 + 标准库最小集（48 内置）
+  + §3.2 全绿 + 审计集 + web 同步（含 stats API 正则缺陷修复）+
+  自举验证包 + git 两条提交（r5）
+- 批次 B 剩余：TD-004（重排裁定批次 E 收口批次整体推进）+ B3 Reader
+  kerf 重写 + 高阶函数 preamble（下会话按 plan §5 序列）
+- 遵循原则：§3.2（交付前六命令实测）、§7.3.1（审计集 release 复跑）、
+  §19（打包 + 包内自举验证）、§8.4.5（stats 正则缺陷发现即修——
+  文档-代码一致性的运行时面）、浏览器验证标准（Playground 语义/
+  渲染/响应式/console 四面）
+---
+Task ID: 24-a
+Agent: Super Z (main) — DEV-A
+Task: VM 宿主调用 API call_closure（B3 前置——自举 Reader 的程序化调用入口）
+
+Work Log:
+- §0 启动协议：sop.md §1 路由（写代码/写测试约束）→ L3 判定（中枢
+  read 路径切换在本批）→ worklog 摘 Task 20-d/21/22-a/22-c/23（无冲突：
+  Task 23 尾注「下会话按 plan §5 序列」→ B3）→ MUV 六字段拆分
+  （24-a/b/c/d）
+- 实现（kerf-vm/src/vm.rs）：`call_closure(program, globals, heap,
+  callee, args)` ——函数入口帧进入执行循环：Bytecode 闭包提取 + 原型
+  越界防御（跨程序闭包显式拒绝——P3 否决的运行时面，§2.3-4 报错>
+  静默）+ 元数检查（与 CALL 同口径）+ 参数入单元格 + 错误追踪帧链
+  快照（与 run_program 同构）
+- RET 底帧语义泛化：`frames.len() <= 1` 时返回弹栈值（原为「主原型
+  出现 RET」报错——run_program 主原型以 Halt 终止不经此路径；查全库
+  无该错误消息的断言依赖）
+- 测试（+4）：带参调用/多次调用独立性 / 非闭包与元数错误 / 跨程序
+  原型拒绝 / 错误传播与追踪
+- 回归：kerf-vm 18:0（14 + 4）；cargo check 全绿
+
+Stage Summary:
+- call_closure 交付：宿主信任层对已加载程序的程序化调用（§11 与
+  run_program 同级——builtin 内部递归 re-entry 仍禁止，P5 否决维持）
+- 遵循原则：§11（接口隔离——入口与 run_program 同级而非 builtin 层
+  越权）、§2.3-4（跨程序闭包显式报错而非越界 panic）
+
+---
+Task ID: 24-b
+Agent: Super Z (main) — DEV-A
+Task: B3 自举 Reader 本体——reader.krf（kerf 源码词法+语法+高阶函数）+ 自举桥 + 生产读路径切换
+
+Work Log:
+- 知识搜索（§2.3-11 先查禁猜）：种子 reader 全读（lexer 581/parser
+  321/token 158 行——错误消息/Span/次序口径逐项摘录）；driver 管线
+  （compile_front/dump_*）；VM 值模型 + CALL/RET/Halt + GC 根集
+  （栈+帧+全局——call_closure 复用同一 execute 循环天然安全）；
+  SymbolTable 语义（intern("lambda")==keyword_symbol——桥侧符号
+  直接按名 intern 即一致）；内置面盘点（无 char 原语→4 新原语裁定）
+- 4 新原语（builtins.rs，§8.4.6 两级语义——运行时服务层非语言语义面）：
+  str->pos-chars（(字节偏移 . 单字符) 列表——偏移差分得 UTF-8 长度）/
+  char-whitespace?/char-alphabetic?（Unicode 属性——语言内不可枚举）/
+  str-int-valid?（i64 域 = Rust parse 同源——错误次序 parity 的前置
+  校验；正确舍入的 f64 转换与 i64 域是宿主类型边界）
+- reader.krf（~430 行 kerf，crates/kerf-driver/src/bootstrap/）：
+  - 契约：lex-src(src, blen)/parse-tokz(toks) 两入口（与种子
+    lex_source/parse_tokens 接口形状对齐 §11）；Token=(kind start end
+    payload) 15 种类；datum=(tag start end ...)；err=('err 消息 起 止)
+    值编码（不依赖异常——VM span 指向 reader.krf 而非用户源）
+  - 词法：skip-trivia/嵌套块注释/字符串转义（含种子 eo+1 字节口径
+    逐字节复刻——多字节转义字符的 Span 怪癖保持）/数字扫描（指数/
+    贪婪拒绝/溢出前置 str-int-valid?——扫描序 parity 关键）/省略号族
+    （"..."→id 续字符 / ".." "...."→标识符——精确复刻种子分支）
+  - 语法：递归下降 + 深度 256 上限 + 括号配对矩阵 + 'x → (quote x)
+    （头符号 Span=引号字符）
+  - 高阶函数序章：map/filter/foldl/for-each（r5 裁定「自举验证命题
+    本体」——lex-scan-with 为真实高阶消费点：scan-ident/dots/number
+    作函数值传入）
+  - 错误传播：尾调用链形态（lex-loop 尾递归——深层 err 经尾链免费
+    上浮；parse-datum 非尾位经单点检查续传）
+- 自举桥（bootstrap.rs）：thread_local 惰性加载（种子编译 reader.krf
+  → run_program 顶层定义——无递归）+ 持久堆（GC 根集含全局——
+  KEYWORDS 等序对树全局跨调用存活）+ 值树→Token/Stx 走查 + 数字
+  同源 parse（消息/Span 逐字节）+ as_err_form 值错误解码 + VM 内部
+  错误防御路径（reader.krf 源映射渲染）+ 自检面（selfcheck_call/
+  list/render——§14.9 编译器自调试族，builtin 直调分支）
+- driver.rs 重构：compile_front（自举读）与 compile_front_seed（种子
+  读）经 front_from_forms 共享后段（expand/簿记/compile 单一实现）；
+  dump_tokens/dump_stx 切换自举读；FrontOutput pub(crate)（bootstrap
+  消费三字段）
+- kerf-reader：operator_of 导出（桥复用同一运算符映射——唯一可信
+  数据源 §2.3-10）
+- 开发中发现并修复 2 缺陷（P1 级——既有测试立即拦截，§5.2 当轮内循环）：
+  1. tok-end 命名冲突（游标助手 vs Token 访问器——E6 重复定义在
+     reader.krf 加载时暴露：种子的重复定义守卫生效实证）
+  2. 'nil/'true/'false 引用后是字面量 datum（TD-002 语义）非符号——
+     tag 改经 string->symbol 构造 + lex-string 解构字段序（second→
+     third——string token payload 曾误取 kind 整数）
+- 回归：全套件 328:0:1 经自举 Reader（含全部负向消息断言）——整体
+  行为等价实证
+
+Stage Summary:
+- B3 交付：Reader 以 kerf 源码运行于 Stage 0 VM（07 §3.2 混合期构成
+  的 Reader 项 ✅）；生产读路径整体切换；种子保留双职责（引导编译 +
+  parity oracle）
+- 触点教训（登记 calibration-data）：跨表示边界（Rust 值 ↔ kerf 值）
+  的字段/tag 约定无类型兜底——契约文档化 + parity 逐字节断言为对策
+- 遵循原则：§2.3-11（种子全读后动手）、§11（两入口接口形状对齐 /
+  call_closure 与 run_program 同级 / 原语归运行时服务层）、§2.3-4
+  （err 值编码显式返回 / 跨程序闭包拒绝 / VM 内部错误防御渲染）、
+  §12（数字转换归宿主原语——不做语言算术的不可靠重实现）、§2.1.1-3
+  （front_from_forms 单一实现——两读入口零逻辑漂移）
+
+---
+Task ID: 24-c
+Agent: Super Z (main) — QA-A
+Task: B3 parity 套件（bootstrap_reader_tests：正 87 / 负 307 case）+ 全局正负比维持
+
+Work Log:
+- tests/v0/stage1/plan/bootstrap_reader_tests.rs（28 函数）+
+  Cargo.toml [[test]] 声明 + tests/v0/stage1/plan.md 套件行
+- parity 走查器：stx_equiv（datum+Span 递归——符号按名：两实现 intern
+  次序不保证一致）+ assert_read_parity（Ok 树等价 / Err 消息+Span
+  逐字节 / 形态一致）+ assert_negative_parity（种子确实报错断言——
+  防语料误收正例；开发中即拦下 2 处误收：[(a) b] 有效 / 1..2 可分词）
+- 正例 87 case：种子 reader 测试全集语料 + 奇异边界（省略号族/前导零/
+  边界值 ±max/NFC 组合归一/NNBSP 异形空白/多字节标识符 Span）+
+  Token 流 parity（种类+Span）+ dump 格式 parity（种子格式循环镜像）+
+  深度 256 ok / 高阶函数直测（map/filter/foldl/for-each 经 selfcheck
+  ——builtin 作 f，跨程序安全）+ Reader 原语正例 + 管线集成
+  （run fib→55 / 读错误渲染 / T1 双路径 / dump_stx）
+- 负例 307 case：28 负例语料 + 双错误次序 5（首错位置契约——溢出
+  前置 vs 后置词法错误双向）+ 深度 257/300 + 系统化矩阵 266（未闭合
+  深度 1..30 / 括号错配矩阵 / 非法转义 32 字符含多字节 eo+1 口径 /
+  贪婪数字 10×5 矩阵 / 溢出扫描 19..26 位 × 3 符号 + 边界外一格 +
+  前导零 / 非法字符 8×3 上下文 / 双错误 9 / 注释嵌套与 EOF 16）+
+  原语误用 6
+- 自检面（bootstrap.rs）：call_entry 双形态（kerf 闭包走 call_closure；
+  builtin 直调——str->pos-chars 等原语经 selfcheck 驱动）
+- 回归：bootstrap_reader_tests 28:0；全套件 356:0:1；clippy -D 0；
+  fmt 零 diff；审计集 41/41 EXIT 0
+- 文档对账：matrix.md r6（356 全绿 + 正负比 1:3.2 全局口径——负 1000
+  case / 正 ≈311）
+
+Stage Summary:
+- parity 验收门交付：双实现行为契约（树/消息/Span/次序）逐字节锁定；
+  §9.4.3 正负比经负例矩阵维持（1:3.2——r6 增量正 87/负 307）
+- 遵循原则：§9.4.3（正负例成对 + 实跑断言防误收）、§7.1（集成验证
+  ≥3：parity/管线/hof）、§2.3-11（断言全部经双实现实跑比对——
+  零手写期望值快照）

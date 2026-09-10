@@ -14,10 +14,10 @@ use std::rc::Rc;
 use kerf_compiler::{compile_module, disassemble_program, BcProgram};
 use kerf_core::{lower_program, CoreExpr, IrGraph};
 use kerf_expander::{expand_program, phase::ModuleRegistry, ExpandCtxt, ExpandError};
-use kerf_reader::{lex_source, read_source, ReadError, TokenKind};
+use kerf_reader::{read_source, ReadError, TokenKind};
 use kerf_runtime::Heap;
 use kerf_span::{render_diagnostic, Diagnostic, DiagnosticCode, Severity, SourceMap, Span};
-use kerf_syntax::{Symbol, SymbolTable};
+use kerf_syntax::{Stx, Symbol, SymbolTable};
 use kerf_vm::{run_program, Env, Value, VmError};
 
 use crate::builtins::{register_globals, resolve_hygiene_fallbacks};
@@ -150,20 +150,27 @@ impl CompileOutput {
 /// TD-015 偿还：run/eval 生产路径消费本形态——`IrGraph` 仅在消费方
 /// （`kerf ir` 子命令 / CodeValue 检查 / 完整 dump）经 [`compile_source`]
 /// 按需计算，生产执行路径不再旁路构造后丢弃（恒定开销消除）。
-struct FrontOutput {
+///
+/// pub(crate)（B3）：自举 Reader 加载（bootstrap 模块）消费 program /
+/// table / source_map 三字段——种子管线的产物形状。
+pub(crate) struct FrontOutput {
     /// 展开后的核心表达式序列。
-    core: Vec<Rc<CoreExpr>>,
+    pub(crate) core: Vec<Rc<CoreExpr>>,
     /// 字节码程序。
-    program: BcProgram,
+    pub(crate) program: BcProgram,
     /// 源映射（诊断渲染）。
-    source_map: SourceMap,
+    pub(crate) source_map: SourceMap,
     /// 符号表（渲染与调试）。
-    table: SymbolTable,
+    pub(crate) table: SymbolTable,
     /// 模块注册簿记（declare/visit 已完成）。
-    registry: ModuleRegistry,
+    pub(crate) registry: ModuleRegistry,
 }
 
 /// 编译前段（read → expand → 相位簿记 → 字节码，不含 lower）。
+///
+/// **读阶段经自举 Reader**（B3：kerf 源码 Reader 在 VM 上运行，
+/// crate::bootstrap 桥接）——生产管线入口。自举 Reader 本身的编译走
+/// 种子路径 [`compile_front_seed`]（无递归：种子编译自举实现）。
 ///
 /// [`compile_source`]（完整管线，含图 IR）与 [`run_source`]/[`eval_source`]
 /// （生产执行路径，无需 IR）共用本前段——单一编译逻辑，两分流出口
@@ -176,10 +183,41 @@ fn compile_front(source: &str, filename: &str) -> Result<FrontOutput, DriverErro
     // 默认模块名（无 module 形式时使用）——在任何 read/expand 之前 intern
     let main_sym = table.intern("main");
 
-    // 1. Reader：源 → Stx
+    // 1. Reader（自举）：源 → Stx
+    let forms = crate::bootstrap::read_source(source, file_id, &mut table)
+        .map_err(|e| DriverError::from_read(&e, &sm))?;
+
+    front_from_forms(forms, table, sm, main_sym)
+}
+
+/// 种子编译前段（Rust Reader——自举 Reader 的引导实现与 parity oracle）。
+///
+/// 消费方：bootstrap 加载（编译 reader.krf）+ parity 测试对照基准。
+/// 逻辑与 [`compile_front`] 完全同构——仅 read 入口为种子实现。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+pub(crate) fn compile_front_seed(source: &str, filename: &str) -> Result<FrontOutput, DriverError> {
+    let mut sm = SourceMap::new();
+    let file_id = sm.add_file(filename, source);
+    let mut table = SymbolTable::new();
+    let main_sym = table.intern("main");
+
+    // 1. Reader（种子）：源 → Stx
     let forms =
         read_source(source, file_id, &mut table).map_err(|e| DriverError::from_read(&e, &sm))?;
 
+    front_from_forms(forms, table, sm, main_sym)
+}
+
+/// 前段公共部分（read 之后：expand → 相位簿记 → 字节码）。
+///
+/// 两入口（自举/种子）共享——保证除 read 外的管线行为单一实现。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+fn front_from_forms(
+    forms: Vec<Stx>,
+    table: SymbolTable,
+    sm: SourceMap,
+    main_sym: Symbol,
+) -> Result<FrontOutput, DriverError> {
     // 2. Expander：Stx → CoreExpr（visit = 变换器注册完成）
     let mut ectx = ExpandCtxt::new(table);
     let core = expand_program(&forms, &mut ectx).map_err(|e| DriverError::from_expand(&e, &sm))?;
@@ -432,13 +470,15 @@ pub fn run_source_rendered(source: &str, filename: &str) -> Result<String, Drive
 ///
 /// reader 是 driver 唯一合法调用者（§11 接口隔离 §14.7.2 B4）——
 /// 根 CLI 的 `tokens` 子命令经本入口转发，不直连 kerf-reader。
+/// B3：读阶段经自举 Reader（kerf 源码在 VM 上运行）——Token 种类
+/// 分类/数字语义与种子同源（桥侧同源 parse）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上方入口约定，错误体积可接受
 pub fn dump_tokens(source: &str, filename: &str) -> Result<String, DriverError> {
     let mut sm = SourceMap::new();
     let file_id = sm.add_file(filename, source);
     let mut table = SymbolTable::new();
-    let toks =
-        lex_source(source, file_id, &mut table).map_err(|e| DriverError::from_read(&e, &sm))?;
+    let toks = crate::bootstrap::lex_source(source, file_id, &mut table)
+        .map_err(|e| DriverError::from_read(&e, &sm))?;
     let mut out = String::new();
     for t in &toks {
         let name = match &t.kind {
@@ -457,14 +497,15 @@ pub fn dump_tokens(source: &str, filename: &str) -> Result<String, DriverError> 
 
 /// 语法对象 dump（Stx 渲染——§14.9 编译器自调试）。
 ///
-/// 同 [`dump_tokens`]：CLI `stx` 子命令经 driver 转发调用 reader。
+/// 同 [`dump_tokens`]：CLI `stx` 子命令经 driver 转发调用 reader（B3：
+/// 自举 Reader）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上方入口约定，错误体积可接受
 pub fn dump_stx(source: &str, filename: &str) -> Result<String, DriverError> {
     let mut sm = SourceMap::new();
     let file_id = sm.add_file(filename, source);
     let mut table = SymbolTable::new();
-    let forms =
-        read_source(source, file_id, &mut table).map_err(|e| DriverError::from_read(&e, &sm))?;
+    let forms = crate::bootstrap::read_source(source, file_id, &mut table)
+        .map_err(|e| DriverError::from_read(&e, &sm))?;
     let mut out = String::new();
     for f in &forms {
         out.push_str(&format!(

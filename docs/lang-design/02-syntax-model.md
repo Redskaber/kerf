@@ -135,6 +135,16 @@ Span 在管线各阶段的消费方式：
 
 Reader = UTF-8 感知的词法器 + 递归下降语法器：输入字符流，输出携带 Span 的 Token 流与 SyntaxObject 树（能力模型定义见本文 §1，接口契约见同节）。
 
+> **B3 自举交付注记（r6，Stage 1 批次 B）**：本框架已以 **kerf 源码**双实现——
+> `kerf-driver/src/bootstrap/reader.krf`（词法 + 语法全逻辑，Stage 0 VM 上运行；
+> 生产读路径 `compile_front` 经此实现）与种子 `kerf-reader`（Rust——引导编译
+> reader.krf + parity oracle）。两实现行为契约：Token 流（种类/Span/payload）、
+> datum 树、错误消息与 Span **逐字节一致**（`tests/v0/stage1/plan/bootstrap_
+> reader_tests.rs` 为验收门，356 全套件经自举 Reader 实证）。词法骨架的宿主
+> 依赖收敛为 4 个运行时原语（str->pos-chars / char-whitespace? / char-alphabetic? /
+> str-int-valid?，见 [09-stdlib](./09-stdlib.md) v5.4）——字符级索引与 Unicode
+> 属性判定是与 Racket string-ref/char-whitespace? 同层的运行时服务，非语言语义面。
+
 **词法器骨架**：
 
 ```rust

@@ -177,6 +177,97 @@ pub fn run_program(
 /// 调用点追踪截断上限（深递归诊断防爆——仅保留最内 N 帧）。
 const MAX_TRACE_FRAMES: usize = 16;
 
+/// 宿主侧闭包调用入口（自举 Reader 等宿主消费方使用，B3）。
+///
+/// 语义：以「函数入口帧」进入执行循环——callee 必须是**本 program**
+/// 编译产出的字节码闭包；参数注入局部槽；底帧 RET 即本次调用的返回值。
+/// 错误路径与 [`run_program`] 同构（活跃帧链快照 → 调用点追踪）。
+///
+/// 边界（§11 接口隔离）：本入口与 run_program 同级——宿主信任层对已
+/// 加载程序的程序化调用；builtin 内部递归 re-entry 仍被禁止（P5 否决
+/// 维持）；eval 路径闭包不支持（双路径用于互查，宿主调用走字节码）。
+pub fn call_closure(
+    program: &BcProgram,
+    globals: &mut HashMap<Symbol, Value>,
+    heap: &mut Heap,
+    callee: &Value,
+    args: Vec<Value>,
+) -> Result<Value, VmError> {
+    let (proto, captures) = match callee {
+        Value::Closure(rc) => match rc.as_ref() {
+            ClosureValue::Bytecode { proto, captures } => (*proto, captures.clone()),
+            // eval 臂理由：双路径互查设计（T1）——eval 闭包属树走查路径，
+            // 宿主程序化调用仅支持字节码形态
+            ClosureValue::Eval { .. } => {
+                return Err(VmError::new(
+                    "call_closure 不支持 eval 路径闭包（宿主调用走字节码路径）",
+                    Span::dummy(),
+                ))
+            }
+        },
+        // other 臂理由：非闭包值（int/str/builtin 等）无原型可进入
+        other => {
+            return Err(VmError::new(
+                format!("call_closure 需要闭包，实际 {}", other.type_name()),
+                Span::dummy(),
+            ))
+        }
+    };
+    // 原型越界防御：跨程序闭包（原型索引指向别的 program）不可调用——
+    // 显式报错而非越界 panic（§2.3-4 报错>静默；P3 否决的运行时面）
+    let proto_idx = proto as usize;
+    if proto_idx >= program.protos.len() {
+        return Err(VmError::new(
+            format!(
+                "闭包原型索引越界：proto {} / 共 {}（跨程序闭包不可调用）",
+                proto,
+                program.protos.len()
+            ),
+            Span::dummy(),
+        ));
+    }
+    let target = &program.protos[proto_idx];
+    if target.params.len() != args.len() {
+        return Err(VmError::new(
+            format!(
+                "过程参数数量不匹配：期望 {} 实际 {}",
+                target.params.len(),
+                args.len()
+            ),
+            Span::dummy(),
+        ));
+    }
+    // 参数入单元格（捕获共享语义的帧基础——与 CALL 同构）
+    let local_cells: Vec<std::rc::Rc<std::cell::RefCell<Value>>> = args
+        .into_iter()
+        .map(|v| std::rc::Rc::new(std::cell::RefCell::new(v)))
+        .collect();
+    let mut frames: Vec<Frame> = vec![Frame {
+        ret_proto: 0,
+        ret_pc: 0,
+        proto: proto_idx,
+        locals: local_cells,
+        captures,
+        ext: FrameExt::new(),
+        call_span: Span::dummy(),
+    }];
+    let outcome = execute(program, globals, heap, &mut frames);
+    outcome.map_err(|mut e| {
+        // 调用点追踪：与 run_program 同构（内层 16 帧）
+        if e.trace.is_empty() && frames.len() > 1 {
+            let start = frames.len().saturating_sub(MAX_TRACE_FRAMES).max(1);
+            e.trace = frames[start..]
+                .iter()
+                .map(|f| TraceFrame {
+                    proto_name: Some(program.protos[f.proto].name),
+                    span: f.call_span,
+                })
+                .collect();
+        }
+        e
+    })
+}
+
 /// 主执行循环（run_program 内层——错误路径的 `return`/`?` 在此传播，
 /// 外层从 `frames` 快照附加堆栈追踪）。
 fn execute(
@@ -481,7 +572,11 @@ fn execute(
             Op::Ret => {
                 let v = pop!();
                 if frames.len() <= 1 {
-                    return Err(VmError::new("主原型出现 RET（编译器不变式破坏）", span));
+                    // 底帧 RET = 函数入口调用的返回（call_closure 语义）。
+                    // run_program 主原型以 Halt 终止（编译器不变式），不经
+                    // 此路径——主帧出现 RET 的旧行为是显式报错；本入口引入
+                    // 后，底帧 RET 成为合法的程序化返回点。
+                    return Ok(v);
                 }
                 let frame = frames.pop().expect("上方已检查");
                 pc = frame.ret_pc;
@@ -819,6 +914,180 @@ mod tests {
         let mut globals = HashMap::new();
         let mut heap = Heap::new();
         run_program(&program, &mut globals, &mut heap)
+    }
+
+    #[test]
+    fn call_closure_invokes_function_with_args() {
+        // (define (add x y) ...builtin +...) → run_program 加载全局 →
+        // call_closure 以参数进入函数入口帧 → 底帧 RET 返回值（B3 宿主调用）
+        let body = StdRc::new(CoreExpr::App {
+            fn_expr: StdRc::new(CoreExpr::VarRef {
+                name: Symbol(100),
+                span: Span::dummy(),
+            }),
+            args: vec![
+                StdRc::new(CoreExpr::VarRef {
+                    name: Symbol(0),
+                    span: Span::dummy(),
+                }),
+                StdRc::new(CoreExpr::VarRef {
+                    name: Symbol(1),
+                    span: Span::dummy(),
+                }),
+            ],
+            span: Span::dummy(),
+        });
+        let lam = StdRc::new(CoreExpr::Lambda {
+            params: vec![Symbol(0), Symbol(1)],
+            body,
+            span: Span::dummy(),
+        });
+        let def = StdRc::new(CoreExpr::Define {
+            name: Symbol(200),
+            value: lam,
+            span: Span::dummy(),
+        });
+        let program = compile_module(&[def]).unwrap();
+        let mut globals = HashMap::new();
+        globals.insert(Symbol(100), Value::Builtin(plus_builtin()));
+        let mut heap = Heap::new();
+        run_program(&program, &mut globals, &mut heap).unwrap();
+        let add = globals.get(&Symbol(200)).cloned().unwrap();
+        // 两种调用形态：多次调用互不影响（帧/堆独立入口）
+        let mut heap = Heap::new();
+        let r = call_closure(
+            &program,
+            &mut globals,
+            &mut heap,
+            &add,
+            vec![Value::Int(20), Value::Int(22)],
+        )
+        .unwrap();
+        assert_eq!(r, Value::Int(42));
+        let mut heap2 = Heap::new();
+        let r2 = call_closure(
+            &program,
+            &mut globals,
+            &mut heap2,
+            &add,
+            vec![Value::Int(1), Value::Int(2)],
+        )
+        .unwrap();
+        assert_eq!(r2, Value::Int(3));
+    }
+
+    #[test]
+    fn call_closure_arity_and_type_errors() {
+        // 非闭包 → 类型错误；参数数量不匹配 → 元数错误（与 CALL 同口径）
+        let program = compile_module(&[lit(1)]).unwrap();
+        let mut globals = HashMap::new();
+        let mut heap = Heap::new();
+        let e =
+            call_closure(&program, &mut globals, &mut heap, &Value::Int(1), vec![]).unwrap_err();
+        assert!(e.message.contains("需要闭包"));
+        let e2 = call_closure(
+            &program,
+            &mut globals,
+            &mut heap,
+            &Value::Builtin(plus_builtin()),
+            vec![],
+        )
+        .unwrap_err();
+        assert!(e2.message.contains("需要闭包"));
+        // 闭包存在但参数数量不匹配
+        let lam = StdRc::new(CoreExpr::Lambda {
+            params: vec![Symbol(0)],
+            body: StdRc::new(CoreExpr::VarRef {
+                name: Symbol(0),
+                span: Span::dummy(),
+            }),
+            span: Span::dummy(),
+        });
+        let def = StdRc::new(CoreExpr::Define {
+            name: Symbol(200),
+            value: lam,
+            span: Span::dummy(),
+        });
+        let p2 = compile_module(&[def]).unwrap();
+        let mut g2 = HashMap::new();
+        let mut h2 = Heap::new();
+        run_program(&p2, &mut g2, &mut h2).unwrap();
+        let f = g2.get(&Symbol(200)).cloned().unwrap();
+        let e3 = call_closure(
+            &p2,
+            &mut g2,
+            &mut h2,
+            &f,
+            vec![Value::Int(1), Value::Int(2)],
+        )
+        .unwrap_err();
+        assert!(e3.message.contains("参数数量不匹配"));
+    }
+
+    #[test]
+    fn call_closure_cross_program_proto_rejected() {
+        // 跨程序闭包：原型索引指向别的 program → 显式拒绝（P3 否决的运行时面）
+        let lam = StdRc::new(CoreExpr::Lambda {
+            params: vec![Symbol(0)],
+            body: StdRc::new(CoreExpr::VarRef {
+                name: Symbol(0),
+                span: Span::dummy(),
+            }),
+            span: Span::dummy(),
+        });
+        let def = StdRc::new(CoreExpr::Define {
+            name: Symbol(200),
+            value: lam,
+            span: Span::dummy(),
+        });
+        let program_a = compile_module(&[def]).unwrap();
+        let mut globals = HashMap::new();
+        let mut heap = Heap::new();
+        run_program(&program_a, &mut globals, &mut heap).unwrap();
+        let closure = globals.get(&Symbol(200)).cloned().unwrap();
+        // program_b：空程序（不同原型表）——closure 的 proto 越界
+        let program_b = compile_module(&[lit(0)]).unwrap();
+        let e = call_closure(
+            &program_b,
+            &mut globals,
+            &mut heap,
+            &closure,
+            vec![Value::Int(5)],
+        )
+        .unwrap_err();
+        assert!(e.message.contains("跨程序闭包不可调用"));
+    }
+
+    #[test]
+    fn call_closure_error_trace_collected() {
+        // 被调闭包内部运行时错误 → 错误传播 + 调用帧追踪（与 run_program 同构）
+        let body = StdRc::new(CoreExpr::App {
+            fn_expr: StdRc::new(CoreExpr::VarRef {
+                name: Symbol(0),
+                span: Span::dummy(),
+            }),
+            args: vec![],
+            span: Span::dummy(),
+        });
+        let lam = StdRc::new(CoreExpr::Lambda {
+            params: vec![Symbol(0)],
+            body,
+            span: Span::dummy(),
+        });
+        let def = StdRc::new(CoreExpr::Define {
+            name: Symbol(200),
+            value: lam,
+            span: Span::dummy(),
+        });
+        let program = compile_module(&[def]).unwrap();
+        let mut globals = HashMap::new();
+        let mut heap = Heap::new();
+        run_program(&program, &mut globals, &mut heap).unwrap();
+        let f = globals.get(&Symbol(200)).cloned().unwrap();
+        // 传入非 builtin 值 → 调用时类型错误
+        let e =
+            call_closure(&program, &mut globals, &mut heap, &f, vec![Value::Int(7)]).unwrap_err();
+        assert!(!e.message.is_empty());
     }
 
     #[test]

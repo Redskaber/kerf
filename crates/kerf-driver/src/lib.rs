@@ -18,6 +18,12 @@
 //! **接口预留层**（§9.1，P2/P3 级）：Effect Handlers / 多阶段编程 /
 //! 能力模型 I/O / 编译缓存——仅类型签名与行为规格，冻结契约。
 
+//! **自举 Reader**（B3，Stage 1 批次 B）：`bootstrap` 模块——kerf 源码
+//! Reader（`bootstrap/reader.krf`）经种子管线编译后在 VM 上运行；生产
+//! 读路径（`compile_front`）经自举 Reader，种子（kerf-reader）保留为引导
+//! 实现与 parity oracle（07-bootstrap §3.2 混合期构成）。
+
+pub mod bootstrap;
 pub mod builtins;
 pub mod driver;
 pub mod reserved;

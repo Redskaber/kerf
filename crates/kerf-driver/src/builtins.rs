@@ -6,6 +6,9 @@
 //!
 //! 数值塔：Int×Int → Int（溢出检查）；任一 Float → Float。
 //! 比较：链式（(= a b c) 全相等）。
+//!
+//! 另含自举 Reader 原语（3，B3）：str->pos-chars / char-whitespace? /
+//! char-alphabetic? ——服务 reader.krf（见各注册处边界注记）。
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -675,6 +678,103 @@ pub fn register_globals(table: &mut SymbolTable) -> HashMap<Symbol, Value> {
                 Value::Symbol(s) => Ok(Value::Str(s.clone())),
                 other => Err(RuntimeError::new(format!(
                     "symbol->string 需要 symbol，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+
+    // —— 自举 Reader 原语（3，B3：Reader kerf 重写的运行时服务层）——
+    // 边界（§8.4.6 两级语义 + §11）：词法/语法逻辑在 reader.krf（kerf 源码，
+    // VM 上运行）；字符级索引与 Unicode 属性判定是运行时原语（与 Racket 的
+    // string-ref/char-whitespace? 同层）——不属于语言层内置函数的语义面。
+    defs.push((
+        "str->pos-chars",
+        BuiltinFn::new("str->pos-chars", |heap, args| {
+            one_arg("str->pos-chars", &args)?;
+            match &args[0] {
+                Value::Str(s) => {
+                    // 源文本 → ((字节偏移 . 单字符 str) ...) 列表：
+                    // 字节偏移经相邻差分可得 UTF-8 长度（末字符用源字节长度）
+                    let mut acc = heap.alloc_boxed(BoxedInput::Nil);
+                    let pairs: Vec<(usize, char)> = s.char_indices().collect();
+                    for (off, ch) in pairs.iter().rev() {
+                        let mut buf = [0u8; 4];
+                        let ch_str = Value::Str(Rc::from(ch.encode_utf8(&mut buf)));
+                        let off_val = Value::Int(*off as i64);
+                        let car = box_value(&off_val, heap);
+                        let cdr = box_value(&ch_str, heap);
+                        let elem = heap.alloc_pair(car, cdr);
+                        acc = heap.alloc_pair(elem, acc);
+                    }
+                    if s.is_empty() {
+                        Ok(Value::Nil)
+                    } else {
+                        Ok(Value::Pair(acc))
+                    }
+                }
+                other => Err(RuntimeError::new(format!(
+                    "str->pos-chars 需要 str，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "char-whitespace?",
+        BuiltinFn::new("char-whitespace?", |_, args| {
+            one_arg("char-whitespace?", &args)?;
+            match &args[0] {
+                Value::Str(s) => {
+                    let mut it = s.chars();
+                    let (first, len_ok) = (it.next(), it.next().is_none());
+                    match first {
+                        Some(c) if len_ok => Ok(Value::Bool(c.is_whitespace())),
+                        _ => Err(RuntimeError::new(
+                            "char-whitespace? 需要 1 字符 str，实际多字符",
+                        )),
+                    }
+                }
+                other => Err(RuntimeError::new(format!(
+                    "char-whitespace? 需要 str，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "char-alphabetic?",
+        BuiltinFn::new("char-alphabetic?", |_, args| {
+            one_arg("char-alphabetic?", &args)?;
+            match &args[0] {
+                Value::Str(s) => {
+                    let mut it = s.chars();
+                    let (first, len_ok) = (it.next(), it.next().is_none());
+                    match first {
+                        Some(c) if len_ok => Ok(Value::Bool(c.is_alphabetic())),
+                        _ => Err(RuntimeError::new(
+                            "char-alphabetic? 需要 1 字符 str，实际多字符",
+                        )),
+                    }
+                }
+                other => Err(RuntimeError::new(format!(
+                    "char-alphabetic? 需要 str，实际 {}",
+                    other.type_name()
+                ))),
+            }
+        }),
+    ));
+    defs.push((
+        "str-int-valid?",
+        BuiltinFn::new("str-int-valid?", |_, args| {
+            one_arg("str-int-valid?", &args)?;
+            match &args[0] {
+                // i64 域判定 = Rust parse 语义原样（宿主类型边界——错误消息
+                // 与字节级行为由桥侧同源 parse 保证，kerf 侧仅作扫描序前置
+                // 校验以维持错误次序 parity）
+                Value::Str(s) => Ok(Value::Bool(s.parse::<i64>().is_ok())),
+                other => Err(RuntimeError::new(format!(
+                    "str-int-valid? 需要 str，实际 {}",
                     other.type_name()
                 ))),
             }

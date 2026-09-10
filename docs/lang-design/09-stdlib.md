@@ -1,10 +1,10 @@
 # Stage 0 最小内置库边界
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.3：r5 标准库最小集扩张 24→48 项——列表 8/字符串 10/I/O 6 新增，高阶函数显式推迟 B3）
+> **Date**: 2026-09-10（v5.4：r6 B3 交付——高阶函数四件套以 kerf 源码实现于 reader.krf 序章（经自举桥直测）；+4 自举 Reader 原语；用户面 hof 注入推迟批次 E（TD-021））
 > **Version**: v5.3
 > **Status**: Active
-> **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐）→ Stage 2（库化生长） ｜ **推迟项**：高阶函数（map/filter/foldl/for-each——B3 用 kerf preamble 实现）、中缀运算符宏（Stage 1+）、能力模型 I/O（Stage 2）
+> **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：高阶函数**用户面注入**（preamble/模块机制——批次 E，TD-021；P1 源码拼接/P3 跨程序全局合并/P5 builtin 调闭包三方案已否决）、中缀运算符宏（Stage 1+）、能力模型 I/O（Stage 2）
 
 > 本文件界定 Stage 0 的内置库边界：**语言核心零内置**——算术、比较、序对、谓词、I/O 与 print 等内置函数全部由 driver（宿主侧启动器）在启动时注册为全局函数，而不进入语言核心。设计依据提取自 stage0.md §8.8（最小 I/O）与 §14.5（语言规范与文档流程），并遵循 [01-核心原语 §2](./01-core-forms.md) 的核心冻结原则。相关实现：I/O 与分配器接口见 [05-运行时](./05-runtime.md)，操作码级能力见 [04-字节码 VM §1](./04-bytecode-vm.md)，12 个能力模型矩阵见 [13-能力矩阵](./13-capability-matrix.md)（其 §2.8 为本文件 §2 的规范副本）。
 
@@ -28,7 +28,7 @@
 
 Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print` 两个用户可见内置函数（经 driver 注册的全局函数，非能力模型）；**通道层**是 [05-运行时 §1](./05-runtime.md) 的 `read_line_stdin()` / `write_line_stdout()`（kerf-runtime/src/io.rs，错误显式返回）。两层经 driver 内置函数接线（语言层 `read-line`/`print` 调用通道层函数）。Stage 0 不引入能力模型 I/O，但 VM 栈帧和分配器接口必须预留 `register_foreign_ref` 等接口（Stage 0 可为 no-op），以便 Stage 1+ 升级到能力模型时无需破坏接口——能力模型 I/O 的类型预留定义见 [13-能力矩阵 §3.1.3](./13-capability-matrix.md)。
 
-**Stage 0/1 内置函数完整清单（48 项，v5.3：24 项 Stage 0 基线 + r5 批次 B 标准库最小集 24 项——逐项对齐 `kerf-driver/src/builtins.rs` 的 `register_globals`）**：
+**Stage 0/1 内置函数完整清单（52 项，v5.4：48 项用户面（v5.3）+ 4 项自举 Reader 原语（r6，B3）——逐项对齐 `kerf-driver/src/builtins.rs` 的 `register_globals`）**：
 
 | 类别 | 函数（个数） | 实现层 |
 |------|------------|--------|
@@ -49,6 +49,16 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 | 字符串（1） | `str-append` | driver 注册的外部函数（恰 2 参字符串拼接） |
 | 字符串处理（10，r5） | `str-length` / `str-substring` / `str-index-of` / `str-contains?` / `str-prefix?` / `str-suffix?` / `str-upcase` / `str-downcase` / `string->symbol` / `symbol->string` | driver 注册（字符索引 Unicode 安全——非字节；`str-index-of` 未找到 -1；大小写 Unicode 变换；符号互转依赖 TD-002 符号值） |
 | 基本 I/O（6，r5） | `newline` / `write-string` / `read-int` / `read-num` / `error` / `assert-eq?` | driver 注册（`newline` 0 参；`write-string` 无换行——通道层 write_stdout（r5 新增）；`read-int`/`read-num` 行解析（失败结构化报错，EOF → nil）；`error` ≥1 参消息部件（str 原文、其余类型名）；`assert-eq?` 按 `eq?` 断言） |
+| 自举 Reader 原语（4，r6/B3） | `str->pos-chars` / `char-whitespace?` / `char-alphabetic?` / `str-int-valid?` | driver 注册（**运行时服务层，非语言语义面**：服务 reader.krf——字符级索引（(字节偏移 . 单字符 str) 列表）、Unicode White_Space/Alphabetic 属性判定、i64 域校验（Rust parse 同源——维持错误次序 parity）。与 Racket 的 string-ref/char-whitespace? 同层） |
+
+> **高阶函数（r6，B3 交付注记）**：`map` / `filter` / `foldl` / `for-each` 已以 **kerf 源码**
+> 实现于 `kerf-driver/src/bootstrap/reader.krf` 序章（语言自描述的标准库片段），在
+> Stage 0 VM 上运行并经自举桥（`bootstrap::selfcheck_call`）直测——这是「高阶函数
+> 用 kerf 源码 preamble 实现」的自举验证命题本体（r5 裁定）的交付面。**用户面注入
+> 推迟批次 E**：P1 源码拼接（Span 诊断污染 = P1 缺陷）/ P3 跨程序全局合并（SymbolTable
+> id 不可比 + 原型索引程序局部）/ P5 builtin 调闭包（VM 递归 re-entry 越界 §11）三方案
+> 已否决——正确载体是模块系统（批次 E Expander 重写时设计）。在此之前 hofs 仅为
+> Reader 内部全局（用户程序引用 `map` 报未绑定变量）——TD-021。
 
 > **表面名与通道名的区分**（v5.2 澄清）：语言层用连字符命名（`read-line`/`str-append`——与 kerf 标识符规则一致）；通道层用 Rust snake_case（`read_line_stdin`/`write_line_stdout`）；谓词是 `null?`（非 `nil?`）。该清单为 Stage 0 的**最小骨架**：仅保证自举与测试所需（同 [12-路线图 §1.1](./12-roadmap.md) 里程碑验证清单的要求）；标准库的完整生长（列表操作、字符串处理、基本 I/O 的库化）是 Stage 1 → Stage 2 的阶段切换信号之一（见 [07-自举策略 §3.3](./07-bootstrap-strategy.md)）。完整清单以 `kerf-driver` 实现为准（δ 函数表）。`and`/`or`/`when`/`unless` 等是**语法糖**（[01-核心原语 §2](./01-core-forms.md) 推导表，展开期处理），不在内置函数表内。
 

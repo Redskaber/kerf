@@ -404,7 +404,10 @@ impl<'a, 'i> Lexer<'a, 'i> {
 }
 
 /// 运算符查表（纯查表）。
-fn operator_of(text: &str) -> Option<Operator> {
+///
+/// pub（B3）：自举 Reader 桥（kerf-driver/bootstrap）复用同一映射——
+/// kerf 侧 Token 的 Operator 分类与种子词法器保持唯一可信数据源（§2.3-10）。
+pub fn operator_of(text: &str) -> Option<Operator> {
     Some(match text {
         "+" => Operator::Add,
         "-" => Operator::Sub,

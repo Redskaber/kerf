@@ -78,9 +78,11 @@ flowchart TD
 
 ```text
 新语言编写的部分（在 Stage 0 VM 上运行）：
-├── Reader（新语言子集）
-├── Expander（新语言子集）
-└── 基础宏定义
+├── Reader（新语言子集）       ← r6 已交付（B3）：reader.krf 全 kerf 源码，
+│                                 生产读路径切换（compile_front 经自举 Reader）；
+│                                 种子 Rust Reader 保留为引导实现 + parity oracle
+├── Expander（新语言子集）     ← 批次 E 计划（E1）
+└── 基础宏定义                 ← 批次 E 计划（随 E1）
 
 宿主语言编写的部分（原生执行）：
 ├── Stage 0 VM 的 C/Rust 实现
@@ -89,6 +91,18 @@ flowchart TD
 ├── 基准测试框架
 └── 调试工具
 ```
+
+> **B3 交付注记（r6）**：Reader 已以 kerf 源码重写（`kerf-driver/src/bootstrap/
+> reader.krf`，~430 行：词法 + 语法 + 高阶函数序章），经种子管线编译为字节码后
+> 在 Stage 0 VM 上运行——`lex-src`/`parse-tokz` 两入口（与种子 `lex_source`/
+> `parse_tokens` 接口形状对齐，§11）。宿主桥（`kerf-driver/src/bootstrap.rs`）：
+> VM 宿主调用（`call_closure`）+ 值树 ↔ Token/Stx 转换 + 数字文本同源 parse
+> （i64/f64 语义转换是宿主类型边界——正确舍入的十进制→二进制转换不可在语言
+> 算术中可靠重实现；扫描序内的溢出前置校验经 `str-int-valid?` 原语维持首错
+> 位置 parity）。**验收**：356 测试全套件（含全部既有负向消息断言）经自举
+> Reader 执行 + parity 套件 28 函数（正 87 / 负 307 case，Stx 树与错误消息/Span
+> 逐字节等价）。已知边界：VM 帧消耗 O(源字符数)（TCO 未实现——TD-022，
+> Stage 2 决策点）。
 
 ### 3.3 阶段切换信号（原 §18.3）
 

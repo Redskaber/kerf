@@ -214,3 +214,67 @@ MUV 22-c（标准库最小集）各走完整内循环（22-b TD-004 按重排裁
 - 09-stdlib v5.3（48 项清单 + 高阶函数 B3 推迟注记）/ capability-
   boundaries（48 内置）/ matrix 324 对账（stdlib 15 函数 172 负 case）/
   status r5 / tests/v0/stage1/plan.md + plan/stdlib.md 新建
+
+## v0.1.0-r6（2026-09-10）——Stage 1 批次 B 收官：B3 自举 Reader（Reader kerf 重写）
+
+**SOP 流程**：批次 B 收官按 plan.md §5 序列（Task 23 尾注）；MUV 24-a
+（VM 宿主调用 API）→ 24-b（reader.krf + 桥 + 生产读路径切换）→ 24-c
+（parity 套件）→ 24-d（交付闭环）各走完整内循环。
+
+### 交付（B3：Reader 以 kerf 源码重写，在 Stage 0 VM 上运行）
+
+- **reader.krf**（`kerf-driver/src/bootstrap/reader.krf`，~430 行 kerf 源码）：
+  完整词法 + 语法逻辑——`lex-src` / `parse-tokz` 两入口（与种子
+  `lex_source`/`parse_tokens` 接口形状对齐，§11）；尾调用链形态的错误
+  传播（err 标签值返回，不依赖异常）；高阶函数序章（map/filter/foldl/
+  for-each 以 kerf 源码实现——r5 裁定「自举验证命题本体」的交付面）
+- **VM 宿主调用 API**（24-a）：`kerf_vm::call_closure`——函数入口帧语义
+  （底帧 RET = 程序化返回值）；跨程序闭包显式拒绝（P3 否决的运行时面）；
+  错误追踪与 run_program 同构
+- **自举桥**（`kerf-driver/src/bootstrap.rs`）：种子管线编译 reader.krf
+  （thread_local 惰性加载，无递归）+ 值树 ↔ Token/Stx 转换 + 数字文本
+  同源 parse（i64/f64 转换是宿主类型边界）+ 持久堆（GC 根集含全局）
+- **生产读路径切换**：`compile_front`（run/eval/compile_source 全管线）
+  与 `dump_tokens`/`dump_stx` 经自举 Reader；种子（kerf-reader）保留为
+  引导实现 + parity oracle（`compile_front_seed`）
+- **+4 自举 Reader 原语**（52 项总量）：`str->pos-chars`（(字节偏移 .
+  单字符) 列表）/ `char-whitespace?` / `char-alphabetic?`（Unicode 属性）/
+  `str-int-valid?`（i64 域——扫描序内溢出前置校验，维持首错位置 parity）
+- **错误次序契约**：数字溢出在 VM 词法扫描序内前置报错（与种子一致）；
+  数字文本最终转换桥侧同源 parse（消息与 Span 逐字节一致）
+
+### parity 验收（bootstrap_reader_tests：28 函数，正 87 / 负 307 case）
+
+- **Stx 树等价**：datum + Span 递归比对（符号按名——两实现 intern 次序
+  不保证一致）；语料 = 种子 reader 测试全集 + 奇异边界（省略号族/
+  多行字符串/科学计数法/前导零/Unicode 标识符/NFC 组合归一）
+- **错误 parity**：消息 + Span 逐字节（28 负例语料 + 系统化矩阵 266：
+  未闭合深度 1..30 / 括号错配矩阵 / 非法转义 32 字符（含多字节——
+  种子 eo+1 字节口径逐字节复刻）/ 贪婪数字 10×5 矩阵 / 溢出扫描
+  19..26 位 × 3 符号 / 非法字符 8×3 上下文 / 双错误次序 / 注释嵌套）
+- **双错误次序**：溢出 + 后置词法错误（首错 = 溢出）与前置错误反向——
+  两实现首错位置逐字节一致
+- **高阶函数直测**：map/filter/foldl/for-each 经自举桥（builtin 作 f——
+  跨程序安全的函数值）
+- **防误收断言**：全部负例先断言种子确实报错（`assert_negative_parity`）
+
+### 质量口径
+
+- §3.2 全绿：build --release 0 警告 / fmt 零 diff / clippy -D warnings
+  零警告 / test --release **356:0:1**（324 基线 + 32：VM call_closure 4 +
+  parity 28）/ 审计集 41/41 复跑 EXIT 0
+- **356 全套件（含全部既有负向消息断言）经自举 Reader 执行**——整体
+  行为等价的实证（孤立正确 → 集成正确的 §7 防崩验证）
+- 全局正负比 **≈1:3.2**（负 1000 case / 正 ≈311；§9.4.3 门限维持）
+
+### 技术债登记
+
+- TD-021（P3）：高阶函数用户面注入缺载体（P1/P3/P5 否决——批次 E 模块系统）
+- TD-022（P3）：自举 Reader 帧消耗 O(源字符数)（无 TCO 边界——Stage 2 决策点）
+
+### 文档同步
+
+07-bootstrap v5.3（§3.2 B3 交付注记）/ 09-stdlib v5.4（4 原语 + hof
+注记）/ 02-syntax-model（B3 双实现注记）/ stage-1 plan §5（B3 ✅）/
+matrix r6 对账 / tests/v0/stage1/plan.md（parity 套件行）/ status r6 /
+data-flow（自举 Reader 读路径）
