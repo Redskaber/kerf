@@ -1,11 +1,13 @@
 # 总览：最小自举系统级编程语言设计蓝图
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-09
-> **Version**: v5.0（源自 stage0.md v5.0 拆分）
+> **Date**: 2026-09-09（v5.1：收敛审查后增补——06 补齐理论欠账，01–05/09–11 契约回填与标注补齐）
+> **Version**: v5.1
 > **Status**: Active
 
 > 本文件是 `kerf/docs/lang-design/` 20 个编号设计文档的入口，内容提取自 stage0.md（最小自举系统级编程语言完整设计蓝图 v5.0）的文档头（标题/状态/版本历史/目录/如何阅读本文档）、§1 设计哲学与核心结论、以及 §2.2 历史案例参考。§2.1 自举的数学本质与 §2.3 自举流水线陷阱已拆分至 [07-自举策略](./07-bootstrap-strategy.md)。其余设计内容按主题拆分至 01-19 各文件，完整清单见文末「文档地图」。读者可从本文件出发，按「如何阅读本文档」的路径选读，无需回看 stage0.md 原文。
+>
+> **v5.1 收敛审查**（对应 worklog Task 10/11）：对照 stage0.md 全文与 Stage 0 冻结实现逐文件审查后：(1) [06-操作语义](./06-operational-semantics.md) 从 21 行空壳重写为完整理论文档（9 原语归约规则组 R1–R9、错误吸收语义、GC 不可观测性引理 L-GC、编译正确性定理 T1 及三引理证明纲要——补齐 stage0.md §13.4 的源文档欠账）；(2) [03-宏系统](./03-macro-system.md) 与 [05-运行时](./05-runtime.md) 从冻结实现回填四组接口契约（Transformer/ExpandCtxt/ModuleRegistry/syntax-rules 文法、Heap/RootSet/I-O 通道）；(3) 01–05/09–11 统一增补「处理程度（P0–P4）/所属 Stage/推迟项」头部标注与「测试锚点」节；(4) 修正系统性断链（19-参考文献 §2 → §3.5/§3.6 共 3 处）、术语计数（43→42）、与 13-能力矩阵的副本关系声明。
 
 ---
 
@@ -155,7 +157,7 @@ Racket 的引导策略：分发版包含"schemified"的中间层（用 Racket �
 | [03-macro-system.md](./03-macro-system.md) | 相位分离系统、基础卫生宏系统与 Expander 实现框架 | §8.9、§8.10、§12.3、§19.2 |
 | [04-bytecode-vm.md](./04-bytecode-vm.md) | 字节码 VM（约 35 操作码）、Compiler 代码生成与 VM 执行循环实现框架 | §8.12、§19.3、§19.5 |
 | [05-runtime.md](./05-runtime.md) | 最小 I/O、标记-清除 GC、内存管理策略与 GC 三阶段实现框架 | §8.8、§8.11、§14.2、§19.4 |
-| [06-operational-semantics.md](./06-operational-semantics.md) | 9 个核心原语的操作语义形式化定义与编译正确性定理 | §13.4 |
+| [06-operational-semantics.md](./06-operational-semantics.md) | 9 个核心原语的操作语义形式化定义（归约规则组 R1–R9 + 错误吸收 + GC 引理 + 编译正确性定理 T1 证明纲要） | §13.4（v5.1 补齐源欠账） |
 | [07-bootstrap-strategy.md](./07-bootstrap-strategy.md) | 自举数学本质、流水线三陷阱与 Stage 1+ 演化策略（含阶段切换信号） | §2.1、§2.3、§18 |
 | [08-backend-evolution.md](./08-backend-evolution.md) | 后端策略（Stage 0 不引入 LLVM）、混合演进策略与性能演化路径 | §11 |
 | [09-stdlib.md](./09-stdlib.md) | Stage 0 最小内置库边界：语言核心零内置，内置函数由 driver 注册 | §8.8 / §14.5 提取 + 新撰章节 |

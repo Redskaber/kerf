@@ -293,11 +293,13 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
             Ok(())
         }
         CoreExpr::Define { name, value, .. } => {
-            // 顶层定义：求值 → 写全局（Define 返回 nil——栈平衡 +1）
+            // 顶层定义：求值 → DUP → 定义全局（Define 返回 v——R6/D1，
+            // 与 eval 路径 `Env::define` 后返回 v 一致，T1 定理）。
+            // DUP 留存返回值，DefineGlobal 弹出另一份写入全局（栈净 +1）。
             compile_expr(ctx, value)?;
+            ctx.emit(Op::Dup, span);
             let gi = ctx.intern_global(*name);
-            ctx.emit(Op::StoreGlobal(gi), span);
-            ctx.emit(Op::PushNil, span);
+            ctx.emit(Op::DefineGlobal(gi), span);
             Ok(())
         }
         CoreExpr::Begin { body, .. } => {
@@ -625,7 +627,7 @@ mod tests {
         let p = compile_ok(&exprs);
         assert_eq!(
             p.entry_proto().code,
-            vec![Op::PushConst(0), Op::StoreGlobal(1), Op::PushNil, Op::Halt]
+            vec![Op::PushConst(0), Op::Dup, Op::DefineGlobal(1), Op::Halt]
         );
         assert_eq!(p.global_refs, vec![Symbol(3)]);
     }

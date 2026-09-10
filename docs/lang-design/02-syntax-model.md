@@ -1,11 +1,12 @@
 # 语法模型：类型化 Token 流、Span 与结构化诊断
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-09
-> **Version**: v5.0（源自 stage0.md v5.0 拆分）
+> **Date**: 2026-09-09（v5.1 增补：职责边界调和 + 实现落点 + 测试锚点）
+> **Version**: v5.1
 > **Status**: Active
+> **处理程度**：P0（必须实现——Stage 0 已落地，kerf-reader + kerf-span + kerf-syntax）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：查询式增量编译按 Span 细粒度失效（Stage 2，[15-架构分层 §3.1](./15-architecture-layers.md)）、编译缓存键与 Span 失效关系（接口预留，[13-能力矩阵 §3.1.4](./13-capability-matrix.md)）
 
-> 本文件收录语法前端的设计与实现：类型化 Token 流 Reader（原 §8.1）、Span 全管线传播（原 §8.6）、结构化诊断框架（原 §8.7）、Span 源位置追踪系统与诊断框架的横切架构约束（原 §12.1/§12.2），以及 Reader 实现框架（原 §19.1：词法器/语法器骨架 + 核心不变式 + 实现陷阱）。九个核心原语的语义定义见 [01-核心原语](./01-core-forms.md)；12 个能力模型的完整矩阵与其余能力见 [13-能力矩阵](./13-capability-matrix.md)；Span/诊断作为横切关注点的分层架构论述见 [15-架构分层](./15-architecture-layers.md)。
+> 本文件收录语法前端的设计与实现：类型化 Token 流 Reader（原 §8.1）、Span 全管线传播（原 §8.6）、结构化诊断框架（原 §8.7）、Span 源位置追踪系统与诊断框架的横切架构约束（原 §12.1/§12.2），以及 Reader 实现框架（原 §19.1：词法器/语法器骨架 + 核心不变式 + 实现陷阱）。九个核心原语的语义定义见 [01-核心原语](./01-core-forms.md)；12 个能力模型的完整矩阵与其余能力见 [13-能力矩阵](./13-capability-matrix.md)（其 §2.1/§2.6/§2.7 为本文件 §1/§2/§3 的规范副本——本文件为专题深化版）；Span/诊断作为横切关注点的分层架构论述见 [15-架构分层](./15-architecture-layers.md)。
 
 ---
 
@@ -48,9 +49,13 @@ pub enum TokenKind {
 }
 ```
 
-**职责边界**：
-- **做什么**：将字符流转为类型化 Token 流；附带 Span 和 Scope 信息
-- **不做什么**：不做语法分析；不执行宏展开；不判断类型正确性
+**职责边界**（v5.1 调和裁定——区分**词法层**与 **Reader 模块**两级）：
+- **词法层（tokenize）**：将字符流转为类型化 Token 流；附带 Span；**不做语法分析**、不执行宏展开、不判断类型正确性
+- **Reader 模块（完整）**：词法器 + 递归下降**语法器**（本文 §6）——产出 SyntaxObject 树。语法器仅做**括号平衡的 datum 结构化**（S 表达式的 read：列表/向量/字面量/引号简写），**不做传统文法分析**（本语言的语法即数据结构，不存在关键字驱动的语句文法）——这是「同像性」路线下「不做语法分析」的精确含义：不存在传统意义上的 parse 树，read 直接产生可编程的数据结构
+
+> **源文档矛盾调和说明**：stage0.md 原文 §8.1（职责：不做语法分析）与 §19.1（Reader = 词法器 + 递归下降语法器）表述冲突。本拆分按「词法层/Reader 模块」两级裁定调和，并与 Stage 0 实现（kerf-reader：类型化 Token 41 种类 + 递归下降语法器读 datum + 'x 简写 → (quote x)）一致。
+
+**Stage 0 实现落点**（kerf-reader / kerf-syntax）：设计层的 `TokenKind`（上图）是 2026 现代方案的**方向性蓝图**（含 `TypeIdentifier / Keyword(fn/let/match) / MacroInvocation` 等扩展位）；Stage 0 实现为同构的类型化 Token（41 种类 + `Operator` 携带 `Symbol` 句柄——运算符身份显式化而非字符串比较）。两者差异是「设计方向 → 阶段实现」的裁剪：`TypeIdentifier`/关键字驱动的表面语法属于 Stage 1+ 表面语言层（[12-路线图 §2.5](./12-roadmap.md) 演进矩阵）；核心不变式（无损、位置完备、词法层零语义）两级同构。Token 使用的辅助类型定义于：`Symbol / SymbolTable`（kerf-syntax，NFC 一次归一化 + 关键字预内部化）、`ScopeId / ScopeSet`（kerf-syntax，有序去重 + 并集/子集）、`Keyword / Operator / Delimiter`（kerf-reader 的 TokenKind 变体），`Span / FileId / ByteOffset / ExpansionId`（kerf-span，字节偏移主键 + 行/列派生渲染）。
 
 **接口契约**：
 
@@ -208,3 +213,15 @@ fn parse_if(&mut self) -> Result<Stx, ParseError> {
 - **标识符 Unicode 规范化时机**：NFC 归一化应在 intern 时做一次且仅一次，否则同一视觉标识符会产生两个 Symbol
 - **字符串跨行会破坏行号**：词法器内的 line 计数必须在字符串字面量内部继续维护
 - **拒绝"贪心数字"**：`123abc` 应报错（数字后紧跟标识符字符），而非拆成两个 Token——贪心拆分会掩盖用户笔误
+
+## 7. 测试锚点（设计驱动测试，测试验证设计）
+
+| 契约/不变式 | 测试锚点（tests/v0/stage0/） | 验证命题 |
+|-----------|------------------------------|---------|
+| 无损性（§6 不变式 1） | Reader 快照测试 ≥ 20 项（Token 流 Span 并集精确覆盖，无间隙无重叠） | 细粒度失效前提 |
+| 位置完备性（§6 不变式 2） | 词法/括号三态错误负例（含 Span 断言） | 错误可直接进入诊断 |
+| NFC 归一化一次（§6 陷阱 2） | 同一视觉标识符 → 同一 Symbol 单测 | 双 Symbol 分裂防御 |
+| 'x 简写（§6 语法器） | quote 读取快照：'(quote x) 等价 | 同像性入口 |
+| 嵌套块注释/字符串跨行 | 词法器单测（line 计数在字面量内部维护） | 行号正确性 |
+
+> 测试矩阵完整定义见 [11-测试基础设施 §3](./11-testing.md)；本表是其语法前端侧子集。

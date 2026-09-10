@@ -122,13 +122,15 @@ fn main_proto_terminates_with_halt() {
     assert!(matches!(main.code.last(), Some(Op::Halt)));
 }
 
-/// define 产生 STORE_GLOBAL + 值登记。
+/// define 产生 DEFINE_GLOBAL（D1/E6 语义）+ DUP 返回值 + 值登记。
 #[test]
 fn define_emits_global_store() {
     let out = compile_via_driver("(define x 5) x");
     assert!(!out.program.global_refs.is_empty());
     let main = out.program.entry_proto();
-    assert!(main.code.iter().any(|op| matches!(op, Op::StoreGlobal(_))));
+    // T1 对齐：Define 返回值 = v（DUP 留存），经 DefineGlobal 写入
+    assert!(main.code.iter().any(|op| matches!(op, Op::DefineGlobal(_))));
+    assert!(main.code.iter().any(|op| matches!(op, Op::Dup)));
 }
 
 /// 反汇编渲染（人类可感知输出）。

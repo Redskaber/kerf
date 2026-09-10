@@ -299,7 +299,17 @@ fn parse_params(param_stx: &Stx) -> Result<Vec<Symbol>, ExpandError> {
     let mut params = Vec::with_capacity(list.len());
     for p in list {
         match p.datum.as_symbol() {
-            Some(s) => params.push(s),
+            Some(s) => {
+                // A3 卫式（[06-操作语义 §2]）：同名形参在同层只允许出现一次。
+                // 展开期检查是两执行路径（eval/VM）的共同上游——单点防御。
+                if params.contains(&s) {
+                    return Err(ExpandError::new(
+                        "lambda 参数重名（同名形参只允许出现一次）",
+                        p.span,
+                    ));
+                }
+                params.push(s);
+            }
             None => {
                 return Err(ExpandError::new(
                     "lambda 参数必须是符号（不支持解构参数）",

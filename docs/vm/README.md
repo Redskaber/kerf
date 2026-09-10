@@ -9,7 +9,7 @@ VM 设计正文见语言设计文档 [04-bytecode-vm.md](../lang-design/04-bytec
 
 ## 实现状态
 
-- 39 操作码（§8.12 分组冻结）：kerf-compiler/src/opcode.rs
+- 40 操作码（§8.12 分组冻结；含 v5.1 DefineGlobal——D1/E6 语义）：kerf-compiler/src/opcode.rs
 - 三扩展槽帧格式：kerf-vm/src/vm.rs `FrameExt`
 - 迭代式主循环：kerf 递归以帧栈承载（深度上限 10^5）
 - GC 安全点：分配驱动触发 + 低收益冷却退避

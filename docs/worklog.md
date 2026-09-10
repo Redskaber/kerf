@@ -141,3 +141,111 @@ Work Log:
 Stage Summary:
 - 文档树符合 §8.4.1/§8.4.4（元数据头/相对路径交叉引用/mermaid）
 - 阶段门审查结论 PASS（§21.5 切换信号满足）
+
+---
+Task ID: 9
+Agent: Super Z (main)
+Task: §19 阶段打包 + 最终验证
+
+Work Log:
+- tar -czf download/kerf-stage0-v0.1.0-stage0.1-process-doc-v11.0-12-capabilities-r1.tar.gz
+  --exclude target/.git → 286,936 B 压缩 / 1,034,240 B 原始（>1MB 验收口径）/ 165 文件
+- Web 端到端自验证通过（Playground 执行本二进制：fib/宏/文档/下载全链路）
+- 最终 git commit（交付基线）
+
+Stage Summary:
+- Stage 0 交付闭环：验收全绿 + 门审查 PASS + 交付包就位
+
+---
+Task ID: 10
+Agent: Super Z (main) — ARCH-A（三路并行审查：T10-a/b/c 子代理）
+Task: 对照 stage0.md 全文审查 docs/lang-design/ 20 文件缺口矩阵
+
+Work Log:
+- 三路并行精读：T10-a（01–05 核心语言组）/ T10-b（07–12 策略路线组）/
+  T10-c（13–19 矩阵参考组），逐文件对照源章节
+- 缺口矩阵汇总：P0×1（06 操作语义空壳——源 §13.4 本身仅一句承诺的
+  继承性欠账）、P1×2（03/05 接口契约系统性缺失）、P2×7
+  （01–05 P0–P4 标注缺失、02 职责矛盾、04 操作码漂移、
+  19§2 系统性误引×3、18 计数、15 双入口注记、重复关系未声明）
+- 断链机械验证：全库链接 0 错误（拆分忠实度的最大优点确认）
+
+Stage Summary:
+- 缺口矩阵完整产出；修复优先级排序确定（P0 理论欠账优先）
+
+---
+Task ID: 11
+Agent: Super Z (main) — DEV-A
+Task: lang-design v5.1 收敛完善（T11-a/b/c/d 四 MUV）
+
+Work Log:
+- T11-a：06-operational-semantics 从 21 行空壳重写（~200 行）：
+  语义域定义（值/环境/堆/求值状态）+ 9 原语小步归约规则组
+  R1–R9（含 βv/δ 辅助规则）+ 错误吸收语义 E0–E8 + GC 不可观测性
+  引理 L-GC + 编译正确性定理 T1（L1–L4 三引理证明纲要 + 适用边界）
+  + 归约规则 ↔ 测试锚点映射表 + 演进义务（核心冻结承诺）
+- T11-b：03-macro-system 契约回填（81→245 行）：§1.1 ModuleRegistry
+  簿记契约（declare/visit/instantiate + ModuleEntry + 幂等/先行次序
+  不变式）、§2.1 Transformer/TransformerKind、§2.2 ExpandCtxt +
+  MAX_EXPANSION_DEPTH=128（TD-007 校准注记）、§2.3 syntax-rules 文法
+  （pattern/template/省略号维度规则）、§2.4 HygieneCtx 契约 + 卫生
+  三重保证；§4 不变式 4（同类路径审查六项修复簇）；§5 测试锚点表
+- T11-c：05-runtime 契约回填（73→176 行）：§1 I/O 通道契约
+  （write_line_stdout/read_line_stdin + CapabilityIO 升级路径）、
+  §3.1 Heap/GcRef/Slot/HeapObj 分配器契约（六类型化分配入口 +
+  register_foreign_ref 非 no-op 裁定 + GC 冷却退避注记）、
+  §3.2 RootSet/mark_sweep_cycle 契约 + 根集四来源；§5 测试锚点表
+- T11-d：01（import_spec/export_spec Stage 0 裁定定义 + 06/17 锚链 +
+  测试锚点）、02（职责矛盾调和：词法层 vs Reader 模块两级裁定 +
+  Stage 0 实现落点 + 五辅助类型指向 + 测试锚点）、04（操作码漂移
+  注记 + CodeBuf/CaptureSource 契约 + CLOSURE 协议定案 + 双路径互查
+  链接 + ext1→EffectSystem 预留链 + 测试锚点）、09（20 项内置对账 +
+  头部标注）、10/18/15（断链修正 §3.5/§3.6 + 计数 42 + 双入口注记 +
+  §3.4 欠账补齐声明）、11（Week 2 核心形式判据 + 200 项落地对账）
+- 00-overview：v5.1 修订记录 + 06 文档地图行更新
+- 链接完整性终验：全库 0 断链（含 § 级引用抽查 15 处全中）
+
+Stage Summary:
+- 遵循原则：§2.1.1-11（确定性边界：先判 P 级再动笔）、§2.2 原则 8
+  （语义形式化）、§2.3-8（设计驱动测试：每文件测试锚点节）、
+  §2.3-9（正确>妥协：06 从实现反向提炼而非保留空壳）
+- lang-design 4134→约 4900 行；全部 20 文件含处理程度标注（01–06/09–11）
+
+---
+Task ID: 12
+Agent: Super Z (main) — REV-A → DEV-A
+Task: 依据完善后 06 操作语义审查 Stage 0 实现 → 双路径语义分裂修复
+
+Work Log:
+- 审查发现（依据 06 §2 R5/R6 + §3 E3/E6 + §5 T1）并经 CLI 实证
+  （eval vs run 三组 case 全部实锤）：
+  (1) Define 返回值分裂：eval 返回 v / VM 返回 nil（T1 反例）
+  (2) set! 未绑定全局：eval 报 E3 / VM 静默创建（T1 反例）
+  (3) 重复 define：双路径均静默覆盖（E6 双侧缺失）
+  (4) lambda 形参表重名：双侧无检查（A3 卫式缺失）
+- 修复（通解>特解 §2.1.1-4；正确>妥协 §2.3-9）：
+  - opcode.rs：新增第 40 号冻结契约 DefineGlobal(u32)（D1/E6 语义）
+  - compile.rs：Define 编译模式改为 value;DUP;DefineGlobal
+    （返回值 = v，与 eval 对齐；移除 PushNil）
+  - vm.rs：StoreGlobal 严格化（S1/E3：未绑定报错不再静默创建）+
+    DefineGlobal 实现（E6：同层重复报错）
+  - eval.rs：Env::define 返回 bool（同层新增语义；跨层 shadowing
+    合法）+ Define 分支 E6 报错 + apply_value 参数重名报错
+  - expander.rs：parse_params 重名检查（展开期单点防御——两路径
+    共同上游）
+  - driver.rs：root.define 宿主信任注记
+- 测试：4 组新增（define_returns_value_dual_path /
+  duplicate_define_errors_dual_path / set_unbound_errors_on_vm /
+  lambda_duplicate_params_rejected_at_expand）；修正 2 处依赖旧
+  错误语义的断言（compile 单测字节码快照 + gate_g4 源码先 define
+  后 set!——去除兼容思维 §2.3-5）
+- 文档回填：04（39→40 操作码 + DefineGlobal 契约注记）、06
+  （40 操作码）、vm/README、data-flow 图
+- 验收：204 项测试全绿（200 基线 + 4 新增）/ fmt 零 diff /
+  clippy -D warnings 零警告
+
+Stage Summary:
+- T1 定理三处直接反例清零；双路径全局存储语义一致（define/set! 
+  分指令承载）；E0–E8 错误全集双侧对齐
+- 遵循原则：§2.1.1-4（通解）、§2.3-4（报错>静默）、§2.3-9
+  （正确>妥协）、§9.4.3（正负测试 1:3——4 组负例 + 正例对账）

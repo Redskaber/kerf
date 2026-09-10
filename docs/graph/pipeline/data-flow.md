@@ -13,7 +13,7 @@ flowchart TD
     READER -->|"Vec<Stx>（Span+Scopes+Phase）"| EXP["kerf-expander<br/>展开 + 卫生宏 + 相位"]
     EXP -->|"Vec<Rc<CoreExpr>>（9 原语）"| IR["kerf-core::lower<br/>图 IR（Arena+共享）"]
     IR -->|"IrGraph"| COMP["kerf-compiler<br/>回填 + 捕获转换"]
-    COMP -->|"BcProgram（39 操作码 + debug_info）"| VM["kerf-vm<br/>switch-dispatch"]
+    COMP -->|"BcProgram（40 操作码 + debug_info）"| VM["kerf-vm<br/>switch-dispatch"]
     VM -->|"Value（堆引用）"| RT["kerf-runtime<br/>GC 堆 + I/O"]
     DRIVER["kerf-driver（编排）"] -.->|"declare/visit/instantiate"| PH["kerf-expander::phase<br/>模块相位簿记"]
     DRIVER -.->|"内置注册 + 卫生回退"| VM

@@ -40,6 +40,10 @@ pub enum Op {
     LoadGlobal(u32),
     /// 按常量池符号索引写入全局。
     StoreGlobal(u32),
+    /// 按常量池符号索引定义全局（D1/E6 语义：不存在才写入；
+    /// 已存在报「重复定义变量」——与 eval 路径 `Env::define` 对齐，
+    /// T1 定理要求两条路径的全局存储语义一致）。
+    DefineGlobal(u32),
     /// 读取当前闭包捕获槽 `i`。
     LoadCaptured(u32),
     /// 写入当前闭包捕获槽 `i`（共享可变单元——词法闭包语义）。
@@ -114,6 +118,7 @@ impl Op {
             Op::StoreLocal(_) => "STORE_LOCAL",
             Op::LoadGlobal(_) => "LOAD_GLOBAL",
             Op::StoreGlobal(_) => "STORE_GLOBAL",
+            Op::DefineGlobal(_) => "DEFINE_GLOBAL",
             Op::LoadCaptured(_) => "LOAD_CAPTURED",
             Op::StoreCaptured(_) => "STORE_CAPTURED",
             Op::Jump(_) => "JUMP",
@@ -153,6 +158,7 @@ impl Op {
             | Op::StoreLocal(k)
             | Op::LoadGlobal(k)
             | Op::StoreGlobal(k)
+            | Op::DefineGlobal(k)
             | Op::LoadCaptured(k)
             | Op::StoreCaptured(k)
             | Op::Jump(k)

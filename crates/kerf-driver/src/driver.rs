@@ -259,10 +259,11 @@ pub fn eval_source(source: &str, filename: &str) -> Result<RunOutcome, DriverErr
     let out = compile_source(source, filename)?;
     let mut table = out.table;
     let globals = register_globals(&mut table);
-    // eval 路径全局经根环境注入
+    // eval 路径全局经根环境注入（宿主信任代码：内置名互不重复，
+    // define 返回值在此无需检查——E6 只约束用户程序的同层重复定义）
     let root = Env::new();
     for (sym, v) in &globals {
-        root.define(*sym, v.clone());
+        let _ = root.define(*sym, v.clone());
     }
     let mut heap = Heap::new();
     heap.set_gc_enabled(false); // eval 路径不触发回收（根集不完整，TD-009）

@@ -7,7 +7,7 @@
 
 ## 总量
 
-**200 通过 / 0 失败 / 0 忽略**（§3.2 release 验收实测）
+**204 通过 / 0 失败 / 0 忽略**（§3.2 release 验收实测；v5.1 语义分裂修复新增 4 项双路径对账测试）
 
 ## 分套件统计
 
@@ -35,7 +35,7 @@
 | 验收项 | 覆盖测试 |
 |--------|---------|
 | (1) 9 原语语义正确 | vm_tests::nine_primitives_semantics + gate_g1/g2 |
-| (2) 50+ 快照测试 | 全套件（200 ≥ 50） |
+| (2) 50+ 快照测试 | 全套件（204 ≥ 50） |
 | (3) 自举测试（同结果） | compiler_tests::deterministic + pipeline_tests::convergent |
 | (4) Span 全管线传播 | pipeline_tests::span_propagates + gate_g6 |
 | (5) 性能基准基线 | bench CLI（fib(25) 84.7ms/轮） |

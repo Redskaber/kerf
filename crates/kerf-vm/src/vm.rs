@@ -280,6 +280,24 @@ pub fn run_program(
                     _ => return Err(VmError::new("STORE_GLOBAL 操作数不是符号", span)),
                 };
                 let v = pop!();
+                // S1/E3 语义（与 eval 路径 `Env::set` 对齐，T1 定理）：
+                // set! 只写已存在的绑定——未绑定报错而非静默创建全局。
+                if !globals.contains_key(&sym) {
+                    return Err(VmError::new("set! 未绑定变量", span));
+                }
+                globals.insert(sym, v);
+            }
+            Op::DefineGlobal(k) => {
+                let sym = match &program.consts[*k as usize] {
+                    BcConst::Symbol(s) => *s,
+                    _ => return Err(VmError::new("DEFINE_GLOBAL 操作数不是符号", span)),
+                };
+                let v = pop!();
+                // D1/E6 语义（与 eval 路径 `Env::define` 对齐，T1 定理）：
+                // define 只新增绑定——同层已存在报错而非静默覆盖。
+                if globals.contains_key(&sym) {
+                    return Err(VmError::new("重复定义变量", span));
+                }
                 globals.insert(sym, v);
             }
             Op::LoadCaptured(i) => {

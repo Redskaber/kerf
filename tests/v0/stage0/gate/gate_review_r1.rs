@@ -79,13 +79,14 @@ fn gate_g4_vm_executes_opcode_groups() {
         (define (make-adder n) (lambda (x) (+ x n)))
         (define add5 (make-adder 5))
         (define lst (quote (1 2 3)))
+        (define acc 0)
         (list
           (add5 10)
           (if (null? nil) 1 2)
           (pair? lst)
           (eq? (car lst) 1)
           (mod 7 3)
-          (begin (set! acc 0) acc))
+          (begin (set! acc 1) acc))
     "#;
     let o = run_source(src, "gate.krf").unwrap();
     assert!(matches!(o.value, Value::Pair(_)));

@@ -65,9 +65,16 @@ impl Env {
         })
     }
 
-    /// 定义绑定。
-    pub fn define(&self, name: Symbol, value: Value) {
-        self.bindings.borrow_mut().insert(name, value);
+    /// 定义绑定（同层新增；同层已存在返回 false——D1/E6 语义：
+    /// 重复定义报错而非静默覆盖，与 VM 路径 `DefineGlobal` 对齐）。
+    /// 跨层 shadowing 合法（词法作用域：子层可定义与父层同名的新绑定）。
+    pub fn define(&self, name: Symbol, value: Value) -> bool {
+        let mut b = self.bindings.borrow_mut();
+        if b.contains_key(&name) {
+            return false;
+        }
+        b.insert(name, value);
+        true
     }
 
     /// 查找（沿父链——词法作用域）。
@@ -159,10 +166,14 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
                 Err(EvalError::new("set! 未绑定变量", *span))
             }
         }
-        CoreExpr::Define { name, value, .. } => {
+        CoreExpr::Define { name, value, span } => {
             let v = eval_expr(value, env, heap)?;
-            env.define(*name, v.clone());
-            Ok(v)
+            // D1/E6（[06-操作语义 §2 R6]）：同层重复定义报错。
+            if env.define(*name, v.clone()) {
+                Ok(v)
+            } else {
+                Err(EvalError::new("重复定义变量", *span))
+            }
         }
         CoreExpr::Begin { body, span } => {
             let mut last = Value::Nil;
@@ -201,7 +212,10 @@ pub fn apply_value(f: Value, args: Vec<Value>, heap: &mut Heap) -> Result<Value,
             }
             let call_env = env.child();
             for (p, a) in params.iter().zip(args) {
-                call_env.define(*p, a);
+                // A3 卫式：参数表重名报错（同名形参在同层只允许出现一次）。
+                if !call_env.define(*p, a) {
+                    return Err(RuntimeError::new("过程参数重名（lambda 形参表重复）"));
+                }
             }
             eval_expr(body, &call_env, heap)
                 .map_err(|e| RuntimeError::new(format!("求值失败：{}", e.message)))

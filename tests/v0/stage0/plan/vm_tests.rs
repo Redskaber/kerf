@@ -138,3 +138,43 @@ fn pair_construction_and_traversal() {
     assert_eq!(common::run_rendered("(car (cdr (quote (1 2 3))))"), "2");
     assert_eq!(common::run_rendered("(null? (quote ()))"), "true");
 }
+
+/// T1 对账（[06-操作语义 §2 R6/D1]）：Define 返回值为被定义值——
+/// 双路径必须一致（修复前 VM 返回 nil、eval 返回 v）。
+#[test]
+fn define_returns_value_dual_path() {
+    assert!(dual_path_agrees("(define x 5)"));
+    assert!(dual_path_agrees("(define x (+ 2 3)) x"));
+    assert_int("(define x 5)", 5); // D1：Define 表达式的值 = v
+}
+
+/// E6（[06-操作语义 §3]）：同层重复定义报错——双路径一致
+/// （修复前 eval 静默覆盖、VM 静默覆盖）。
+#[test]
+fn duplicate_define_errors_dual_path() {
+    let src = "(define x 1) (define x 2)";
+    let err = common::run(src).unwrap_err();
+    assert!(err.contains("重复定义变量"), "VM 路径应报 E6：{}", err);
+    let ev = kerf_driver::eval_source(src, "test.krf").err().unwrap();
+    assert!(ev.to_string().contains("重复定义变量"), "eval 路径应报 E6");
+    assert!(dual_path_agrees(src)); // 错误消息形态一致（渲染层对账）
+}
+
+/// E3（[06-操作语义 §2 R5/S1]）：set! 未绑定变量在 VM 路径同样报错
+/// （修复前 VM 静默创建全局——与 eval 分裂，违反 T1）。
+#[test]
+fn set_unbound_errors_on_vm() {
+    let err = common::run("(set! y 1)").unwrap_err();
+    assert!(err.contains("set! 未绑定变量"), "VM 路径应报 E3：{}", err);
+    assert!(dual_path_agrees("(set! y 1)"));
+    // 正例：已绑定（先 define 后 set!）两路径均成功
+    assert!(dual_path_agrees("(define n 1) (set! n 5) n"));
+}
+
+/// A3 卫式（[06-操作语义 §2]）：lambda 形参表重名在展开期即拒绝
+/// （两执行路径的共同上游单点防御）。
+#[test]
+fn lambda_duplicate_params_rejected_at_expand() {
+    let err = common::run("(lambda (x x) x)").unwrap_err();
+    assert!(err.contains("参数重名"), "展开期应拒绝重名形参：{}", err);
+}
