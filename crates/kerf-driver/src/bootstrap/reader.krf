@@ -77,7 +77,7 @@
 (define KEYWORDS
   (list "lambda" "if" "set!" "define" "begin" "module" "import" "export"
         "quote" "let" "letrec" "let*" "cond" "else" "and" "or" "when"
-        "while" "unless" "define-syntax" "syntax-rules"))
+        "while" "unless" "define-syntax" "syntax-rules" "require"))
 (define OPERATORS
   (list "+" "-" "*" "/" "mod" "<" ">" "<=" ">=" "="))
 

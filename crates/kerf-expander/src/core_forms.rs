@@ -13,7 +13,7 @@
 
 use std::rc::Rc;
 
-use kerf_core::{CoreExpr, LiteralValue};
+use kerf_core::{Capability, CoreExpr, LiteralValue};
 use kerf_syntax::{Keyword, ScopeSet, Stx, StxDatum, SymbolTable};
 
 use crate::expander::{
@@ -36,6 +36,7 @@ pub(crate) fn expand_core_form(
         Keyword::Define => expand_define(stx, items, ctx),
         Keyword::Begin => expand_begin(stx, items, ctx, true),
         Keyword::Module => expand_module(stx, items, ctx),
+        Keyword::Require => expand_require(stx, items, ctx),
         Keyword::Quote => expand_quote(stx, items, ctx),
         Keyword::Import | Keyword::Export => Err(ExpandError::new(
             "import/export 只能出现在 module 形式内部",
@@ -372,6 +373,65 @@ fn expand_module(
         imports,
         exports,
         body,
+        span: stx.span,
+    }))
+}
+
+/// `(require io read|write ...)` 展开（r8 能力声明——13 §3.1.3 基础传递
+/// 的程序侧声明面）。
+///
+/// 形状契约：`(require <主体> <能力>...)`；主体当前仅 `io`（Stage 2 扩
+/// 展 net/process——数据驱动扩展面）；能力项 `read`/`write`。声明为幂
+/// 等集合语义（重复项去重）；产出 `CoreExpr::Require`（零运行时语义，
+/// 供 driver R9 权限验证与令牌铸造消费）。
+fn expand_require(
+    stx: &Stx,
+    items: &[Stx],
+    ctx: &mut ExpandCtxt,
+) -> Result<Rc<CoreExpr>, ExpandError> {
+    if items.len() < 3 {
+        return Err(ExpandError::new(
+            "require 形式：(require io read|write)——主体与能力项不可缺省",
+            stx.span,
+        ));
+    }
+    let subject = items[1]
+        .datum
+        .as_symbol()
+        .ok_or_else(|| ExpandError::new("require 主体必须是符号（当前仅 io）", items[1].span))?;
+    let subject_name = ctx.table.name(subject).to_string();
+    if subject_name != "io" {
+        return Err(ExpandError::new(
+            format!(
+                "未知能力主体「{}」（当前仅支持 io；net/process 属 Stage 2）",
+                subject_name
+            ),
+            items[1].span,
+        ));
+    }
+    let mut caps: Vec<Capability> = Vec::new();
+    for item in &items[2..] {
+        let cap_sym = item
+            .datum
+            .as_symbol()
+            .ok_or_else(|| ExpandError::new("require 能力项必须是符号（read/write）", item.span))?;
+        let cap_name = ctx.table.name(cap_sym).to_string();
+        let cap = match cap_name.as_str() {
+            "read" => Capability::IoRead,
+            "write" => Capability::IoWrite,
+            other => {
+                return Err(ExpandError::new(
+                    format!("未知能力项「{}」（当前仅 read/write）", other),
+                    item.span,
+                ))
+            }
+        };
+        if !caps.contains(&cap) {
+            caps.push(cap);
+        }
+    }
+    Ok(Rc::new(CoreExpr::Require {
+        caps,
         span: stx.span,
     }))
 }

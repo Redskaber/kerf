@@ -347,6 +347,13 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
             }
             Ok(())
         }
+        CoreExpr::Require { span, .. } => {
+            // r8 能力声明：求值恒为 nil（零副作用）——产 PushNil 保持
+            // 顶层形式「每形式一值」栈不变式（与 eval 路径 Ok(Nil) 一致，
+            // T1 双路径口径；权限验证已在 driver front 管线 R9/E0006 完成）
+            ctx.emit(Op::PushNil, *span);
+            Ok(())
+        }
     }
 }
 

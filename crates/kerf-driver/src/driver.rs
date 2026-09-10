@@ -22,6 +22,7 @@ use kerf_vm::{run_program, Env, Value, VmError};
 
 use crate::builtins::{builtin_sigs, register_globals, resolve_hygiene_fallbacks};
 use crate::cache::{cache_enabled, cache_key, with_cache};
+use crate::capability::{verify_io_capabilities, IoGrant, IoRequirements};
 use std::collections::HashMap;
 
 /// 管线阶段标识。
@@ -228,6 +229,11 @@ fn front_from_forms(
     let core = expand_program(&forms, &mut ectx).map_err(|e| DriverError::from_expand(&e, &sm))?;
     let table = ectx.table;
 
+    // 2.5 R9 能力权限验证（r8——13 §3.1.3 条款 3「编译期错误」：
+    // front 管线全路径生效 run/eval/check/compile；首个违规即阻断
+    // fail-closed；E0006 家族与 E0005 静态检查分离）
+    verify_io_capabilities(&core, &table, &sm)?;
+
     // 3. 相位簿记：declare + visit（§8.9 单模块生命周期）
     let mut registry = ModuleRegistry::new();
     let module_name = core
@@ -311,6 +317,10 @@ pub struct CheckReport {
     pub rendered: Vec<String>,
     /// 编译前段是否命中缓存（增量编译基础设施的观测面）。
     pub cache_hit: bool,
+    /// 程序是否声明读能力（(require io read)——r8 能力观测面）。
+    pub io_read: bool,
+    /// 程序是否声明写能力（(require io write)——同上）。
+    pub io_write: bool,
     /// 原型数。
     pub proto_count: usize,
     /// 常量池大小。
@@ -330,6 +340,7 @@ pub struct CheckReport {
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
 pub fn check_source(source: &str, filename: &str) -> Result<CheckReport, DriverError> {
     let (front, cache_hit) = compile_front_cached(source, filename)?;
+    let io_req = IoRequirements::from_core(&front.core);
     let mut table = front.table;
     let sigs = builtin_sigs(&mut table);
     let diagnostics = kerf_compiler::check_program(&front.core, &sigs, &table);
@@ -342,6 +353,8 @@ pub fn check_source(source: &str, filename: &str) -> Result<CheckReport, DriverE
         const_count: front.program.consts.len(),
         global_ref_count: front.program.global_refs.len(),
         instruction_count: front.program.total_instructions(),
+        io_read: io_req.read,
+        io_write: io_req.write,
         diagnostics,
         rendered,
         cache_hit,
@@ -397,7 +410,8 @@ impl std::fmt::Debug for RunOutcome {
 pub fn run_source(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
     let (out, _cache_hit) = compile_front_cached(source, filename)?;
     let mut table = out.table;
-    let mut globals = register_globals(&mut table);
+    let grant = IoGrant::from_requirements(IoRequirements::from_core(&out.core));
+    let mut globals = register_globals(&mut table, &grant);
     // 卫生回退解析（$hyg$N 后缀剥离）
     let program = out.program;
     let source_map = out.source_map;
@@ -419,7 +433,8 @@ pub fn run_source(source: &str, filename: &str) -> Result<RunOutcome, DriverErro
 pub fn eval_source(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
     let (out, _cache_hit) = compile_front_cached(source, filename)?;
     let mut table = out.table;
-    let globals = register_globals(&mut table);
+    let grant = IoGrant::from_requirements(IoRequirements::from_core(&out.core));
+    let globals = register_globals(&mut table, &grant);
     // eval 路径全局经根环境注入（宿主信任代码：内置名互不重复，
     // define 返回值在此无需检查——E6 只约束用户程序的同层重复定义）
     let root = Env::new();
@@ -531,7 +546,8 @@ fn collect_global_refs(e: &CoreExpr, out: &mut Vec<Symbol>) {
                 collect_global_refs(item, out);
             }
         }
-        CoreExpr::Literal { .. } => {}
+        // _ 臂理由：require 零运行时语义（无全局引用——R9 静态门控）
+        CoreExpr::Require { .. } | CoreExpr::Literal { .. } => {}
     }
 }
 
@@ -540,6 +556,193 @@ fn collect_global_refs(e: &CoreExpr, out: &mut Vec<Symbol>) {
 pub fn run_source_rendered(source: &str, filename: &str) -> Result<String, DriverError> {
     let outcome = run_source(source, filename)?;
     Ok(kerf_vm::render_value(&outcome.value, &outcome.heap))
+}
+
+// ---------------------------------------------------------------------------
+// kerf test：用例运行器（r8——内部效应系统的消费面：测试短路 + 错误恢复）
+// ---------------------------------------------------------------------------
+
+/// 单用例结果。
+#[derive(Debug, Clone)]
+pub struct TestCaseOutcome {
+    /// 用例序号（1 起）。
+    pub index: usize,
+    /// 用例形态（核心表达式渲染——截断形态）。
+    pub name: String,
+    /// 是否通过（求值无错且值非 #f）。
+    pub pass: bool,
+    /// 失败详情（效应载荷——用例内任意深度捕获）。
+    pub detail: String,
+}
+
+/// 测试报告。
+#[derive(Debug, Clone)]
+pub struct TestReport {
+    /// 逐用例结果（源序）。
+    pub cases: Vec<TestCaseOutcome>,
+    /// 通过数。
+    pub passed: usize,
+    /// 失败数。
+    pub failed: usize,
+}
+
+impl TestReport {
+    /// 全部通过。
+    pub fn all_passed(&self) -> bool {
+        self.failed == 0
+    }
+}
+
+/// 测试用例失败载荷（效应系统类型化逃逸——`perform_escape` 从用例体内
+/// 任意深度触发，`handle_escape` 边界捕获：**测试短路**（case 内首错即
+/// 停止该 case）+ **错误恢复**（边界捕获后下一 case 续跑——同进程状态
+/// 隔离：每 case 全新全局环境与堆）。
+struct TestFailure {
+    detail: String,
+}
+
+/// 用例内任意深度失败上报（嵌套助手层零签名污染——D-任意节点消费面）。
+fn fail_test(detail: impl Into<String>) -> ! {
+    crate::effects::perform_escape(TestFailure {
+        detail: detail.into(),
+    })
+}
+
+/// 判定核心形式是否为前置（prelude）形态（define/set!/module/require——
+/// 状态与声明，非用例）。
+fn is_prelude_form(e: &CoreExpr) -> bool {
+    matches!(
+        e,
+        CoreExpr::Define { .. }
+            | CoreExpr::SetBang { .. }
+            | CoreExpr::Module { .. }
+            | CoreExpr::Require { .. }
+    )
+}
+
+/// 运行测试源文本（`kerf test` 的驱动入口）。
+///
+/// **约定**（零新语法——测试面即语言面）：
+/// - 前置形式（define/set!/module/require）= 公共前置（每个用例独立
+///   重放——用例间状态隔离，v0 口径：用例是前置的纯函数）；
+/// - 其余顶层表达式形式 = 用例：求值无错且值非 `#f` = PASS（`(= a b)`
+///   形谓词即断言），运行时错误或 `#f` = FAIL；
+/// - 执行路径 = 生产 VM 路径（§11 无平行语义；编译缓存内容寻址复用）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——driver 入口既有约定
+pub fn test_source(source: &str, filename: &str) -> Result<TestReport, DriverError> {
+    // 效应系统 hook 安装（幂等——进程一次；效应逃逸零噪声）
+    crate::effects::ensure_hook_installed();
+    let (front, _hit) = compile_front_cached(source, filename)?;
+    let table = front.table;
+    let sm = front.source_map;
+    let grant = IoGrant::from_requirements(IoRequirements::from_core(&front.core));
+
+    // 前置/用例切分（源序保持）
+    let mut prelude: Vec<Rc<CoreExpr>> = Vec::new();
+    let mut cases: Vec<Rc<CoreExpr>> = Vec::new();
+    for e in &front.core {
+        if is_prelude_form(e) {
+            prelude.push(e.clone());
+        } else {
+            cases.push(e.clone());
+        }
+    }
+
+    let mut outcomes: Vec<TestCaseOutcome> = Vec::new();
+    for (i, case) in cases.iter().enumerate() {
+        let index = i + 1;
+        let name = truncate_form_name(&case.render(&|s: Symbol| resolve_symbol(s, &table)));
+        // 用例边界（效应处理器）：短路（case 内任意深度 fail_test 即停）
+        // + 恢复（捕获后下一用例续跑）
+        let outcome = crate::effects::handle_escape::<(), TestFailure>(|| {
+            run_case(&prelude, case, &table, &sm, &grant)
+        });
+        let (pass, detail) = match outcome {
+            Ok(()) => (true, String::new()),
+            Err(f) => (false, f.detail),
+        };
+        outcomes.push(TestCaseOutcome {
+            index,
+            name,
+            pass,
+            detail,
+        });
+    }
+
+    let passed = outcomes.iter().filter(|c| c.pass).count();
+    Ok(TestReport {
+        failed: outcomes.len() - passed,
+        passed,
+        cases: outcomes,
+    })
+}
+
+/// 单用例执行（嵌套助手层——失败点任意深度 `fail_test` 直达边界）。
+fn run_case(
+    prelude: &[Rc<CoreExpr>],
+    case: &Rc<CoreExpr>,
+    table: &SymbolTable,
+    sm: &SourceMap,
+    grant: &IoGrant,
+) {
+    // 层 1：编译切片（前置 ++ 用例）
+    let mut slice = prelude.to_vec();
+    slice.push(case.clone());
+    let program = match kerf_compiler::compile_module(&slice) {
+        Ok(p) => p,
+        Err(e) => {
+            let diag = kerf_span::Diagnostic::error(
+                Some(kerf_span::DiagnosticCode(3)),
+                e.message.clone(),
+                e.span,
+            );
+            fail_test(format!(
+                "用例编译失败：{}",
+                first_line(&kerf_span::render_diagnostic(&diag, sm))
+            ))
+        }
+    };
+    // 层 2：全新环境执行（状态隔离）
+    let mut run_table = table.clone();
+    let mut globals = register_globals(&mut run_table, grant);
+    let mut heap = Heap::new();
+    // 卫生回退解析（与 run_source 同则——宏引入全局引用可达）
+    resolve_hygiene_fallbacks(&program, &mut run_table, &mut globals);
+    let value = match kerf_vm::run_program(&program, &mut globals, &mut heap) {
+        Ok(v) => v,
+        Err(e) => {
+            let derr = DriverError::from_vm(&e, sm, table);
+            fail_test(first_line(&derr.rendered).to_string())
+        }
+    };
+    // 层 3：断言检查（嵌套最深点：#f 即失败，其余值通过）
+    assert_case_value(&value, &heap);
+}
+
+/// 值断言（层 3——嵌套最深点：#f 即失败，其余值通过）。
+fn assert_case_value(value: &Value, heap: &Heap) {
+    if matches!(value, Value::Bool(false)) {
+        fail_test(format!(
+            "断言返回 #f（期望非 #f 值）——求值结果 {}",
+            kerf_vm::render_value(value, heap)
+        ));
+    }
+}
+
+/// 用例名截断（渲染形态 ≤ 64 字符）。
+fn truncate_form_name(rendered: &str) -> String {
+    const MAX: usize = 64;
+    if rendered.chars().count() <= MAX {
+        rendered.to_string()
+    } else {
+        let truncated: String = rendered.chars().take(MAX).collect();
+        format!("{}…", truncated)
+    }
+}
+
+/// 首行提取（诊断消息压缩）。
+fn first_line(s: &str) -> &str {
+    s.lines().next().unwrap_or("")
 }
 
 /// Token 流 dump（§16 人类可感知输出 / §14.9 编译器自调试）。

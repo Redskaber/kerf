@@ -1249,3 +1249,206 @@ Stage Summary:
 - 遵循原则：§3.2（六命令实测逐条记录）、§7.3.1（审计集 release
   复跑）、§8.4.5（文档 13 处对账——代码-文档一致性）、§9.4.3
   （正负比维持 + 反向锚新形态）、§19（打包 + 包内自举验证）
+
+---
+Task ID: 26-a
+Agent: Super Z (main) — ARCH-A/REV-A
+Task: 接口契约与可替换性深审（批次 D 前置设计对齐）——四项预留契约 × 四维标尺 + 12 模块边界矩阵 + 五条替换路径审计
+
+Work Log:
+- §0 启动协议：sop.md §1 路由（评审 Agent + 新阶段）→ L3 判定 → worklog
+  摘 Task 26（r7 批次 C）/plan §5 批次 D 行 → 26-x 序号裁定（预排 24-x
+  已被 B3 占用，§8.6 唯一性顺延）
+- 证据收集：reserved.rs 冻结契约 289 行实读 / builtins.rs I/O 消费面
+  （6 内置直调 kerf_runtime 全局函数——F2 实据）/ vm.rs FrameExt 三槽
+  （ext1 静态休眠——F3 实据）/ heap.rs register_foreign_ref（已落地——
+  F6 正面确认）/ 12-roadmap §2.4.3 四级做实主题 + §2.5.1 矩阵 Stage 1
+  行（Effect=编译器内部做实 / 能力 I/O=基础传递）/ multi-error-
+  recovery-design §4 效应联动裁定（编译期恢复≠effect，继续有效）
+- 撰写 docs/develop/v0/stage-1/interface-contract-review.md：四维标尺
+  （D-强度/D-任意节点/D-边界/D-可替换）逐契约评定 + 12 模块边界矩阵
+  （8/12 活体替换证明）+ 五条替换路径审计 + 「任意流程节点」专项裁定
+  + 发现分级 F1-F6
+- 关键裁定：两处 P2（F1 Effect Value 耦合、F2 I/O 硬接线）恰为批次 D
+  做实目标本身——审查与实现收敛（做实即修复）；D1 语言面零暴露（12
+  §2.4.3「编译器内部使用属实现策略」）；ext1 激活记 Stage 2 边界
+
+Stage Summary:
+- 深审报告冻结：契约形状均足以承载目标语义；12 模块边界零漂移；
+  8/12 有活体替换证明（B3 Reader 换实现 + T1 双路径 + TD-015 分流为
+  最强三证）；批次 D 范围由 F1/F2 直接驱动
+- 遵循原则：§13.1（设计对齐先行）、§6.1（分级处置）、§11（内部效应
+  不进语言面）、§21.7（不做实不预留投机钩子——MultiStage 维持 P3
+  零行动）
+
+---
+Task ID: 27-a
+Agent: Super Z (main) — REV-A/ARCH-A
+Task: next.md 吸收完整性审计（lang-design 收敛验证）——四轮 Q&A 逐节映射 + 关键词矩阵 + 抽样段落三级核对
+
+Work Log:
+- §0 启动协议：sop.md §1 路由（评审 Agent + 新阶段）→ L3 判定 →
+  worklog 摘 Task 26-a（批次 D 前置深审）/26（r7）→ 发现批次 D 在飞
+  未提交工作（capability/effects/test_source 均就位、断点 =
+  test_runner_tests.rs 缺失）→ 承接裁定（§8.6 无冲突顺延）
+- 磁盘事实核验：upload/next.md（1604 行，四轮 Q&A：超越 Lisp 范式 →
+  五能力术语起源/创新原则/2026 推荐 → 五方案深度设计 → Stage 0 混合
+  务实）vs lang-design 20 文件现状
+- 吸收链核验：stage0.md v3.0（合并 next.md：替代设计/术语起源/2026
+  推荐/三层分类——00-overview 版本历史实证）+ v5.0（进程规划：
+  成熟度/P0-P4/演进矩阵）→ 拆分（Task 5）→ v5.1/v5.2 收敛 → 本轮核验
+- 三级核对执行：关键词矩阵（Esterel/谱系/TRAC-Mooers/创新原则/
+  AST 构造-操纵-执行/混合务实/Mojo/MetaOCaml/五方案共同原则 12 组
+  特征词全部命中）+ 结构映射（Q1-Q3 → 14 §1/§2/§3 逐节；Q4 → 13/15/
+  12 + sop §21.7-21.11）+ 抽样段落（同像性谱系论/McCarthy 考据/
+  批判性评估表/混合务实结论逐段比对）——零实质缺口
+- 审计结论写入 00-overview.md v5.4 修订记录第 (1) 条
+
+Stage Summary:
+- next.md 吸收链闭合实证：v3.0/v5.0 两轮合并 + 拆分分布六文件群 +
+  本轮三级核对零缺口——「吸收并融入直至完全收敛」判定达成（无需
+  重建 stage0.md 中间态——00-overview 头部明示 lang-design 为其
+  现行收敛形态，重建将回退 v5.1-v5.5 演化并违反唯一可信数据源
+  §2.3-10，裁定记录于本条目）
+- 遵循原则：§8.4.5 规则 1（先查文档）、§2.3-10（唯一可信数据源）、
+  §3.3（路由>通读——按映射表精读而非全文重排）
+
+---
+Task ID: 27-b
+Agent: Super Z (main) — REV-A/REC-A
+Task: lang-design 批次 D 设计回写（新语言面先文档后验收）+ v5.4 版本推进
+
+Work Log:
+- 事实采集：Keyword 21→22（+Require）、Token 叶级 44→45、
+  CoreExpr::Require 全链处理核实（compile→PushNil / eval→Ok(Nil) /
+  IR→nil 共享节点 / typecheck→Unknown——T1 双路径一致）
+- 01-core-forms v5.4：新增 §6 声明形式 require（文法/OCaml 形态/
+  零运行时语义/测试锚点）+ **核心冻结边界精确化裁定**（「语义原语集
+  冻结 + 声明变体可追加」——Require 为元数据节点，R1-R9 归约不变、
+  可整体删除不改行为、与 Racket #%require 同构；§5 锚点表 +1 行）
+- 13-capability-matrix v5.4：§3.1.1 r8 注记（Effect 编译器内部做实：
+  一次性逃逸层 + InternalEffectSystem 双层，语言面保持 P3）+ §3.1.3
+  r8 注记（能力 I/O 基础传递做实：三层分工 + R9/E0006 + IoGrant）
+- 12-roadmap v5.4：§2.4.3/§2.4.5 四级做实表 ✅ 注记 + §2.5.1 演进
+  矩阵三行状态（能力 I/O「预留保持」→「做实引入 ✅」+ 附加类型检查
+  器行）+ r8 交付注记段
+- 11-testing v5.4：新增 §4 用例运行器（动机/约定六条/效应消费面/
+  形态学对照 rackunit）+ 处理程度对账至 476
+- 09-stdlib v5.6：§2 能力门控注记（六 I/O 内置 require 门控 +
+  FS-4 修复）+ 清单表两行更新
+- 02-syntax-model v5.4：Token 叶级 44→45 + Keyword 22（+require）
+- 00-overview v5.4：修订记录（吸收审计结论 + 批次 D 回写清单）
+- 交叉引用一致性：11-testing §5→§4 重编号后三处引用同步修正
+  （01/12/13）；表格列数错误当场修正（✅ 注记并入单元格）
+
+Stage Summary:
+- 批次 D 新语言面元素（require 声明/能力门控/kerf test）全部具备
+  设计文档（§8.4.5 规则 3 新功能必须有设计文档——先行达成）；
+  lang-design 七文件 v5.4-v5.6 状态与代码一致
+- 遵循原则：§8.4.5 规则 2/3、§21.9 规则 3（矩阵一致性——状态对账
+  与偏差登记）、§17 原则 9（核心冻结——边界精确化而非破坏）
+
+---
+Task ID: 27-c
+Agent: Super Z (main) — ARCH-A/REV-A
+Task: sop.md 同步更新（v11.1）——§21.9 演进矩阵现状对账 + 变更日志
+
+Work Log:
+- §21.9 矩阵：四行 ✅ 做实注记（编译缓存 r7 / 类型检查器 r7 提前
+  引入 / Effect r8 编译器内部 / 能力 I/O r8 基础传递）+ 附加类型
+  检查器行 + 实施状态对账注记段（含「预留保持→做实引入」单元格
+  更新依据——r8 实际交付基础传递，单调深化成立）
+- §21.7.1 三档成熟度表 P4 行：类型检查器提前引入偏差登记（§21.6
+  风险缓解路径显式裁定，不构成倒挂）
+- §16.1 变更日志：v11.1 行（三处变更清单）；尾部版本说明更新
+- 工具事故与修复：MultiEdit 部分生效导致 v11.1 变更日志行重复 →
+  行级去重；表格 old_str 匹配失败两次 → 改用精确文本/行级插入
+
+Stage Summary:
+- sop.md v11.1 就位：流程权威文档与实施现状对账一致（§8.4.5 规则
+  2 文档随代码）；类型检查器提前引入按 §21.9 解读规则 3 显式登记
+- 遵循原则：§3.3（合并>新增、精要>冗长——最小变更面三处）、
+  §21.9 规则 3（gate 核对矩阵一致性）
+
+---
+Task ID: 27-d
+Agent: Super Z (main) — DEV-A/QA-A
+Task: 批次 D 承接收尾——test_runner_tests.rs 补齐 + 断点缺陷修复 + §3.2 全绿 + 文档对账
+
+Work Log:
+- 断点定位：Cargo.toml 声明 test_runner_tests 而文件缺失（clippy
+  target resolution error 实证）→ 按 test_source 契约补齐 18 case
+  （正向 6 + 负向/边界 12：短路/恢复/深位失败/状态隔离/front 错误面）
+- 断点缺陷修复（在飞代码两处）：①capability_tests example 路径
+  ../../examples → examples（workspace cwd 口径）；②read-line EOF
+  测试阻塞真实 stdin（非确定性）→ 改子进程确定性探针
+  （CARGO_BIN_EXE_kerf + Stdio::null()）
+- 测试语义修正：状态隔离用例重设计（前置重放语义下 set! 在前置
+  会让所有用例失败——改为 case 内 set! + 次用例独立重放验证隔离）
+- clippy 清零五处：builtins auto-deref ×2 / capability needless_
+  lifetimes ×1 / result_large_err ×2（driver 入口既有 allow 约定）
+- fmt：builtins.rs 排版修正
+- §3.2 六命令 clean release 前台实测：build 9.10s 0 警告 / fmt 零
+  diff / clippy -D 0 / test --release **476:0:0** / 审计集 41/41
+  EXIT 0（七类覆盖 1=1 2=5 3=1 4=4 5=16 6=1 7=2）
+- 文档对账：matrix.md r8 全量重写（含 r7 陈旧计数修正：r7 实际 =
+  150 单元 + 260 集成 = 408:0:1，分项表多处陈旧已修正）+
+  RELEASE_NOTES r8 段 + plan.md 批次 D 行 ✅ + README 476/v5.4/
+  v11.1 + calibration §4 批次 D 行 + 测试计划 capability.md/
+  test-runner.md 新两篇 + stage1/plan.md 套件表 +2 行
+
+Stage Summary:
+- 批次 D 交付闭环：476 测试全绿（408 基线 + 68）+ FS-4 随能力
+  参数化修复激活（ignore 清零）+ E0006 第七族结构码就位 + 全局
+  正负比 ≈1:3.15 维持
+- 断点承接方法论沉淀：worklog 唯一事实源使跨会话在飞工作可无损
+  承接（calibration §4 已记录）
+- 遵循原则：§3.2（六命令逐条实测）、§9.4.3（正负比 + 确定性纪律
+  ——stdin 阻塞探针改子进程）、§8.5（文档 15 项对账）、§2.3-4
+  （报错>静默——效应逃逸无处理器时清晰终止）
+
+---
+Task ID: 27-e
+Agent: Super Z (main) — REC-A/QA-A
+Task: web 同步（批次 D 内容/stats/预设）+ §19 打包 r8 + agent-browser E2E 终验
+
+Work Log:
+- web 同步：kerf-data 六面（fib 预设 +require 前缀——I/O 门控正确性
+  关键修复；新增能力门控预设（GC 预设保留）；管线/9 crates/预留卡
+  Effect+能力 I/O 做实注记/路线图批次 D 三要点+批次 E 待启动/包清单
+  476-v5.4；HERO_FEATURES +能力门控 I/O+内部效应系统）+ hero（Stage 1
+  徽章 + 副标题 + hint 单元 175/集成 301）+ footer（批次 A/B/C/D +
+  476 + v0.2.0 + sop v11.1）
+- stats API 自动对账：testCount 476（matrix.md 解析）/ rustLoc 15,832
+  / r8 包 mtime 降序识别 ✓
+- §19 打包 r8：kerf-stage1-v0.2.0-batchD-capabilityio-effects-
+  testrunner-476tests-r8.tar.gz（615,655 B / 153 文件 = r7 146 + 7
+  新文件；file 验证 gzip；排除 target/.git/download/tool-results）
+- 包内解压自举验证（/tmp 独立解压）：cargo test --release
+  **476:0:0** 与交付环境一致 + fib→75025/⇒144 + kerf test 实跑
+  （PASS 3/共 5：短路 case+恢复 case+exit 1）+ E0006 未声明 print
+  完整诊断（--> 位置+摘录+^）+ 审计集 41/41 EXIT 0
+- download/README.md r8 段（头部插入；旧尾部 r7 重复段去重）
+- agent-browser E2E 终验：页面加载 0 console/0 页面错误；统计实时
+  （15,832/476/12/0）；Playground 实跑 fib（6765+⇒144）+ 能力门控
+  预设（已授权输出+⇒42）+ **E0006 负例直连**（(print 1) → 红色
+  error[E0006] 含 Span 摘录——新语言面端到端）；路线图批次 D/
+  预留卡做实标记/footer 476 全渲染；390×844 无横向溢出
+  （scrollWidth=390）；footer 平滑滚动完成后视口底精确对齐
+  （footerBottom=844=viewportH——长内容自然下推双形态验证）；
+  文档区 00-overview v5.4 修订记录渲染（next.md 吸收审计可见）；
+  VLM 双截图审查：无重叠/截断/对比度问题，zinc+emerald 主题合规
+  （发现并修复 hero Stage 0 陈旧徽章 → Stage 1 批次 D）
+- web 质量闭环：bun run lint 0 错误；dev.log 无编译错误（仅正常
+  200 请求日志）
+
+Stage Summary:
+- 会话五项任务全部完成：SOP 启动协议 + next.md 吸收完整性审计
+  （零缺口——吸收链 v3.0/v5.0→拆分→v5.2 闭合实证）→ lang-design
+  v5.4 系统回写（require 声明形式 + 核心冻结边界精确化 + 演进矩阵
+  对账，七文件）→ sop.md v11.1（§21.9 现状对账 + 变更日志）→
+  批次 D 承接收尾（断点 test_runner_tests 补齐 + FS-4 修复 + 476
+  全绿）→ web 同步 + r8 交付包（615KB/包内自举验证一致）
+- 遵循原则：§19（打包规则：全绿后打包 + 包内自举验证 + 文件数
+  对账）、§3.2（交付前实测全绿）、浏览器验证标准（交互/渲染/
+  响应式/console 四面 + VLM 视觉审查）

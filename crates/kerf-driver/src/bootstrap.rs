@@ -134,7 +134,9 @@ fn load_bootstrap() -> Result<BootstrapState, ReadError> {
         )
     })?;
     let mut table = front.table;
-    let mut globals = register_globals(&mut table);
+    // reader.krf 无 I/O 引用（纯词法数据变换）——空授权（R9 已验证
+    // 无门控引用；fail-closed：I/O 内置不进自举环境）
+    let mut globals = register_globals(&mut table, &crate::capability::IoGrant::none());
     let program = front.program;
     // 卫生回退解析（reader.krf 无宏——空操作；保持与 run_source 管线一致性）
     crate::builtins::resolve_hygiene_fallbacks(&program, &mut table, &mut globals);

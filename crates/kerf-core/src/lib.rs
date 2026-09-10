@@ -19,5 +19,5 @@ pub mod ir;
 // 显式 re-export（§10.1 规则 4：禁止 glob re-export）。
 // 约定：本 crate 暴露核心语言（expr）、图 IR 与代码值全部公共类型。
 pub use code_value::{CodeValue, CompositionError, StageLevel};
-pub use expr::{CoreExpr, LiteralValue};
+pub use expr::{Capability, CoreExpr, LiteralValue};
 pub use ir::{lower_program, IrGraph, IrNode, NodeId, NodeMetadata};

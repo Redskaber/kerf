@@ -1,8 +1,8 @@
 # 语法模型：类型化 Token 流、Span 与结构化诊断
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.2：Token 计数更正（enum 12 变体 / 叶级 44）+ NFC 保守子集入设计（#17/#18））
-> **Version**: v5.2
+> **Date**: 2026-09-10（v5.4：Token 叶级计数 44→45 + Keyword 21→22——r8 require 声明关键字）
+> **Version**: v5.4（前版 v5.2：Token 计数更正 #17 + NFC 保守子集 #18）
 > **Status**: Active
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-reader + kerf-span + kerf-syntax）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：查询式增量编译按 Span 细粒度失效（Stage 2，[15-架构分层 §3.1](./15-architecture-layers.md)）、编译缓存键与 Span 失效关系（接口预留，[13-能力矩阵 §3.1.4](./13-capability-matrix.md)）
 
@@ -55,7 +55,7 @@ pub enum TokenKind {
 
 > **源文档矛盾调和说明**：stage0.md 原文 §8.1（职责：不做语法分析）与 §19.1（Reader = 词法器 + 递归下降语法器）表述冲突。本拆分按「词法层/Reader 模块」两级裁定调和，并与 Stage 0 实现（kerf-reader：类型化 Token（**`TokenKind` enum 12 变体**，叶级展开 44 种——见下）+ 递归下降语法器读 datum + 'x 简写 → (quote x)）一致。
 
-**Stage 0 实现落点**（kerf-reader / kerf-syntax）：设计层的 `TokenKind`（上图）是 2026 现代方案的**方向性蓝图**（含 `TypeIdentifier / Keyword(fn/let/match) / MacroInvocation` 等扩展位）；Stage 0 实现为同构的类型化 Token——运算符身份显式化而非字符串比较（`Operator` 携带 `Symbol` 句柄）。**Token 种类计数（v5.2 更正，deep-review R1 偏差 #17）**：`TokenKind` enum 为 **12 个变体**（`IntLiteral / FloatLiteral / StringLiteral / BoolLiteral / NilLiteral / Identifier / QuoteShorthand / Keyword / Operator / Delimiter / MacroInvocation / Eof`）；**叶级展开 44 种**——构成：字面量 5（Int/Float/Str/Bool/Nil）+ `Identifier` 1 + `QuoteShorthand` 1 + `Keyword` 21（lambda/if/set!/define/begin/module/import/export/quote/let/letrec/let*/cond/else/and/or/when/while/unless/define-syntax/syntax-rules）+ `Operator` 10（+ - * / mod < > <= >= =）+ `Delimiter` 4（( ) [ ]）+ `MacroInvocation` 1 + `Eof` 1（5+1+1+21+10+4+1+1 = 44）。早期文档的「41 种类」不可验证（既非 enum 数也非叶级数），废弃该口径。两者差异是「设计方向 → 阶段实现」的裁剪：`TypeIdentifier`/关键字驱动的表面语法属于 Stage 1+ 表面语言层（[12-路线图 §2.5](./12-roadmap.md) 演进矩阵）；核心不变式（无损、位置完备、词法层零语义）两级同构。Token 使用的辅助类型定义于：`Symbol / SymbolTable`（kerf-syntax，NFC 一次归一化 + 关键字预内部化）、`ScopeId / ScopeSet`（kerf-syntax，有序去重 + 并集/子集）、`Keyword`（kerf-syntax，21 变体）、`Operator / Delimiter`（kerf-reader 的 TokenKind 变体载荷），`Span / FileId / ByteOffset / ExpansionId`（kerf-span，字节偏移主键 + 行/列派生渲染）。
+**Stage 0 实现落点**（kerf-reader / kerf-syntax）：设计层的 `TokenKind`（上图）是 2026 现代方案的**方向性蓝图**（含 `TypeIdentifier / Keyword(fn/let/match) / MacroInvocation` 等扩展位）；Stage 0 实现为同构的类型化 Token——运算符身份显式化而非字符串比较（`Operator` 携带 `Symbol` 句柄）。**Token 种类计数（v5.2 更正，deep-review R1 偏差 #17）**：`TokenKind` enum 为 **12 个变体**（`IntLiteral / FloatLiteral / StringLiteral / BoolLiteral / NilLiteral / Identifier / QuoteShorthand / Keyword / Operator / Delimiter / MacroInvocation / Eof`）；**叶级展开 45 种**（v5.4，r8 批次 D +require）——构成：字面量 5（Int/Float/Str/Bool/Nil）+ `Identifier` 1 + `QuoteShorthand` 1 + `Keyword` 22（lambda/if/set!/define/begin/module/import/export/quote/let/letrec/let*/cond/else/and/or/when/while/unless/define-syntax/syntax-rules/require）+ `Operator` 10（+ - * / mod < > <= >= =）+ `Delimiter` 4（( ) [ ]）+ `MacroInvocation` 1 + `Eof` 1（5+1+1+22+10+4+1+1 = 45）。早期文档的「41 种类」不可验证（既非 enum 数也非叶级数），废弃该口径。两者差异是「设计方向 → 阶段实现」的裁剪：`TypeIdentifier`/关键字驱动的表面语法属于 Stage 1+ 表面语言层（[12-路线图 §2.5](./12-roadmap.md) 演进矩阵）；核心不变式（无损、位置完备、词法层零语义）两级同构。Token 使用的辅助类型定义于：`Symbol / SymbolTable`（kerf-syntax，NFC 一次归一化 + 关键字预内部化）、`ScopeId / ScopeSet`（kerf-syntax，有序去重 + 并集/子集）、`Keyword`（kerf-syntax，22 变体——v5.4 +require 声明关键字，[01-核心原语 §6](./01-core-forms.md)）、`Operator / Delimiter`（kerf-reader 的 TokenKind 变体载荷），`Span / FileId / ByteOffset / ExpansionId`（kerf-span，字节偏移主键 + 行/列派生渲染）。
 
 **NFC 保守子集裁定（v5.2 入设计，deep-review R1 偏差 #18）**：完整 Unicode NFC 归一化需要归一化库；Stage 0 **零外部依赖**约束（自举信任根显式化）下采用**保守子集**策略：ASCII 走快路径；含组合字符（U+0300..U+036F 等）的输入走归一化路径，按「基字符 + 后随重音组合 → 预组字符」的 **Latin-1 常见映射表**折叠（覆盖 ç/Ç 等组合对——组合形式与预组形式必须内部化为同一 Symbol，测试锚定）。映射表之外的组合序列**不被归一并保持原样**（两个 Symbol 风险仅限该子集外的输入）——这是「零依赖 > 完整 NFC」的显式裁定，完整 NFC 于引入 Unicode 依赖的时点（Stage 1+，与 [12-路线图 §2.5](./12-roadmap.md) 评估）升级，接口（intern 时一次且仅一次归一化）不变。
 

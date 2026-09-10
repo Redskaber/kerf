@@ -11,6 +11,7 @@
 //!   | Define of { name : string; value : core_expr }
 //!   | Begin of core_expr list
 //!   | Module of { name; imports; exports; body }
+//!   | Require of { caps : capability list }   (* r8：能力声明，零运行时语义 *)
 //! ```
 //!
 //! 每个 AST 节点携带 Span（§8.6：Span 全管线传播，编译期段）。
@@ -124,6 +125,31 @@ pub enum CoreExpr {
         body: Vec<Rc<CoreExpr>>,
         span: Span,
     },
+    /// `(require io read|write ...)`（r8 能力声明——13 §3.1.3 基础传递的
+    /// 程序侧声明面；**零运行时语义**：不产字节码、不求值出 nil，仅供
+    /// 编译期权限验证（R9/E0006）与 driver 令牌铸造消费）。
+    Require { caps: Vec<Capability>, span: Span },
+}
+
+/// 能力令牌种类（`(require ...)` 声明项——Stage 1 仅 I/O 两类；
+/// Stage 2 扩展 net/process 等（数据驱动扩展面，任意流程节点裁定
+/// F2 修复））。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Capability {
+    /// stdin 读能力（read-line/read-int/read-num 门控）。
+    IoRead,
+    /// stdout 写能力（print/newline/write-string 门控）。
+    IoWrite,
+}
+
+impl Capability {
+    /// 声明名（require 形式与诊断渲染用）。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Capability::IoRead => "read",
+            Capability::IoWrite => "write",
+        }
+    }
 }
 
 impl CoreExpr {
@@ -138,7 +164,8 @@ impl CoreExpr {
             | CoreExpr::SetBang { span, .. }
             | CoreExpr::Define { span, .. }
             | CoreExpr::Begin { span, .. }
-            | CoreExpr::Module { span, .. } => *span,
+            | CoreExpr::Module { span, .. }
+            | CoreExpr::Require { span, .. } => *span,
         }
     }
 
@@ -154,6 +181,7 @@ impl CoreExpr {
             CoreExpr::Define { .. } => "define",
             CoreExpr::Begin { .. } => "begin",
             CoreExpr::Module { .. } => "module",
+            CoreExpr::Require { .. } => "require",
         }
     }
 
@@ -214,6 +242,10 @@ impl CoreExpr {
                 }
                 out.push(')');
                 out
+            }
+            CoreExpr::Require { caps, .. } => {
+                let cs: Vec<&str> = caps.iter().map(|c| c.as_str()).collect();
+                format!("(require io {})", cs.join(" "))
             }
         }
     }
@@ -279,6 +311,9 @@ impl CoreExpr {
                     e.free_variables(bound, out);
                 }
             }
+            // _ 臂理由：require 不含变量引用（零运行时语义——能力声明
+            // 不进入作用域分析）
+            CoreExpr::Require { .. } => {}
         }
     }
 

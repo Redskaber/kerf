@@ -13,6 +13,7 @@ use std::rc::Rc;
 use kerf_core::CodeValue;
 use kerf_driver::{
     cache_stats, check_source, compile_source, dump_stx, dump_tokens, eval_source, run_source,
+    test_source,
 };
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -26,6 +27,7 @@ fn main() {
         ("run", Some(f)) => cmd_run(f),
         ("eval", Some(f)) => cmd_eval(f),
         ("check", Some(f)) => cmd_check(f),
+        ("test", Some(f)) => cmd_test(f),
         ("tokens", Some(f)) => cmd_tokens(f),
         ("stx", Some(f)) => cmd_stx(f),
         ("core", Some(f)) => cmd_core(f),
@@ -33,7 +35,7 @@ fn main() {
         ("bc", Some(f)) => cmd_bc(f),
         ("code", Some(f)) => cmd_code(f),
         ("bench", Some(f)) => cmd_bench(f, args.get(3).and_then(|n| n.parse::<u32>().ok())),
-        ("run", None) | ("eval", None) | ("check", None) => {
+        ("run", None) | ("eval", None) | ("check", None) | ("test", None) => {
             eprintln!("错误：{} 需要文件参数", cmd);
             2
         }
@@ -58,6 +60,7 @@ fn print_usage() {
     eprintln!("  run <file> [N]       编译 + VM 执行（打印最终值）");
     eprintln!("  eval <file>          元循环求值器执行（参考路径）");
     eprintln!("  check <file>         干编译（read→expand→compile，仅诊断）");
+    eprintln!("  test <file>          用例运行器（表达式形式=用例；短路+错误恢复）");
     eprintln!("  tokens <file>        Token 流 dump");
     eprintln!("  stx <file>           语法对象 dump");
     eprintln!("  core <file>          CoreExpr dump");
@@ -72,6 +75,42 @@ fn read_file(path: &str) -> Result<String, i32> {
         eprintln!("错误：无法读取文件 {}：{}", path, e);
         1
     })
+}
+
+fn cmd_test(path: &str) -> i32 {
+    let src = match read_file(path) {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    match test_source(&src, path) {
+        Ok(report) => {
+            for case in &report.cases {
+                if case.pass {
+                    println!("PASS  {:>3} {}", case.index, case.name);
+                } else {
+                    println!("FAIL  {:>3} {}", case.index, case.name);
+                    if !case.detail.is_empty() {
+                        println!("      └ {}", case.detail);
+                    }
+                }
+            }
+            println!(
+                "通过 {} / 共 {}（失败 {}）",
+                report.passed,
+                report.cases.len(),
+                report.failed
+            );
+            if report.all_passed() {
+                0
+            } else {
+                1
+            }
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            1
+        }
+    }
 }
 
 fn cmd_run(path: &str) -> i32 {

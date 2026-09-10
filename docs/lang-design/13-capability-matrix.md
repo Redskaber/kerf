@@ -1,8 +1,8 @@
 # Stage 0 能力矩阵与 12 个能力模型完整设计
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.3：r7 批次 C——编译缓存 P2 做实（内存内容寻址 + 管线复用）注记 + 类型检查器 Stage 1 引入交付注记；v5.2：§3.1 四项预留接口以 reserved.rs 冻结签名回填（#16）+ 能力模型 I/O 处理程度 P3→P2（#21））
-> **Version**: v5.3
+> **Date**: 2026-09-10（v5.4：r8 批次 D——Effect 编译器内部做实（一次性逃逸层 + InternalEffectSystem）与能力模型 I/O 基础传递做实（require 声明形式 + R9/E0006 + IoGrant）注记；v5.3：r7 批次 C——编译缓存 P2 做实（内存内容寻址 + 管线复用）注记 + 类型检查器 Stage 1 引入交付注记；v5.2：§3.1 四项预留接口以 reserved.rs 冻结签名回填（#16）+ 能力模型 I/O 处理程度 P3→P2（#21））
+> **Version**: v5.4
 > **Status**: Active
 
 > 本文件是 12 个能力模型详细设计（原 §8）的**唯一完整副本**，同时收录 Stage 0 能力矩阵与职责边界（原 §7：三层分类矩阵与架构原则）、接口预留与完全推迟的能力（原 §9 全文）、以及三个待定决策的前置架构约束（原 §15）。其中 §8.1/§8.6/§8.7、§8.9/§8.10、§8.12、§8.8/§8.11 的正文同时收录于对应主题文件（[02-语法模型](./02-syntax-model.md) / [03-宏系统](./03-macro-system.md) / [04-字节码 VM](./04-bytecode-vm.md) / [05-运行时](./05-runtime.md)）以保证自包含；关键算法伪代码收口于 02-05 的「实现框架」章节。能力选型的批判性审视与 2026 现代方案见 [14-替代设计](./14-design-alternatives.md)；能力引入时机与处理程度（P0-P4）的进程视角见 [12-路线图 §2](./12-roadmap.md)。
@@ -390,7 +390,20 @@ switch-dispatch 循环，处理约 35 个操作码。完整操作码定义涵盖
 
 > **v5.2 签名权威声明（deep-review R1 偏差 #16）**：本节四项预留接口的**冻结签名权威是 `kerf-driver/src/reserved.rs`**（冻结性经 Probe 实现测试 `reserved_signatures_are_frozen` 证明——「测试实现体编译通过 = 契约冻结」）。早期版本的伪签名（如 `Self::Effect::Result` 关联类型路径、`splice(code) -> Self::Code::Inner` 等不可编译形态）仅为设计草稿，以下全部回填为可编译的真实冻结签名。
 
-#### 3.1.1 Effect Handlers（接口预留）（原 §9.1.1）
+#### 3.1.1 Effect Handlers（P3 语言面 + 编译器内部做实——r8 批次 D 交付注记）（原 §9.1.1）
+
+> **r8 交付注记（2026-09-10，批次 D）**：[12-路线图 §2.5.1](./12-roadmap.md) 演进矩阵
+> Stage 1 行「做实引入（**编译器内部**）」已兑现——`kerf-driver/src/effects.rs`
+> 双层做实：(1) **类型化一次性逃逸层**（`handle_escape<R,T>`/`perform_escape<T>`）：
+> 载荷从任意嵌套深度上展开至最近同类型边界，零签名污染（「任意流程节点
+> 能力」的机械实现）；线程局部深度计数 + `catch_unwind`/`resume_unwind`
+> std-only 载荷逃逸 + 私有载荷类型判别的 panic hook 过滤（效应控制流零
+> 噪声，真实 panic 照常报告）；(2) **冻结契约层**（`InternalEffectSystem`）：
+> 本节 trait 的真实现（与 Probe 测试构成契约可编译/可承载双证）。**语言面
+> 保持 P3**（D1 裁定：语言级 perform/handle 语义仍留 Stage 2——多次恢复
+> continuation 不实现，`Continuation` 维持 unit 形状留白）；消费面 =
+> `kerf test` 用例短路 + 错误恢复（[11-测试 §4](./11-testing.md)）。
+> VM 帧 `ext1` 槽位不激活（Stage 2 语言级效应时启用）。
 
 **预留接口（Stage 0 冻结，P3——仅类型形状）**：
 
@@ -448,7 +461,20 @@ pub trait MultiStage {
 
 **预留原因**：MetaOCaml 虽然理论上成熟（"良构的、良类型的和良作用域的"），但"实际实现往往使用启发式方法"。
 
-#### 3.1.3 能力模型 I/O（接口预留）（原 §9.1.3）
+#### 3.1.3 能力模型 I/O（P2 做实基础传递——r8 批次 D 交付注记）（原 §9.1.3）
+
+> **r8 交付注记（2026-09-10，批次 D）**：「Stage 1 基础传递」已兑现——三层
+> 分工落地（interface-contract-review F2 修复裁定）：`reserved.rs` 冻结契约
+> （签名权威）+ `kerf-driver/src/capability.rs` 铸造/实现/验证 + `builtins.rs`
+> 消费。程序侧声明面 = 新声明形式 `(require io read|write)`（[01-核心原语
+> §6](./01-core-forms.md)——零运行时语义，幂等集合）；R9 保守静态权限验证
+> （下述条款 3：门控内置名任意位置引用未声明 → **编译期错误 E0006**，
+> front 管线 run/eval/check/compile 全路径单一验证点；用户接管豁免 +
+> 卫生回退基名判定防误报）；`IoGrant` 令牌铸造（pub(crate) 构造面——
+> 不可伪造）+ `StdCapabilityIO`（stdio 实现）+ I/O 内置能力参数化（条款 4：
+> `register_globals` 按授权面注册门控内置——未声明即不注册，fail-closed）。
+> 令牌线性语义以 `Rc<RefCell<>>` 承载（借用期互斥 = 线性近似，Stage 2
+> 令牌值化时消除）。
 
 **处理程度（v5.2 修订，deep-review R1 偏差 #21）**：**P2**（原记 P3）——reserved.rs 的 `CapabilityIO` 冻结签名附带**完整行为规格**（下述 4 条），满足 P2 判据「冻结类型签名与行为规格，无实现」（[12-路线图 §2.1.2](./12-roadmap.md) 五级标度）——与 [17-设计原则 §1 原则 26](./17-principles.md) 三级成熟度匹配规则的「研究前沿 → P3」裁定并不冲突：规则给出的是**上限**，实现策略上为Stage 1 直达预留了完整规格（超规格交付）。
 

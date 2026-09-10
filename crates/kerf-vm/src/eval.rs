@@ -241,6 +241,12 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
             let _ = span;
             Ok(last)
         }
+        CoreExpr::Require { span, .. } => {
+            // r8 能力声明：零运行时语义——求值为 nil（与编译路径的
+            // 零字节码行为一致；T1 双路径口径）
+            let _ = span;
+            Ok(Value::Nil)
+        }
     }
 }
 

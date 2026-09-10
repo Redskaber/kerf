@@ -345,6 +345,9 @@ impl<'a> TypeCtxt<'a> {
                 }
                 TcType::Unknown
             }
+            // r8 能力声明：权限验证归 driver R9（E0006 家族），静态类型
+            // 检查（E0005 家族）不涉——零运行时语义无类型约束
+            CoreExpr::Require { .. } => TcType::Unknown,
         }
     }
 

@@ -43,6 +43,7 @@ pub enum Keyword {
     Unless,
     DefineSyntax,
     SyntaxRules,
+    Require,
 }
 
 impl Keyword {
@@ -70,6 +71,7 @@ impl Keyword {
             Keyword::Unless => "unless",
             Keyword::DefineSyntax => "define-syntax",
             Keyword::SyntaxRules => "syntax-rules",
+            Keyword::Require => "require",
         }
     }
 
@@ -97,6 +99,7 @@ impl Keyword {
             "unless" => Keyword::Unless,
             "define-syntax" => Keyword::DefineSyntax,
             "syntax-rules" => Keyword::SyntaxRules,
+            "require" => Keyword::Require,
             _ => return None,
         })
     }
@@ -144,6 +147,7 @@ impl SymbolTable {
             Keyword::Unless,
             Keyword::DefineSyntax,
             Keyword::SyntaxRules,
+            Keyword::Require,
         ] {
             let sym = table.intern(kw.as_str());
             table.keywords.insert(kw, sym);

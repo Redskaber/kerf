@@ -289,18 +289,18 @@ fn not_requires_bool() {
 fn not_and_print_arity() {
     expect_run_err("(not)", "not 需要 1 个参数，实际 0");
     expect_run_err("(not true false)", "not 需要 1 个参数，实际 2");
-    expect_run_err("(print)", "print 需要 1 个参数，实际 0");
-    expect_run_err("(print 1 2)", "print 需要 1 个参数，实际 2");
+    expect_run_err("(require io write) (print)", "print 需要 1 个参数，实际 0");
+    expect_run_err(
+        "(require io write) (print 1 2)",
+        "print 需要 1 个参数，实际 2",
+    );
 }
 
-/// read-line 元数不校验（语义发现 FS-4 存档，不计数）：任意实参被
-/// 静默忽略（builtins.rs 实现无 one_arg 检查）。期望：与 print 一致
-/// 报元数错误。无法断言「带参报错」——当前行为是合法读 stdin（测试
-/// 环境阻塞），故以 #[ignore] 存档断言期望行为。
+/// read-line 元数（FS-4 修复——r8 能力参数化重写时补齐校验，启用
+/// 存档断言：带参与 print 族一致报元数错误，不再静默读 stdin）。
 #[test]
-#[ignore = "当前 read-line 不校验元数（带参静默读 stdin）——修复后启用"]
-fn read_line_arity_ignored() {
-    expect_run_err("(read-line 1)", "read-line 需要 0 个参数");
+fn read_line_arity() {
+    expect_run_err("(require io read) (read-line 1)", "read-line 需要 0 个参数");
 }
 
 // ---------------------------------------------------------------------------

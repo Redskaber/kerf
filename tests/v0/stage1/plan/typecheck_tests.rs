@@ -99,7 +99,7 @@ fn dynamic_programs_clean() {
     // 递归定义自引用（定义前引用 → Unknown）
     expect_clean("(define (fact n) (if (= n 0) 1 (* n (fact (- n 1))))) (fact 5)");
     // 宏引入的卫生符号（$hyg$N 后缀——运行期卫生回退解析）
-    expect_clean("(define x 42) (print x)");
+    expect_clean("(require io write) (define x 42) (print x)");
     // 数值塔混合（Int/Float 并集 = Num 合法域）
     expect_clean("(+ 1 2.5)");
     expect_clean("(< 1 2.0)");
@@ -108,7 +108,9 @@ fn dynamic_programs_clean() {
     // 内置遮蔽（用户定义遮蔽内置——按用户类型走）
     expect_clean("(define (car x) 42) (car 5)");
     // set!/begin/if 分支混合
-    expect_clean("(define x 1) (set! x (+ x 1)) (begin (print x) (if (null? nil) x 2))");
+    expect_clean(
+        "(require io write) (define x 1) (set! x (+ x 1)) (begin (print x) (if (null? nil) x 2))",
+    );
     // 谓词结果作 if 条件（结果类型 Bool 推断）
     expect_clean("(if (null? nil) 1 2)");
     expect_clean("(if (eq? 'a 'a) 1 2)");

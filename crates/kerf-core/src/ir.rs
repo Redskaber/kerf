@@ -313,6 +313,12 @@ fn lower_expr(graph: &mut IrGraph, e: &CoreExpr, scopes: &mut ScopeSet) -> NodeI
                 meta,
             )
         }
+        CoreExpr::Require { span, .. } => {
+            // r8 能力声明：零运行时语义——降级为 nil 字面量节点（图连通
+            // 保持；编译期权限验证在 driver front 管线完成，非 IR 职责）
+            let _ = span;
+            graph.add_shared_literal(LiteralKey::from_value(&LiteralValue::Nil), meta)
+        }
     }
 }
 

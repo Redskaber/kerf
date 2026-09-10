@@ -100,6 +100,22 @@ pub struct IOError {
     pub message: String,
 }
 
+// ---------------------------------------------------------------------------
+// 令牌铸造（r8 批次 D——pub(crate)：令牌仅经 driver 组合根流出，
+// 外部 crate 可引用类型但不可构造——「经权限传递获得」的构造面控制）
+// ---------------------------------------------------------------------------
+
+/// 铸造读能力令牌（仅供 crate::capability 的授权管线调用——按程序
+/// 声明的 (require io read) 铸造；13 §3.1.3 规格条款 1）。
+pub(crate) fn mint_read_token() -> ReadCapability {
+    ReadCapability { _private: () }
+}
+
+/// 铸造写能力令牌（同上——规格条款 2）。
+pub(crate) fn mint_write_token() -> WriteCapability {
+    WriteCapability { _private: () }
+}
+
 /// 能力模型 I/O（§9.1.3 预留接口——Stage 1+ 实现）。
 ///
 /// **完整行为规格**（P2——Stage 1 可直接按规格实现）：

@@ -112,3 +112,12 @@ path = "tests/v0/stage1/plan/typecheck_tests.rs"
 [[test]]
 name = "cache_tests"
 path = "tests/v0/stage1/plan/cache_tests.rs"
+
+# Stage 1 批次 D（r8：能力 I/O 基础传递 + 内部效应/测试运行器）
+[[test]]
+name = "capability_tests"
+path = "tests/v0/stage1/plan/capability_tests.rs"
+
+[[test]]
+name = "test_runner_tests"
+path = "tests/v0/stage1/plan/test_runner_tests.rs"

@@ -353,3 +353,69 @@ L3 全量内循环（跨 kerf-compiler/kerf-driver/kerf-syntax/CLI/web 五面）
 
 Effect 内部最小实现（编译器错误恢复用）+ 能力 I/O 基础传递
 （13 §3.1.3 规格）。
+
+## v0.2.0-r8（2026-09-10）——Stage 1 批次 D：能力 I/O 基础传递 + 内部效应做实 + 用例运行器
+
+### 交付一：Effect Handlers 编译器内部做实（12-roadmap §2.4.3 第二级）
+
+- `kerf-driver/src/effects.rs`（新，414 行）：**类型化一次性逃逸层**
+  `handle_escape<R,T>` / `perform_escape<T>`——载荷从任意嵌套深度
+  上展开至最近同类型边界，零签名污染（「任意流程节点能力」的机械
+  实现）；线程局部深度计数 + `catch_unwind`/`resume_unwind` std-only
+  载荷逃逸 + 私有载荷类型判别的 panic hook 过滤（效应控制流零噪声、
+  真实 panic 照常穿透——12 单元测试锁定）
+- **冻结契约层** `InternalEffectSystem`：reserved.rs `EffectSystem`
+  P3 形状的真实现（与 Probe 测试构成「可编译/可承载」契约双证）；
+  语言面保持 P3（D1 裁定——语言级 perform/handle 语义留 Stage 2）
+- VM 帧 `ext1` 槽位不激活（Stage 2 语言级效应时启用）
+
+### 交付二：能力模型 I/O 基础传递（13 §3.1.3 四条款做实）
+
+- **声明形式 `(require io read|write)`**：`CoreExpr::Require`（零运行时
+  语义——求值恒 nil 双路径一致 / 编译产 PushNil / IR 降级 nil 节点）；
+  幂等集合语义；核心冻结边界精确化（「语义原语集冻结 + 声明变体可
+  追加」——01-core-forms §6）
+- **R9 保守静态权限验证**：门控内置名（read-line/read-int/read-num/
+  print/newline/write-string）任意位置引用未声明 → **E0006 编译期
+  错误**（front 管线 run/eval/check/compile 全路径单一验证点；用户
+  接管豁免 + 卫生回退基名判定——零误报纪律）
+- **令牌授权面**：`mint_read_token`/`mint_write_token`（pub(crate)
+  构造面控制）+ `IoGrant` 按声明铸造 + `StdCapabilityIO`（冻结 trait
+  的 stdio 实现）+ `register_globals` 能力参数化（未声明即不注册——
+  fail-closed）
+- **FS-4 修复**：read-line 元数校验补齐（能力参数化重写时顺带——
+  negative_vm_tests 存档断言激活）
+
+### 交付三：用例运行器 `kerf test`（测试面即语言面）
+
+- `test_source` API + CLI `kerf test` 子命令：前置形式（define/set!/
+  module/require）逐用例重放 + 顶层表达式 = 用例（值非 #f = PASS）；
+  **短路 + 恢复**（效应系统消费面——case 内任意深度失败即停、边界
+  捕获后下一 case 续跑）+ 状态隔离（每 case 全新环境与堆）
+- 设计文档：[11-testing §4](docs/lang-design/11-testing.md)
+
+### 交付四：文档回写 v5.4（lang-design 七文件 + sop.md v11.1）
+
+- lang-design：00（v5.4 修订记录 + next.md 吸收审计结论）/ 01（§6
+  require 声明形式设计）/ 02（Token 叶级 45）/ 09（v5.6 能力门控）/
+  11（§4 用例运行器）/ 12（v5.4 演进矩阵状态）/ 13（v5.4 双做实注记）
+- sop.md v11.1：§21.9 矩阵现状对账（四项 ✅ + 类型检查器提前引入
+  偏差登记）+ §16.1 变更日志 + §21.7.1 P4 行注记
+- 测试计划：capability.md / test-runner.md（新）+ matrix.md r8 全量
+  对账（含 r7 陈旧计数修正）
+
+### 质量口径
+
+- §3.2 全绿：build --release 0 警告 / fmt 零 diff / clippy -D warnings
+  零警告 / test --release **476:0:0**（408 基线 + 68：capability 24 +
+  test_runner 18 + driver 单元 25（effects 12 + capability 13）+
+  negative_vm +1（FS-4 激活））/ 审计集 41/41 复跑 EXIT 0
+- 全局正负比 **≈1:3.15 维持**（负 ≈1118 / 正 ≈355 case；E0006 能力
+  权限码逐条断言——第七族结构码就位）
+- 确定性纪律：read-line EOF 语义经子进程探针（Stdio::null()——不依赖
+  运行器 stdin 形态）
+
+### 下一步（批次 E，plan §5）
+
+Expander kerf 重写 + TD-004 scope-set 解析收口 + TD-021 hof 用户面
+注入（模块机制）→ Stage 1 门审查（§7.3 + §21.3 四条验收）。

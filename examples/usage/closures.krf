@@ -1,4 +1,5 @@
 ; closures.krf —— 词法闭包与可变捕获（§8.5）
+(require io write)
 (define (make-counter)
   (let ((n 0))
     (lambda ()

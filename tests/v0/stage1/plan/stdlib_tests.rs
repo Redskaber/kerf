@@ -147,8 +147,11 @@ fn string_ops_negative_semantics() {
 /// 双路径测试内经 stdin 重定向锚定不可行——CLI 层验证，正例 ≥6 case）。
 #[test]
 fn io_ops_positive_semantics() {
-    assert_eq!(common::run_rendered("(newline)"), "nil");
-    assert_eq!(common::run_rendered("(write-string \"x\")"), "nil");
+    assert_eq!(common::run_rendered("(require io write) (newline)"), "nil");
+    assert_eq!(
+        common::run_rendered("(require io write) (write-string \"x\")"),
+        "nil"
+    );
     assert_eq!(common::run_rendered("(assert-eq? 'a 'a)"), "true");
     assert_eq!(common::run_rendered("(assert-eq? 1 1)"), "true");
     assert_eq!(common::run_rendered("(assert-eq? \"s\" \"s\")"), "true");
@@ -161,10 +164,13 @@ fn io_ops_positive_semantics() {
 /// I/O 负向语义（元数/类型，≥6 case）。
 #[test]
 fn io_ops_negative_semantics() {
-    expect_run_err("(newline 1)", "newline 需要 0 个参数");
-    expect_run_err("(write-string 5)", "write-string 需要 str，实际 int");
-    expect_run_err("(read-int 1)", "read-int 需要 0 个参数");
-    expect_run_err("(read-num 1)", "read-num 需要 0 个参数");
+    expect_run_err("(require io write) (newline 1)", "newline 需要 0 个参数");
+    expect_run_err(
+        "(require io write) (write-string 5)",
+        "write-string 需要 str，实际 int",
+    );
+    expect_run_err("(require io read) (read-int 1)", "read-int 需要 0 个参数");
+    expect_run_err("(require io read) (read-num 1)", "read-num 需要 0 个参数");
     expect_run_err("(error)", "error 需要 ≥1 个参数");
     expect_run_err("(assert-eq? 1 2)", "assert-eq? 断言失败：1 ≠ 2");
     expect_run_err("(assert-eq? 1)", "assert-eq? 需要 2 个参数");
@@ -224,10 +230,22 @@ fn stdlib_negative_arity_matrix() {
         ("(str-upcase)", "str-upcase 需要 1 个参数，实际 0"),
         ("(string->symbol)", "string->symbol 需要 1 个参数，实际 0"),
         ("(symbol->string)", "symbol->string 需要 1 个参数，实际 0"),
-        ("(newline 1 2)", "newline 需要 0 个参数，实际 2"),
-        ("(write-string)", "write-string 需要 1 个参数，实际 0"),
-        ("(read-int 1 2)", "read-int 需要 0 个参数，实际 2"),
-        ("(read-num 'a)", "read-num 需要 0 个参数，实际 1"),
+        (
+            "(require io write) (newline 1 2)",
+            "newline 需要 0 个参数，实际 2",
+        ),
+        (
+            "(require io write) (write-string)",
+            "write-string 需要 1 个参数，实际 0",
+        ),
+        (
+            "(require io read) (read-int 1 2)",
+            "read-int 需要 0 个参数，实际 2",
+        ),
+        (
+            "(require io read) (read-num 'a)",
+            "read-num 需要 0 个参数，实际 1",
+        ),
         ("(error)", "error 需要 ≥1 个参数"),
         ("(assert-eq?)", "assert-eq? 需要 2 个参数，实际 0"),
     ];
@@ -277,7 +295,10 @@ fn stdlib_negative_type_matrix() {
             "string->symbol 需要 str，实际 symbol",
         ),
         ("(symbol->string 5)", "symbol->string 需要 symbol，实际 int"),
-        ("(write-string 'a)", "write-string 需要 str，实际 symbol"),
+        (
+            "(require io write) (write-string 'a)",
+            "write-string 需要 str，实际 symbol",
+        ),
         ("(str-substring \"abc\" 2 1)", "索引越界：2..1（长度 3）"),
     ];
     for (src, msg) in cases {
@@ -342,7 +363,12 @@ fn stdlib_negative_str_type_scan() {
     ];
     for fn_name in single_arg_fns {
         for (val, ty) in type_repr {
-            let src = format!("({} {})", fn_name, val);
+            // write-string 门控（r8 R9）：先声明 write 能力再触发类型错误
+            let src = if *fn_name == "write-string" {
+                format!("(require io write) ({} {})", fn_name, val)
+            } else {
+                format!("({} {})", fn_name, val)
+            };
             let msg = format!("{} 需要 str，实际 {}", fn_name, ty);
             expect_run_err(&src, &msg);
         }

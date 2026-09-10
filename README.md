@@ -1,10 +1,10 @@
 # kerf
 
-**最小自举系统级编程语言**——Stage 0（语义验证，Rust 100% 实现）。
+**最小自举系统级编程语言**——Stage 0（语义验证，Rust 100% 实现）→ Stage 1（自举验证进行中）。
 
-> **设计蓝图**: docs/lang-design/（stage0.md v5.0 拆分，20 篇编号文档）
-> **流程管控**: docs/sop.md（v11.0；原名 stage-committee-process.md）
-> **阶段状态**: Stage 0 完成——[状态报告](docs/develop/v0/stage-0/status.md)
+> **设计蓝图**: docs/lang-design/（stage0.md v5.0 拆分，20 篇编号文档，v5.4）
+> **流程管控**: docs/sop.md（v11.1；原名 stage-committee-process.md）
+> **阶段状态**: Stage 1 批次 D 交付（能力 I/O + 内部效应 + 用例运行器）——[阶段计划](docs/develop/v0/stage-1/plan.md)
 
 ## 30 秒了解
 
@@ -54,7 +54,7 @@ cargo build --release
 |------|------|
 | cargo build --release | ✅ 0 警告 |
 | cargo check | ✅ 0 errors / 0 warnings |
-| cargo test --workspace | ✅ **408 通过 / 0 失败 / 1 忽略**（409 函数；负向 case 1077，正负比 ≈1:3.2） |
+| cargo test --workspace | ✅ **476 通过 / 0 失败 / 0 忽略**（476 函数：单元 175 + 集成 301；负向 case ≈1118，正负比 ≈1:3.15；r8） |
 | cargo fmt --check | ✅ 零 diff |
 | cargo clippy -D warnings | ✅ 0 警告 |
 

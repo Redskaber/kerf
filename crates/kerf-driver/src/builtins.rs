@@ -10,6 +10,7 @@
 //! 另含自举 Reader 原语（3，B3）：str->pos-chars / char-whitespace? /
 //! char-alphabetic? ——服务 reader.krf（见各注册处边界注记）。
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -18,8 +19,11 @@ use kerf_runtime::{BoxedInput, RuntimeError};
 use kerf_syntax::{Symbol, SymbolTable};
 use kerf_vm::{box_value, render_value, unbox_slot, BuiltinFn, Value};
 
+use crate::capability::{IoGrant, StdCapabilityIO};
+use crate::reserved::{CapabilityIO, ReadCapability, WriteCapability};
+
 /// 注册全部内置函数到全局环境（返回全局表）。
-pub fn register_globals(table: &mut SymbolTable) -> HashMap<Symbol, Value> {
+pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Symbol, Value> {
     let mut defs: Vec<(&'static str, Rc<BuiltinFn>)> = Vec::new();
     defs.push(("+", arith_builtin("+", Fold::Add, 0)));
     defs.push(("-", arith_builtin("-", Fold::Sub, 1)));
@@ -145,25 +149,10 @@ pub fn register_globals(table: &mut SymbolTable) -> HashMap<Symbol, Value> {
             }
         }),
     ));
-    defs.push((
-        "print",
-        BuiltinFn::new("print", |heap, args| {
-            one_arg("print", &args)?;
-            let rendered = render_value(&args[0], heap);
-            kerf_runtime::write_line_stdout(&rendered)?;
-            Ok(Value::Nil)
-        }),
-    ));
-    defs.push((
-        "read-line",
-        BuiltinFn::new(
-            "read-line",
-            |_, _args| match kerf_runtime::read_line_stdin()? {
-                Some(s) => Ok(Value::Str(Rc::from(s.as_str()))),
-                None => Ok(Value::Nil),
-            },
-        ),
-    ));
+    // print / read-line 能力参数化注册（r8——13 §3.1.3 条款 4）：
+    // 移至 register_io_globals，按 IoGrant 令牌捕获形态注册（未授权
+    // 不注册——fail-closed：无令牌的 I/O 无可达入口）
+    register_io_globals(&mut defs, grant);
     defs.push((
         "str-append",
         BuiltinFn::new("str-append", |_, args| {
@@ -781,86 +770,7 @@ pub fn register_globals(table: &mut SymbolTable) -> HashMap<Symbol, Value> {
         }),
     ));
 
-    // —— 基本 I/O（6）——
-    defs.push((
-        "newline",
-        BuiltinFn::new("newline", |_, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new(format!(
-                    "newline 需要 0 个参数，实际 {}",
-                    args.len()
-                )));
-            }
-            kerf_runtime::write_line_stdout("")?;
-            Ok(Value::Nil)
-        }),
-    ));
-    defs.push((
-        "write-string",
-        BuiltinFn::new("write-string", |_, args| {
-            one_arg("write-string", &args)?;
-            match &args[0] {
-                Value::Str(s) => {
-                    kerf_runtime::write_stdout(s)?;
-                    Ok(Value::Nil)
-                }
-                other => Err(RuntimeError::new(format!(
-                    "write-string 需要 str，实际 {}",
-                    other.type_name()
-                ))),
-            }
-        }),
-    ));
-    defs.push((
-        "read-int",
-        BuiltinFn::new("read-int", |_, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new(format!(
-                    "read-int 需要 0 个参数，实际 {}",
-                    args.len()
-                )));
-            }
-            let line = kerf_runtime::read_line_stdin()?;
-            match line {
-                None => Ok(Value::Nil),
-                Some(s) => match s.trim().parse::<i64>() {
-                    Ok(v) => Ok(Value::Int(v)),
-                    Err(_) => Err(RuntimeError::new(format!(
-                        "read-int 解析失败：非整数字符串「{}」",
-                        s.trim()
-                    ))),
-                },
-            }
-        }),
-    ));
-    defs.push((
-        "read-num",
-        BuiltinFn::new("read-num", |_, args| {
-            if !args.is_empty() {
-                return Err(RuntimeError::new(format!(
-                    "read-num 需要 0 个参数，实际 {}",
-                    args.len()
-                )));
-            }
-            let line = kerf_runtime::read_line_stdin()?;
-            match line {
-                None => Ok(Value::Nil),
-                Some(s) => {
-                    let t = s.trim();
-                    if let Ok(v) = t.parse::<i64>() {
-                        return Ok(Value::Int(v));
-                    }
-                    match t.parse::<f64>() {
-                        Ok(v) => Ok(Value::Float(v)),
-                        Err(_) => Err(RuntimeError::new(format!(
-                            "read-num 解析失败：非数字字符串「{}」",
-                            t
-                        ))),
-                    }
-                }
-            }
-        }),
-    ));
+    // —— 基本 I/O（能力门控 6 项全部移至 register_io_globals——r8）——
     defs.push((
         "error",
         BuiltinFn::new("error", |_, args| {
@@ -900,6 +810,165 @@ pub fn register_globals(table: &mut SymbolTable) -> HashMap<Symbol, Value> {
         globals.insert(sym, Value::Builtin(f));
     }
     globals
+}
+
+/// I/O 内置的能力参数化注册（r8——13 §3.1.3 条款 4「driver 注册的
+/// 内置函数改为能力参数化形态」）。
+///
+/// **门控语义**：令牌句柄存在才注册（授权面 = 声明面，R9 编译期已对
+/// 齐）；闭包捕获 `Rc<RefCell<令牌>>`（F5 线性近似——borrow_mut 互
+/// 斥 = 调用期独占）。错误消息与 r7 逐字兼容（既有负向断言锚定）；
+/// I/O 副作用全部经冻结契约 `StdCapabilityIO`（规格条款 1/2——令牌
+/// 线性占用签名位）。
+fn register_io_globals(defs: &mut Vec<(&'static str, Rc<BuiltinFn>)>, grant: &IoGrant) {
+    if let Some(write_cap) = grant.write_handle() {
+        // —— print：渲染 + 写行（write 能力）——
+        defs.push((
+            "print",
+            BuiltinFn::new("print", {
+                let cap = write_cap.clone();
+                move |heap, args| {
+                    one_arg("print", &args)?;
+                    let rendered = render_value(&args[0], heap);
+                    cap_write_line(&cap, &rendered)?;
+                    Ok(Value::Nil)
+                }
+            }),
+        ));
+        // —— newline：写空行（write 能力）——
+        defs.push((
+            "newline",
+            BuiltinFn::new("newline", {
+                let cap = write_cap.clone();
+                move |_, args| {
+                    if !args.is_empty() {
+                        return Err(RuntimeError::new(format!(
+                            "newline 需要 0 个参数，实际 {}",
+                            args.len()
+                        )));
+                    }
+                    cap_write_line(&cap, "")?;
+                    Ok(Value::Nil)
+                }
+            }),
+        ));
+        // —— write-string：无换行写（write 能力；OS 边界直写——
+        // 冻结契约仅覆盖 write_line，write_string 为 r5 通道层扩展）——
+        defs.push((
+            "write-string",
+            BuiltinFn::new("write-string", {
+                let cap = write_cap.clone();
+                move |_, args| {
+                    one_arg("write-string", &args)?;
+                    match &args[0] {
+                        Value::Str(text) => {
+                            // 令牌占用校验（能力在签名——写入经授权面）
+                            let _ = cap.try_borrow_mut().map_err(|_| {
+                                RuntimeError::new("写能力令牌被并发占用（线性违反）")
+                            })?;
+                            kerf_runtime::write_stdout(text)?;
+                            Ok(Value::Nil)
+                        }
+                        other => Err(RuntimeError::new(format!(
+                            "write-string 需要 str，实际 {}",
+                            other.type_name()
+                        ))),
+                    }
+                }
+            }),
+        ));
+    }
+    if let Some(read_cap) = grant.read_handle() {
+        // —— read-line：读行（read 能力；EOF → nil——与 Stage 0 一致）——
+        defs.push((
+            "read-line",
+            BuiltinFn::new("read-line", {
+                let cap = read_cap.clone();
+                move |_, args| {
+                    if !args.is_empty() {
+                        return Err(RuntimeError::new(format!(
+                            "read-line 需要 0 个参数，实际 {}",
+                            args.len()
+                        )));
+                    }
+                    match cap_read_line(&cap) {
+                        Ok(s) => Ok(Value::Str(Rc::from(s.as_str()))),
+                        Err(e) if e.message == "EOF" => Ok(Value::Nil),
+                        Err(e) => Err(RuntimeError::new(e.message)),
+                    }
+                }
+            }),
+        ));
+        // —— read-int：读行解析整数（read 能力）——
+        defs.push((
+            "read-int",
+            BuiltinFn::new("read-int", {
+                let cap = read_cap.clone();
+                move |_, args| {
+                    if !args.is_empty() {
+                        return Err(RuntimeError::new(format!(
+                            "read-int 需要 0 个参数，实际 {}",
+                            args.len()
+                        )));
+                    }
+                    match cap_read_line(&cap) {
+                        Ok(s) => match s.trim().parse::<i64>() {
+                            Ok(v) => Ok(Value::Int(v)),
+                            Err(_) => Err(RuntimeError::new(format!(
+                                "read-int 解析失败：非整数字符串「{}」",
+                                s.trim()
+                            ))),
+                        },
+                        Err(e) if e.message == "EOF" => Ok(Value::Nil),
+                        Err(e) => Err(RuntimeError::new(e.message)),
+                    }
+                }
+            }),
+        ));
+        // —— read-num：读行解析数值（read 能力）——
+        defs.push((
+            "read-num",
+            BuiltinFn::new("read-num", {
+                let cap = read_cap.clone();
+                move |_, args| {
+                    if !args.is_empty() {
+                        return Err(RuntimeError::new(format!(
+                            "read-num 需要 0 个参数，实际 {}",
+                            args.len()
+                        )));
+                    }
+                    match cap_read_line(&cap) {
+                        Ok(s) => {
+                            let t = s.trim();
+                            if let Ok(v) = t.parse::<i64>() {
+                                return Ok(Value::Int(v));
+                            }
+                            match t.parse::<f64>() {
+                                Ok(v) => Ok(Value::Float(v)),
+                                Err(_) => Err(RuntimeError::new(format!(
+                                    "read-num 解析失败：非数字字符串「{}」",
+                                    t
+                                ))),
+                            }
+                        }
+                        Err(e) if e.message == "EOF" => Ok(Value::Nil),
+                        Err(e) => Err(RuntimeError::new(e.message)),
+                    }
+                }
+            }),
+        ));
+    }
+}
+
+/// 令牌化写行（冻结契约调用——`CapabilityIO::write_line`）。
+fn cap_write_line(cap: &Rc<RefCell<WriteCapability>>, s: &str) -> Result<(), RuntimeError> {
+    <StdCapabilityIO as CapabilityIO>::write_line(&mut cap.borrow_mut(), s)
+        .map_err(|e| RuntimeError::new(e.message))
+}
+
+/// 令牌化读行（冻结契约调用——EOF 约定消息「EOF」，见 StdCapabilityIO）。
+fn cap_read_line(cap: &Rc<RefCell<ReadCapability>>) -> Result<String, crate::reserved::IOError> {
+    <StdCapabilityIO as CapabilityIO>::read_line(&mut cap.borrow_mut())
 }
 
 /// 卫生回退解析：`$hyg$N` 后缀剥离（Stage 0 名称基解析的既定近似，见
@@ -1300,6 +1369,14 @@ fn cmp_builtin(name: &'static str, cmp: Cmp) -> Rc<BuiltinFn> {
 mod tests {
     use super::*;
 
+    /// 全授权（读写令牌齐备——I/O 内置注册的测试前提）。
+    fn full_grant() -> IoGrant {
+        IoGrant::from_requirements(crate::capability::IoRequirements {
+            read: true,
+            write: true,
+        })
+    }
+
     // -----------------------------------------------------------------------
     // 静态签名表 vs 注册表——双向防漂移锚（唯一可信数据源 §2.3 原则 10）
     // -----------------------------------------------------------------------
@@ -1308,7 +1385,7 @@ mod tests {
     #[test]
     fn builtin_sigs_subset_of_registered() {
         let mut t = SymbolTable::new();
-        let g = register_globals(&mut t);
+        let g = register_globals(&mut t, &full_grant());
         let sigs = builtin_sigs(&mut t);
         for sym in sigs.keys() {
             assert!(g.contains_key(sym), "签名表条目未注册：{}", t.name(*sym));
@@ -1320,7 +1397,7 @@ mod tests {
     #[test]
     fn builtin_sigs_cover_operator_families() {
         let mut t = SymbolTable::new();
-        let g = register_globals(&mut t);
+        let g = register_globals(&mut t, &full_grant());
         let sigs = builtin_sigs(&mut t);
         let families = [
             "+",
@@ -1355,7 +1432,7 @@ mod tests {
     #[test]
     fn globals_have_core_set() {
         let mut t = SymbolTable::new();
-        let g = register_globals(&mut t);
+        let g = register_globals(&mut t, &full_grant());
         for name in ["+", "-", "cons", "car", "print", "read-line", "eq?"] {
             let sym = t.intern(name);
             assert!(g.contains_key(&sym), "缺少内置 {}", name);
@@ -1365,7 +1442,7 @@ mod tests {
     #[test]
     fn hygiene_fallback_resolves() {
         let mut t = SymbolTable::new();
-        let mut g = register_globals(&mut t);
+        let mut g = register_globals(&mut t, &full_grant());
         let hyg = t.intern("+$hyg$3");
         let program = BcProgram {
             protos: vec![],
@@ -1381,7 +1458,7 @@ mod tests {
     #[test]
     fn hygiene_fallback_rejects_non_suffix() {
         let mut t = SymbolTable::new();
-        let mut g = register_globals(&mut t);
+        let mut g = register_globals(&mut t, &full_grant());
         let not_hyg = t.intern("some-user-name");
         let program = BcProgram {
             protos: vec![],

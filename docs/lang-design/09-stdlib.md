@@ -1,8 +1,8 @@
 # Stage 0 最小内置库边界
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.5：r7 批次 C——TD-016 收紧：链式比较全操作数前置校验（运行时 + 静态面同步）；v5.4：r6 B3 交付——高阶函数四件套以 kerf 源码实现于 reader.krf 序章（经自举桥直测）；+4 自举 Reader 原语；用户面 hof 注入推迟批次 E（TD-021））
-> **Version**: v5.5
+> **Date**: 2026-09-10（v5.6：r8 批次 D——I/O 六内置能力门控（require 声明 + R9/E0006 + 令牌授权面）+ FS-4 read-line 元数校验补齐；v5.5：r7 批次 C——TD-016 收紧：链式比较全操作数前置校验（运行时 + 静态面同步）；v5.4：r6 B3 交付——高阶函数四件套以 kerf 源码实现于 reader.krf 序章（经自举桥直测）；+4 自举 Reader 原语；用户面 hof 注入推迟批次 E（TD-021））
+> **Version**: v5.6
 > **Status**: Active
 > **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：高阶函数**用户面注入**（preamble/模块机制——批次 E，TD-021；P1 源码拼接/P3 跨程序全局合并/P5 builtin 调闭包三方案已否决）、中缀运算符宏（Stage 1+）、能力模型 I/O（Stage 2）
 
@@ -24,10 +24,11 @@
    - 与接口预留兼容——`register_foreign_ref` 等分配器/VM 接口（见 [05-运行时 §1](./05-runtime.md)）本身就是为宿主注册外部函数而预留的通道，Stage 1+ 升级到能力模型 I/O 时（[13-能力矩阵 §3.1.3](./13-capability-matrix.md)）替换的只是注册进来的实现，而非语言核心。
 4. **操作码与内置函数的关系**：VM 操作码（ADD/SUB/MUL/DIV/MOD、NUM_* 比较组、MAKE_PAIR/CAR/CDR、谓词组等，见 [04-字节码 VM §1](./04-bytecode-vm.md)）是这些内置函数的**底层执行机制**——driver 注册的算术/序对/谓词全局函数最终编译为对应操作码序列；`read-line`/`print`/`str-append` 则经由外部函数接口由宿主实现（通道层见 [05-运行时 §1](./05-runtime.md)）。语言表面（核心形式集合）始终只有 9 个原语。
 
-## 2. 最小 I/O 边界（提取自原 §8.8，v5.2 重写）
+## 2. 最小 I/O 边界（提取自原 §8.8，v5.2 重写；v5.6 能力门控注记）
 
 Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print` 两个用户可见内置函数（经 driver 注册的全局函数，非能力模型）；**通道层**是 [05-运行时 §1](./05-runtime.md) 的 `read_line_stdin()` / `write_line_stdout()`（kerf-runtime/src/io.rs，错误显式返回）。两层经 driver 内置函数接线（语言层 `read-line`/`print` 调用通道层函数）。Stage 0 不引入能力模型 I/O，但 VM 栈帧和分配器接口必须预留 `register_foreign_ref` 等接口（Stage 0 可为 no-op），以便 Stage 1+ 升级到能力模型时无需破坏接口——能力模型 I/O 的类型预留定义见 [13-能力矩阵 §3.1.3](./13-capability-matrix.md)。
 
+> **r8 能力门控注记（2026-09-10，批次 D，v5.6）**：上段「Stage 0 不引入能力模型」描述的是 Stage 0 基线；r8 起 I/O 内置进入**能力门控形态**（[13-能力矩阵 §3.1.3](./13-capability-matrix.md) r8 注记——「基础传递」做实）：程序须声明 `(require io read|write)` 才能引用门控内置（`print`/`newline`/`write-string` 需 write；`read-line`/`read-int`/`read-num` 需 read）；未声明引用 → **E0006 编译期错误**（R9 保守验证，front 全路径）；`register_globals` 按授权面注册（未声明即不注册——fail-closed）。语言层/通道层双层表面不变，只是语言层入口加了权限门。门控不覆盖非 I/O 内置（算术/比较/序对/谓词/字符串——它们无副作用，无需授权）。
 **Stage 0/1 内置函数完整清单（52 项，v5.4：48 项用户面（v5.3）+ 4 项自举 Reader 原语（r6，B3）——逐项对齐 `kerf-driver/src/builtins.rs` 的 `register_globals`）**：
 
 | 类别 | 函数（个数） | 实现层 |
@@ -48,10 +49,10 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 | 列表操作（8，r5） | `length` / `append` / `reverse` / `list-ref` / `list-tail` / `member` / `assoc` / `last-pair` | driver 注册（堆序对链遍历；nil 终结契约——improper 拒绝，除 `append` 末参原样与 `member` 首匹配；`member`/`assoc` 按 `eq?` 查找，命中返回子表/点对、未命中 false） |
 | 谓词（6） | `null?` / `pair?` / `int?` / `bool?` / `procedure?` / `eq?` | VM 操作码（IS_NULL/IS_PAIR/IS_INT/IS_BOOL/IS_PROCEDURE）+ EQ（`eq?` 恰 2 参不可链；即时值按值、堆值按引用） |
 | 逻辑（1） | `not` | VM 操作码（NOT，仅 Bool） |
-| I/O（2） | `print` / `read-line` | driver 注册的外部函数（语言层 → 通道层 read_line_stdin/write_line_stdout；`read-line` 元数不校验为已存档语义发现） |
+| I/O（2） | `print` / `read-line` | driver 注册的外部函数（语言层 → 通道层 read_line_stdin/write_line_stdout；**能力门控**（v5.6/r8：print 需 `(require io write)`、read-line 需 read——未声明报 E0006）；`read-line` 元数校验已补齐（FS-4 修复，恰 0 参）） |
 | 字符串（1） | `str-append` | driver 注册的外部函数（恰 2 参字符串拼接） |
 | 字符串处理（10，r5） | `str-length` / `str-substring` / `str-index-of` / `str-contains?` / `str-prefix?` / `str-suffix?` / `str-upcase` / `str-downcase` / `string->symbol` / `symbol->string` | driver 注册（字符索引 Unicode 安全——非字节；`str-index-of` 未找到 -1；大小写 Unicode 变换；符号互转依赖 TD-002 符号值） |
-| 基本 I/O（6，r5） | `newline` / `write-string` / `read-int` / `read-num` / `error` / `assert-eq?` | driver 注册（`newline` 0 参；`write-string` 无换行——通道层 write_stdout（r5 新增）；`read-int`/`read-num` 行解析（失败结构化报错，EOF → nil）；`error` ≥1 参消息部件（str 原文、其余类型名）；`assert-eq?` 按 `eq?` 断言） |
+| 基本 I/O（6，r5） | `newline` / `write-string` / `read-int` / `read-num` / `error` / `assert-eq?` | driver 注册（`newline` 0 参；`write-string` 无换行——通道层 write_stdout（r5 新增）；`read-int`/`read-num` 行解析（失败结构化报错，EOF → nil）；`error` ≥1 参消息部件（str 原文、其余类型名）；`assert-eq?` 按 `eq?` 断言；**前四项能力门控**（v5.6/r8：newline/write-string 需 write、read-int/read-num 需 read）） |
 | 自举 Reader 原语（4，r6/B3） | `str->pos-chars` / `char-whitespace?` / `char-alphabetic?` / `str-int-valid?` | driver 注册（**运行时服务层，非语言语义面**：服务 reader.krf——字符级索引（(字节偏移 . 单字符 str) 列表）、Unicode White_Space/Alphabetic 属性判定、i64 域校验（Rust parse 同源——维持错误次序 parity）。与 Racket 的 string-ref/char-whitespace? 同层） |
 
 > **高阶函数（r6，B3 交付注记）**：`map` / `filter` / `foldl` / `for-each` 已以 **kerf 源码**

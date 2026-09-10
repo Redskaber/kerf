@@ -1,8 +1,8 @@
 # 最小自举单元的能力模型：九个核心原语
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.2：糖推导示例「非穷举」注记（#5））
-> **Version**: v5.2
+> **Date**: 2026-09-10（v5.4：新增 §6 声明形式 require——r8 批次 D 能力 I/O 基础传递的程序侧声明面 + 核心冻结边界精确化裁定；v5.2：糖推导示例「非穷举」注记（#5））
+> **Version**: v5.4
 > **Status**: Active（核心冻结对象，全生命周期不变）
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-core/src/expr.rs）｜ **所属 Stage**：Stage 0 定义、全生命周期冻结 ｜ **推迟项**：无（原语集合自身不变；周边能力的分级见 [13-能力矩阵](./13-capability-matrix.md)）
 
@@ -91,5 +91,26 @@ type stx_obj = {
 | 正交性（不可互相推导） | 排除实验：任一原语被移除后推导失败（设计审查论证，见 [17-设计原则 §1 原则 2](./17-principles.md)） | 无冗余原语 |
 | 核心冻结（实现与定义一致） | kerf-core 单测：CoreExpr 9 变体逐字段对照本文件 §2 的 OCaml 定义 | 规范 ↔ 代码互锚 |
 | 归约规则组（[06 §2](./06-operational-semantics.md)） | 双执行路径互查（全 73 集成测试） | R1–R9 实例化 |
+| require 声明形式（§6） | stage1/plan 套件：capability_tests 23 case（声明/门控/豁免/形状负例） + test_runner_tests 前置切分 | 声明面与验证面一致 |
 
 > 测试矩阵完整定义见 [11-测试基础设施 §3](./11-testing.md)；本表是其核心形式侧子集。
+
+## 6. 声明形式 require（r8 批次 D 新增——能力 I/O 基础传递的程序侧声明面）
+
+**形式文法**：`(require <主体> <能力>...)`——Stage 1 主体仅 `io`，能力项 `read`/`write`（声明为**幂等集合语义**，重复项去重；主体与能力项均为符号——非符号即展开期 E2 错误；未知主体/未知能力项报错并提示 Stage 2 扩展面 net/process）。
+
+```ocaml
+type capability =
+  | IoRead    (* stdin 读：门控 read-line / read-int / read-num *)
+  | IoWrite   (* stdout 写：门控 print / newline / write-string *)
+
+type core_expr =
+  | ...（9 原语不变）
+  | Require of { caps : capability list }   (* 声明形式——零运行时语义 *)
+```
+
+**语义**：**零运行时语义**——不产生副作用，不求值结果恒为 `nil`（编译侧产 `PushNil`，eval 侧 `Ok(Nil)`，IR 侧降级 nil 共享字面量节点——T1 双路径一致）；不参与作用域分析（无变量引用、无自由变量）与静态类型检查（`Unknown`——权限验证归 R9）。它的**全部语义在编译期**：供 driver front 管线的 R9 保守权限验证（门控内置名引用未声明 → **E0006 编译期错误**，[13-能力矩阵 §3.1.3](./13-capability-matrix.md) 条款 3）与令牌铸造（`IoGrant` 按声明面授权）消费。
+
+**核心冻结边界的精确化裁定**（本节 v5.4）：[17-设计原则 §1 原则 9](./17-principles.md) 冻结的是**语义原语**（九个原语正交完备、运行时语义全量流经它们——本文件 §2 定义不变）；`Require` 是**声明/注记变体**（ADT 第 10 变体——元数据节点，非语义节点）：它不增加任何归约规则（[06-操作语义](./06-operational-semantics.md) 的 R1–R9 不变，求值恒 nil 由编译/求值侧常量化处理）、不与任何原语组合推导、语义上可从程序中整体删除而不改变行为（R9 验证同时移除后程序仍等价——权限门控是外部约束而非程序语义）。**冻结的判定标准因此精确化为「语义原语集冻结 + 声明变体可追加」**——与 Racket `#%require` 形（模块导入声明，非语义原语）同构。Stage 2 语言级能力令牌值化时，`Require` 仍是声明面（令牌铸造的触发器），语义面由值语义承载——两层不会合流。
+
+**测试锚点**：声明后可用（授权链）/未声明报 E0006（run/eval/check 三路径一致门控）/豁免（用户 define 同名接管不误报）/形状负例（缺参/未知主体/未知能力/非符号）——tests/v0/stage1/plan/capability_tests.rs（23 case）；require 为前置形式的切分约定见 [11-测试 §4](./11-testing.md)。

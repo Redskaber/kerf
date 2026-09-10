@@ -26,7 +26,9 @@
 pub mod bootstrap;
 pub mod builtins;
 pub mod cache;
+pub mod capability;
 pub mod driver;
+pub mod effects;
 pub mod hash;
 pub mod reserved;
 
@@ -36,9 +38,15 @@ pub use cache::{
     cache_enabled, cache_entry_count, cache_invalidate_all, cache_key, cache_reset, cache_stats,
     set_cache_enabled, CacheStats, InMemoryCompilationCache, COMPILE_CONFIG_SEED,
 };
+pub use capability::{IoGrant, IoRequirements, StdCapabilityIO};
 pub use driver::{
     check_source, compile_source, dump_stx, dump_tokens, eval_source, run_source,
-    run_source_rendered, CheckReport, CompileOutput, DriverError, RunOutcome, Stage,
+    run_source_rendered, test_source, CheckReport, CompileOutput, DriverError, RunOutcome, Stage,
+    TestCaseOutcome, TestReport,
+};
+pub use effects::{
+    handle_escape, perform_escape, InternalEffectSystem, ValueEffect, ValueEffectFamily,
+    ValueHandler,
 };
 pub use hash::{content_hash64, sha256, sha256_hex};
 pub use reserved::{

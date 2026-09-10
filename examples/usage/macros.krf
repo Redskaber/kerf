@@ -1,4 +1,5 @@
 ; macros.krf —— 卫生宏（syntax-rules + 省略号 + 引入标识符重命名）
+(require io write)
 (define-syntax my-or
   (syntax-rules ()
     ((my-or) false)
