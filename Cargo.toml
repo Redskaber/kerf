@@ -103,3 +103,12 @@ path = "tests/v0/stage1/plan/stdlib_tests.rs"
 [[test]]
 name = "bootstrap_reader_tests"
 path = "tests/v0/stage1/plan/bootstrap_reader_tests.rs"
+
+# Stage 1 批次 C（r7：类型检查器 + 编译缓存）
+[[test]]
+name = "typecheck_tests"
+path = "tests/v0/stage1/plan/typecheck_tests.rs"
+
+[[test]]
+name = "cache_tests"
+path = "tests/v0/stage1/plan/cache_tests.rs"

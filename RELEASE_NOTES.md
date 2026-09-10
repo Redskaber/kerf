@@ -278,3 +278,78 @@ MUV 22-c（标准库最小集）各走完整内循环（22-b TD-004 按重排裁
 注记）/ 02-syntax-model（B3 双实现注记）/ stage-1 plan §5（B3 ✅）/
 matrix r6 对账 / tests/v0/stage1/plan.md（parity 套件行）/ status r6 /
 data-flow（自举 Reader 读路径）
+
+## v0.1.0-r7（2026-09-10）——Stage 1 批次 C：类型检查器 + 编译缓存 + TD-016/013
+
+**SOP 流程**：批次 C 按 plan.md §5 序列（Task 24-d 尾注——批次 B
+收官后承接）；MUV 25-a（类型检查器本体）→ 25-b（编译缓存）→ 25-c
+（TD-016 收紧 + check CLI）→ 25-d（TD-013 设计批）→ 25-e（交付闭环）。
+L3 全量内循环（跨 kerf-compiler/kerf-driver/kerf-syntax/CLI/web 五面）。
+
+### 交付一：保守静态类型检查器（25-a——§21.6 循环依赖缓解落地）
+
+- **kerf-compiler/src/typecheck.rs**：`check_program(core, builtin_sigs, table)`
+  → `Vec<Diagnostic>`（E0005）。**保守性契约**：只报告静态确定的错误——
+  每条规则触发时对应程序运行期必然以同类错误失败；动态信息不足一律
+  Unknown 跳过（误报 = P1 缺陷的工程口径）
+- **R1-R8 规则集**：if 条件非 bool / 算术非数值 / 比较族（TD-016
+  全操作数口径 + TD-011 字符串边界）/ not / car-cdr 非序对 / 不可调用
+  值 / 元数（字面量 lambda + 内置签名）/ 字符串符号族
+- **内置签名表注入**（§2.3-10 唯一可信源）：builtins.rs 的
+  BUILTIN_SIGS（49 项）与 register_globals 同文件维护——签名表 ⊆
+  注册表双向防漂移锚（`builtin_sigs_subset_of_registered` /
+  `builtin_sigs_cover_operator_families`）
+- **多错误收集**：全量诊断按 Span 次序（TD-013 设计的首个实证消费面）
+- **深度预算** MAX_CHECK_DEPTH=512（Reader 256 上限 2×；debug 帧实测
+  ~1 KiB，2000 深度实测溢出 2 MiB 栈——程序化构造单测存档）
+- **消费面**：`kerf check` 子命令（编译 + 静态报告 + 缓存观测，发现
+  问题 exit 1）+ `check_source` 库 API + web /api/check
+
+### 交付二：编译缓存（25-b——13 §3.1.4 三方法规格做实，§21.3 条件 4）
+
+- **InMemoryCompilationCache**（kerf-driver/src/cache.rs）：冻结 trait
+  `get_cached`/`store`/`invalidate` 行为规格 1/2/3 逐条测试锁定 +
+  管线富入口（`lookup_front`/`store_front`——完整前端输出含符号表/
+  源映射/模块簿记；快照语义克隆）
+- **SHA-256 内容寻址**（hash.rs 零外部依赖自实现，FIPS 180-4；NIST
+  标准向量锚定）：`CacheKey{source_hash 截断 u64, config_fingerprint
+  = 阶段种子 + 文件名}`（位置信息入指纹——SourceMap 产物等价性要求）
+- **管线接线**：run/eval/compile/check 经 `compile_front_cached`
+  （同源二次命中——eval 共享 run 条目；错误路径不缓存；`cache_stats`
+  观测 + `set_cache_enabled` 基准对照开关）
+- **确定性证明**：`cached_program_equals_fresh_compile`——命中产物 ==
+  新编译产物（BcProgram PartialEq 逐字段）
+
+### 交付三：TD-016 收紧（25-c——链式比较全操作数前置校验，双侧）
+
+- 运行时面：`cmp_builtin` 前置全参数数值校验（全字符串+排序族 →
+  TD-011 消息；其余首个非数值 → `{op} 需要数值`；**既有两参消息
+  逐条兼容**——负例矩阵全绿回归）
+- 静态面：R3 规则同口径（Ordering / NumOrAllStr）
+- 语义收敛：`(< 3 1 "a")` 静默 false → 结构化错误（FS-5 边界闭环）；
+  `(= 1 2 "s")` 同理；`(< "a" "b" 1)` 混串消息统一为「需要数值」
+- 09-stdlib §2 v5.5 重写 + negative_vm_tests 语义边界注记更新
+
+### 交付四：TD-013 设计批（25-d——多错误收集设计冻结）
+
+- docs/develop/v0/stage-1/multi-error-recovery-design.md：恢复粒度 =
+  形式级（表达式级不恢复——半展开状态重建成本）；恢复机制 = 编译期
+  控制流（非 effect——§11 接口隔离裁定）；收集上限 128 + 截断提示；
+  输出按 Span 次序；实现绑定批次 E（验收标准 5 项）
+- 登记册 TD-013 → 设计完成；TD-016 → 已解决（r7）
+
+### 质量口径
+
+- §3.2 全绿：build --release 0 警告 / fmt 零 diff / clippy -D warnings
+  零警告 / test --release **408:0:1**（356 基线 + 52：typecheck 24 +
+  cache 13 + stdlib TD-016 2 + compiler 单元 3 + builtins 签名 2 +
+  cache 单元 6 + hash 单元 2）/ 审计集 41/41 复跑 EXIT 0
+- 全局正负比 **≈1:3.2 维持**（负 1077 / 正 ≈340 case；r7 typecheck
+  负例 68 全部携带静态确定性反向锚——静态报错程序实跑必报 Run 错）
+- **零误报保守性机械验证**：examples/ 6 程序 + 既有 408 全套件零
+  新诊断（缓存行为等价 + 检查器保守性双证明）
+
+### 下一步（批次 D，plan §5）
+
+Effect 内部最小实现（编译器错误恢复用）+ 能力 I/O 基础传递
+（13 §3.1.3 规格）。

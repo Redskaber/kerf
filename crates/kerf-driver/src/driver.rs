@@ -20,7 +20,8 @@ use kerf_span::{render_diagnostic, Diagnostic, DiagnosticCode, Severity, SourceM
 use kerf_syntax::{Stx, Symbol, SymbolTable};
 use kerf_vm::{run_program, Env, Value, VmError};
 
-use crate::builtins::{register_globals, resolve_hygiene_fallbacks};
+use crate::builtins::{builtin_sigs, register_globals, resolve_hygiene_fallbacks};
+use crate::cache::{cache_enabled, cache_key, with_cache};
 use std::collections::HashMap;
 
 /// 管线阶段标识。
@@ -153,6 +154,10 @@ impl CompileOutput {
 ///
 /// pub(crate)（B3）：自举 Reader 加载（bootstrap 模块）消费 program /
 /// table / source_map 三字段——种子管线的产物形状。
+///
+/// Clone（批次 C）：编译缓存命中返回快照克隆（cache.rs 复用安全性
+/// 前提 3——运行期状态不在缓存条目上变异）。
+#[derive(Clone)]
 pub(crate) struct FrontOutput {
     /// 展开后的核心表达式序列。
     pub(crate) core: Vec<Rc<CoreExpr>>,
@@ -274,6 +279,75 @@ fn front_from_forms(
     })
 }
 
+/// 缓存感知的编译前段（批次 C——[13-能力矩阵 §3.1.4] 做实的管线消费面）。
+///
+/// 键命中：返回 FrontOutput **克隆**（快照语义——符号表/源映射随产物
+/// 一致复用）；未中：编译并写入缓存。错误路径不缓存。缓存停用时直
+/// 编译（基准对照）。返回值第二项 = 是否命中（观测/报告用）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+pub(crate) fn compile_front_cached(
+    source: &str,
+    filename: &str,
+) -> Result<(FrontOutput, bool), DriverError> {
+    if !cache_enabled() {
+        return Ok((compile_front(source, filename)?, false));
+    }
+    let key = cache_key(source, filename);
+    if let Some(front) = with_cache(|c| c.lookup_front(&key)) {
+        return Ok((front, true));
+    }
+    let out = compile_front(source, filename)?;
+    with_cache(|c| c.store_front(key, out.clone()));
+    Ok((out, false))
+}
+
+/// 静态检查报告（`kerf check` 子命令与外部消费方的数据面——多错误
+/// 收集，TD-013 设计的首个消费面）。
+#[derive(Debug, Clone)]
+pub struct CheckReport {
+    /// 全部静态诊断（Span 次序；E0005）。
+    pub diagnostics: Vec<Diagnostic>,
+    /// 逐条渲染后的诊断文本（error[E0005] + `-->` 位置 + 源摘录）。
+    pub rendered: Vec<String>,
+    /// 编译前段是否命中缓存（增量编译基础设施的观测面）。
+    pub cache_hit: bool,
+    /// 原型数。
+    pub proto_count: usize,
+    /// 常量池大小。
+    pub const_count: usize,
+    /// 全局引用数。
+    pub global_ref_count: usize,
+    /// 指令总数。
+    pub instruction_count: usize,
+}
+
+/// 静态检查源文本：read → expand → compile（缓存路径）→ 保守类型
+/// 检查（[kerf_compiler::check_program]——R1-R8 规则集；多错误全量
+/// 收集，非短路）。
+///
+/// 编译期错误（Read/Expand/Compile 阶段）仍以 `DriverError` 返回——
+/// 静态检查只对编译通过的程序进行（诊断链前后不交叉）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+pub fn check_source(source: &str, filename: &str) -> Result<CheckReport, DriverError> {
+    let (front, cache_hit) = compile_front_cached(source, filename)?;
+    let mut table = front.table;
+    let sigs = builtin_sigs(&mut table);
+    let diagnostics = kerf_compiler::check_program(&front.core, &sigs, &table);
+    let rendered = diagnostics
+        .iter()
+        .map(|d| render_diagnostic(d, &front.source_map))
+        .collect();
+    Ok(CheckReport {
+        proto_count: front.program.proto_count(),
+        const_count: front.program.consts.len(),
+        global_ref_count: front.program.global_refs.len(),
+        instruction_count: front.program.total_instructions(),
+        diagnostics,
+        rendered,
+        cache_hit,
+    })
+}
+
 /// 编译源文本（全管线，不执行）。
 ///
 /// 管线：read → expand（含相位 declare/visit 簿记）→ lower（图 IR）
@@ -284,7 +358,7 @@ fn front_from_forms(
 /// 走 [`compile_front`] 快路径（TD-015 分流）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 pub fn compile_source(source: &str, filename: &str) -> Result<CompileOutput, DriverError> {
-    let front = compile_front(source, filename)?;
+    let (front, _hit) = compile_front_cached(source, filename)?;
     // Lower：CoreExpr → 图 IR（结构化形式 + 共享节点）——仅消费方按需计算
     let ir = lower_program(&front.core);
     Ok(CompileOutput {
@@ -316,11 +390,12 @@ impl std::fmt::Debug for RunOutcome {
 
 /// 运行源文本（生产路径：编译前段 + VM 执行）。
 ///
-/// 走 [`compile_front`] 快路径——不构造图 IR（TD-015：执行路径无 IR
-/// 消费，旁路计算为恒定开销浪费）。
+/// 走 [`compile_front_cached`] 快路径——不构造图 IR（TD-015：执行路径
+/// 无 IR 消费，旁路计算为恒定开销浪费）；同源重复执行命中编译缓存
+/// （批次 C——内容寻址键，产物等价性由确定性编译保证）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 pub fn run_source(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
-    let out = compile_front(source, filename)?;
+    let (out, _cache_hit) = compile_front_cached(source, filename)?;
     let mut table = out.table;
     let mut globals = register_globals(&mut table);
     // 卫生回退解析（$hyg$N 后缀剥离）
@@ -338,10 +413,11 @@ pub fn run_source(source: &str, filename: &str) -> Result<RunOutcome, DriverErro
 
 /// 求值源文本（参考路径：编译前段 + 元循环求值器）。
 ///
-/// 同 [`run_source`]：走 [`compile_front`] 快路径，不构造图 IR（TD-015）。
+/// 同 [`run_source`]：走 [`compile_front_cached`] 快路径，不构造图 IR
+/// （TD-015）；与 VM 路径共享同一编译缓存（T1 双路径的产物同源）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 pub fn eval_source(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
-    let out = compile_front(source, filename)?;
+    let (out, _cache_hit) = compile_front_cached(source, filename)?;
     let mut table = out.table;
     let globals = register_globals(&mut table);
     // eval 路径全局经根环境注入（宿主信任代码：内置名互不重复，

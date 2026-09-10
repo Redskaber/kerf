@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use kerf_compiler::BcProgram;
+use kerf_compiler::{BcProgram, BuiltinSig, TcParam, TcType};
 use kerf_runtime::{BoxedInput, RuntimeError};
 use kerf_syntax::{Symbol, SymbolTable};
 use kerf_vm::{box_value, render_value, unbox_slot, BuiltinFn, Value};
@@ -1061,12 +1061,202 @@ enum Cmp {
     Ge,
 }
 
+// ---------------------------------------------------------------------------
+// 静态类型检查签名表（Stage 1 批次 C——kerf_compiler::check_program 的注入数据）
+// ---------------------------------------------------------------------------
+
+/// 内置静态签名清单（与 register_globals 的注册表同文件维护——唯一可信
+/// 数据源 §2.3 原则 10；`builtin_sigs_subset_of_registered` 测试锚定不漂移）。
+///
+/// 签名口径与运行时守卫逐项对齐（元数 floor/ceiling 与各注册处的
+/// one_arg/two_args/args.len 守卫一致；参数域与 match 守卫一致）。
+/// 不列入签名表的内置 = 检查器不静态检查（保守跳过，无风险）。
+static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
+    // 算术：数值域；单位元元数 floor（(+)/(*) 合法 0 参；(- x) 一元取负）
+    ("+", BuiltinSig::variadic(TcParam::Num, TcType::Num, 0)),
+    ("-", BuiltinSig::variadic(TcParam::Num, TcType::Num, 1)),
+    ("*", BuiltinSig::variadic(TcParam::Num, TcType::Num, 0)),
+    ("/", BuiltinSig::variadic(TcParam::Num, TcType::Num, 2)),
+    ("mod", BuiltinSig::variadic(TcParam::Num, TcType::Num, 2)),
+    // 比较：= 全数值或全字符串（TD-011/016）；排序族全数值
+    ("=", BuiltinSig::num_or_all_str()),
+    ("<", BuiltinSig::ordering()),
+    (">", BuiltinSig::ordering()),
+    ("<=", BuiltinSig::ordering()),
+    (">=", BuiltinSig::ordering()),
+    // 序对
+    (
+        "cons",
+        BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Pair),
+    ),
+    ("car", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
+    ("cdr", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
+    // list：空参 → nil（结果域 Pair∪Nil → Unknown 保守）
+    (
+        "list",
+        BuiltinSig::variadic(TcParam::Any, TcType::Unknown, 0),
+    ),
+    // 谓词（结果 Bool——上层 if 条件推断消费）
+    ("null?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("pair?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("int?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("bool?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    (
+        "procedure?",
+        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
+    ),
+    (
+        "eq?",
+        BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
+    ),
+    // 逻辑
+    ("not", BuiltinSig::fixed(&[TcParam::Bool], TcType::Bool)),
+    // I/O（副作用面——参数域不检查，元数对齐）
+    ("print", BuiltinSig::fixed(&[TcParam::Any], TcType::Nil)),
+    ("newline", BuiltinSig::fixed(&[], TcType::Nil)),
+    (
+        "write-string",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Nil),
+    ),
+    ("read-int", BuiltinSig::fixed(&[], TcType::Unknown)),
+    ("read-num", BuiltinSig::fixed(&[], TcType::Unknown)),
+    (
+        "error",
+        BuiltinSig::variadic(TcParam::Any, TcType::Unknown, 1),
+    ),
+    // 列表族（List = Pair∪Nil：length/reverse 接受空表）
+    ("length", BuiltinSig::fixed(&[TcParam::List], TcType::Int)),
+    (
+        "reverse",
+        BuiltinSig::fixed(&[TcParam::List], TcType::Unknown),
+    ),
+    (
+        "append",
+        BuiltinSig::variadic(TcParam::Any, TcType::Unknown, 0),
+    ),
+    (
+        "list-ref",
+        BuiltinSig::fixed(&[TcParam::List, TcParam::Int], TcType::Unknown),
+    ),
+    (
+        "list-tail",
+        BuiltinSig::fixed(&[TcParam::List, TcParam::Int], TcType::Unknown),
+    ),
+    (
+        "member",
+        BuiltinSig::fixed(&[TcParam::Any, TcParam::List], TcType::Bool),
+    ),
+    (
+        "assoc",
+        BuiltinSig::fixed(&[TcParam::Any, TcParam::List], TcType::Unknown),
+    ),
+    (
+        "last-pair",
+        BuiltinSig::fixed(&[TcParam::Pair], TcType::Pair),
+    ),
+    // 字符串族
+    (
+        "str-length",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Int),
+    ),
+    (
+        "str-append",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Str),
+    ),
+    (
+        "str-substring",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Int, TcParam::Int], TcType::Str),
+    ),
+    (
+        "str-index-of",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Int),
+    ),
+    (
+        "str-contains?",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
+    ),
+    (
+        "str-prefix?",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
+    ),
+    (
+        "str-suffix?",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
+    ),
+    (
+        "str-upcase",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Str),
+    ),
+    (
+        "str-downcase",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Str),
+    ),
+    (
+        "string->symbol",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Symbol),
+    ),
+    (
+        "symbol->string",
+        BuiltinSig::fixed(&[TcParam::Symbol], TcType::Str),
+    ),
+    // Reader 原语（B3）
+    (
+        "str->pos-chars",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Pair),
+    ),
+    (
+        "char-whitespace?",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
+    ),
+    (
+        "char-alphabetic?",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
+    ),
+    (
+        "str-int-valid?",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
+    ),
+    // 断言
+    (
+        "assert-eq?",
+        BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
+    ),
+    // read-line：运行时不检查元数（忽略多余参数）——签名表不列（不静态断言）
+];
+
+/// 构造内置静态签名表（符号 → 签名；check_program 的注入入口）。
+pub fn builtin_sigs(table: &mut SymbolTable) -> HashMap<Symbol, BuiltinSig> {
+    BUILTIN_SIGS
+        .iter()
+        .map(|(name, sig)| (table.intern(name), *sig))
+        .collect()
+}
+
 fn cmp_builtin(name: &'static str, cmp: Cmp) -> Rc<BuiltinFn> {
     BuiltinFn::new(name, move |_, args| {
         if args.len() < 2 {
             return Err(RuntimeError::new(format!("{} 至少需要 2 个参数", name)));
         }
-        // 链式比较：(= a b c) 等价于相邻两两全部成立
+        // TD-016（批次 C 收紧）：前置全参数数值校验——比较链短路终止
+        // 不再跳过后续操作数的类型检查（09-stdlib §2 v5.5 全操作数口径；
+        // 修复前的 `(< 3 1 "a")` 首对为假即静默返回 false 为 FS-5 边界）。
+        // 校验顺序与既有两参消息兼容：全字符串 + 排序族 → TD-011 消息；
+        // 其余逐参数值域 → `{op} 需要数值`（与两参混串/非数值消息一致）。
+        let all_str = args.iter().all(|a| matches!(a, Value::Str(_)));
+        if all_str && !matches!(cmp, Cmp::Eq) {
+            return Err(RuntimeError::new(
+                "字符串仅支持 = 比较（Stage 0 边界，TD-011）",
+            ));
+        }
+        if !all_str {
+            for a in &args {
+                if a.as_number().is_none() {
+                    return Err(RuntimeError::new(format!("{} 需要数值", name)));
+                }
+            }
+        }
+        // 链式比较：(= a b c) 等价于相邻两两全部成立（类型域已前置
+        // 校验——下方错误臂成为防御性路径）
         for w in args.windows(2) {
             let (a, b) = (&w[0], &w[1]);
             let ok = match (&cmp, a, b) {
@@ -1109,6 +1299,58 @@ fn cmp_builtin(name: &'static str, cmp: Cmp) -> Rc<BuiltinFn> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // -----------------------------------------------------------------------
+    // 静态签名表 vs 注册表——双向防漂移锚（唯一可信数据源 §2.3 原则 10）
+    // -----------------------------------------------------------------------
+
+    /// 签名表名字全部已注册（重命名/删除内置时本测试拦截漂移）。
+    #[test]
+    fn builtin_sigs_subset_of_registered() {
+        let mut t = SymbolTable::new();
+        let g = register_globals(&mut t);
+        let sigs = builtin_sigs(&mut t);
+        for sym in sigs.keys() {
+            assert!(g.contains_key(sym), "签名表条目未注册：{}", t.name(*sym));
+        }
+    }
+
+    /// 运算符族签名全覆盖（算术/比较/序对/逻辑/字符串转换/断言——新内置
+    /// 加入这些族而未配签名时拦截）。
+    #[test]
+    fn builtin_sigs_cover_operator_families() {
+        let mut t = SymbolTable::new();
+        let g = register_globals(&mut t);
+        let sigs = builtin_sigs(&mut t);
+        let families = [
+            "+",
+            "-",
+            "*",
+            "/",
+            "mod",
+            "=",
+            "<",
+            ">",
+            "<=",
+            ">=",
+            "cons",
+            "car",
+            "cdr",
+            "not",
+            "eq?",
+            "str-length",
+            "str-append",
+            "string->symbol",
+            "symbol->string",
+            "length",
+            "assert-eq?",
+        ];
+        for name in families {
+            let sym = t.intern(name);
+            assert!(g.contains_key(&sym), "内置缺失：{}", name);
+            assert!(sigs.contains_key(&sym), "运算符族缺签名：{}", name);
+        }
+    }
 
     #[test]
     fn globals_have_core_set() {

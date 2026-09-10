@@ -11,7 +11,9 @@
 use std::rc::Rc;
 
 use kerf_core::CodeValue;
-use kerf_driver::{compile_source, dump_stx, dump_tokens, eval_source, run_source};
+use kerf_driver::{
+    cache_stats, check_source, compile_source, dump_stx, dump_tokens, eval_source, run_source,
+};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
@@ -112,16 +114,40 @@ fn cmd_check(path: &str) -> i32 {
         Ok(s) => s,
         Err(c) => return c,
     };
-    match compile_source(&src, path) {
-        Ok(out) => {
-            println!(
-                "ok：{} 原型 / {} 常量 / {} 全局引用 / {} 指令",
-                out.program.proto_count(),
-                out.program.consts.len(),
-                out.program.global_refs.len(),
-                out.program.total_instructions()
-            );
-            0
+    // 批次 C：编译（缓存路径）+ 保守静态类型检查（多错误全量收集）
+    match check_source(&src, path) {
+        Ok(report) => {
+            let cache_note = if report.cache_hit {
+                "缓存命中"
+            } else {
+                "缓存未中"
+            };
+            let stats = cache_stats();
+            if report.diagnostics.is_empty() {
+                println!(
+                    "ok：{} 原型 / {} 常量 / {} 全局引用 / {} 指令（{}；会话命中 {}/{}）",
+                    report.proto_count,
+                    report.const_count,
+                    report.global_ref_count,
+                    report.instruction_count,
+                    cache_note,
+                    stats.hits,
+                    stats.hits + stats.misses
+                );
+                0
+            } else {
+                for line in &report.rendered {
+                    eprintln!("{}", line);
+                }
+                println!(
+                    "发现 {} 个静态问题（E0005；{} 原型 / {} 指令；{}）",
+                    report.diagnostics.len(),
+                    report.proto_count,
+                    report.instruction_count,
+                    cache_note
+                );
+                1
+            }
         }
         Err(e) => {
             eprintln!("{}", e);

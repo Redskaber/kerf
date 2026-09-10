@@ -446,3 +446,38 @@ fn stdlib_negative_str_second_arg_scan() {
         "append 第 2 参需要 list，实际 str",
     );
 }
+
+// ---------------------------------------------------------------------------
+// TD-016（批次 C）：链式比较全操作数前置校验
+// ---------------------------------------------------------------------------
+
+/// TD-016 负向（6 case）：比较链短路终止不再跳过后续操作数类型检查。
+/// 修复前行为（FS-5 边界）：`(< 3 1 "a")` 静默返回 false——语义文档
+/// 09-stdlib §2 v5.5 已同步收紧为全操作数口径。
+#[test]
+fn comparison_chain_all_operands_checked() {
+    // 短路后仍检查：首对为假 + 尾参非数值
+    expect_run_err("(< 3 1 \"a\")", "< 需要数值");
+    expect_run_err("(>= 5 2 'sym)", ">= 需要数值");
+    // 等值链同理：首对不等 + 尾参非数值
+    expect_run_err("(= 1 2 \"s\")", "= 需要数值");
+    // 深位混串（链中段非数值）
+    expect_run_err("(< 1 2 3 \"a\" 4)", "< 需要数值");
+    // 全数值链不受影响（正向回归锚——短路值语义保持）
+    assert_eq!(common::run_rendered("(< 1 2 3)"), "true");
+    assert_eq!(common::run_rendered("(< 3 1 2)"), "false");
+    assert_eq!(common::run_rendered("(= 1 1 1)"), "true");
+    // 全字符串等值链不受影响（= 的字符串相等保持）
+    assert_eq!(common::run_rendered("(= \"a\" \"a\" \"a\")"), "true");
+}
+
+/// TD-016 收敛注记（3 case）：混串排序链消息统一为「需要数值」
+/// （修复前 `(< "a" "b" 1)` 报 TD-011 字符串消息——前置校验后按首个
+/// 非数值操作数归因，两参消息口径不变）。
+#[test]
+fn comparison_chain_mixed_string_converges() {
+    expect_run_err("(< \"a\" \"b\" 1)", "< 需要数值");
+    expect_run_err("(> 1 \"a\" \"b\")", "> 需要数值");
+    // 两参混串口径不变（回归锚）
+    expect_run_err("(< \"a\" 1)", "< 需要数值");
+}

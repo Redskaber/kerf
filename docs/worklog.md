@@ -1020,3 +1020,232 @@ Stage Summary:
 - 遵循原则：§9.4.3（正负例成对 + 实跑断言防误收）、§7.1（集成验证
   ≥3：parity/管线/hof）、§2.3-11（断言全部经双实现实跑比对——
   零手写期望值快照）
+---
+Task ID: 24-d
+Agent: Super Z (main) — QA-A/REC-A
+Task: §3.2 终验全绿 + 文档回写 + web 同步 + Agent Browser 验证 + §19 打包 r6（批次 B 收官 B3 交付闭环）
+
+Work Log:
+- §3.2 六命令实测全绿（硬性门 1，cargo clean 起步）：
+  (1) cargo clean ✅（4779 文件 842.3MiB）
+  (2) cargo build --release：0 警告 ✅
+  (3) cargo check --workspace --all-targets：0 errors / 0 warnings ✅
+  (4) cargo fmt --check：零 diff ✅
+  (5) cargo clippy --workspace --all-targets -- -D warnings：0 ✅
+  (6) cargo test --release --workspace：**356 通过 / 0 失败 / 1 忽略** ✅
+      （324 基线 + 32：VM call_closure 4 + parity 套件 28）
+- 审计集复跑（release）：41/41 PASS / EXIT 0；§7.3.1 配比与七类覆盖满足
+- 文档回写（§8.4/8.5 对账）：
+  - 07-bootstrap v5.3（§3.2 B3 交付注记 + 混合期构成三项状态）
+  - 09-stdlib v5.4（52 项清单：+4 Reader 原语行 + hof r6 交付注记）
+  - 02-syntax-model（§6 B3 双实现注记——框架的 kerf 源码落地）
+  - stage-1/plan §5（批次 B 行 B3 ✅ + TD-004 批次 E + TD-021 注记）
+  - matrix.md r6（356 对账 + 正负比 1:3.2 全局口径：负 1000 case）
+  - tests/v0/stage1/plan.md（parity 套件行）+ status.md r6 + RELEASE_NOTES r6
+  - tech-debt-register：TD-021（hof 用户面注入——P1/P3/P5 否决 + 批次 E
+    模块系统载体）+ TD-022（自举 Reader 帧消耗 O(字符)——Stage 2 TCO 决策点）
+  - graph/pipeline/data-flow.md（自举读路径图：BOOT 子图 + 桥 + oracle
+    虚线）+ calibration-data.md（r6 教训：跨表示边界字段/tag 错位对策）
+  - capability-boundaries（52 内置）
+- web 同步（Next.js / 路由 / 唯一用户可见面）：
+  - kerf-data：roadmap Stage 1 →「批次 A/B 已交付；B 收官」+ B3 要点
+    （356 经 kerf Reader 执行 / parity 正 87 负 307 / hof 源码化 TD-021）；
+    Stage 0 卡片 356；PACKAGE_CONTENTS 356；capabilities Reader 行
+    （kerf-reader + bootstrap/reader.krf 双载体）
+  - playground 文案：读阶段经自举 Reader + 52 内置
+  - stats API：从 matrix.md 自动（356）+ 包名正则 r5 修复沿用
+- Agent Browser 端到端自验证：
+  - 页面渲染：356 计数 + B3/自举 Reader/parity 套件/reader.krf 文本 ✅
+  - Playground（web → API → kerf run → 自举 Reader 全链）：
+    fib(10) → 55；Unicode/stdlib 组合 → (11 AÉ true (3 2 1))
+    （str-length/str-upcase/string->symbol eq?/reverse 经 kerf Reader）；
+    负例 (+ 1 → E0001「括号未闭合」+ Span 源码摘录渲染（exit 1）
+  - docs API：07-bootstrap-strategy.md B3 交付注记动态读取 ✅（缓存
+    TTL 刷新后确认）
+  - 响应式 390×844：无横向滚动（scrollWidth=390）、无 undefined 文本；
+    console 零错误；桌面 1440×900 截图存档
+- git commit：feat(stage1-batchB) B3 自举 Reader（parity 28 函数）
+- §19 打包 r6：kerf-stage1-v0.2.0-batchB-b3-bootstrap-reader-356tests-
+  r6.tar.gz（525,880 B / 198 文件；exclude target/.git/download/
+  tool-results）；**包内解压全 workspace 自举验证 356:0:1 与交付环境
+  一致 + 审计集 41/41 + fib→55 CLI 实跑**；download/README.md r6 章节
+
+Stage Summary:
+- Stage 1 批次 B 收官闭环：B3 自举 Reader（Reader 以 kerf 源码在 VM 上
+  运行——07 §3.2 混合期 Reader 项 ✅）+ §3.2 全绿 + 审计集 + 文档 8 处
+  回写 + web 同步 + 浏览器四层实证 + 自举验证包 + git 提交（r6）
+- 批次 B 全景：B1 TD-002 符号值（22-a）+ B2 标准库最小集（22-c）+
+  B3 自举 Reader（24-a/b/c）——A4/TD-004 重排批次 E 收口（20-d 裁定维持）
+- 下会话序列（plan §5）：批次 C（类型检查器 → 编译缓存 → TD-016/013）
+- 遵循原则：§3.2（交付前六命令实测——逐条记录）、§7.3.1（审计集
+  release 复跑）、§19（打包 + 包内自举验证）、§8.4.5（文档 8 处回写
+  对账）、浏览器验证标准（Playground 语义/渲染/响应式/console 四面——
+  定位器失误两次自纠后全绿：find text 匹配到提示文本而非按钮，改
+  role locator 解决）
+- 追加（交付闭环内发现即修，§8.4.5 文档-代码一致性同型）：**download 路由
+  包名正则缺陷**——`/api/download` 仍持 r5 修复前的 `/^kerf-stage0-*.tar\.gz$/`
+  前缀匹配（stats 已修而 download 未同步——r5 会话只修了 stats），实际
+  服务 r3 stage0 旧包（443,174B）而非 stage1 包。镜像 stats 修复（通用
+  `/^kerf-.*\.tar\.gz$/` + mtime 降序选最新）后 525,880B 与 r6 tarball
+  字节一致（cmp 验证）；lint 全绿。教训：同型缺陷修复须全消费面扫描
+  （download/stats 两路由当时各持同一正则）。
+
+---
+Task ID: 25-a
+Agent: Super Z (main) — DEV-A
+Task: 批次 C MUV1——保守静态类型检查器本体（kerf-compiler/typecheck.rs，§21.6 循环依赖缓解落地）
+
+Work Log:
+- §0 启动协议：sop.md §1 路由（写代码+测试+文档+交付四类）→ L3 判定
+  （跨 compiler/driver/syntax/CLI/web 五面，~1500 LOC）→ worklog 摘
+  Task 24-d 尾注（批次 C 序列承接，无冲突）→ MUV 25-a~e 拆分
+- 设计收敛（§2.3-11 先查禁猜）：精读 12-roadmap §2.5.2（L 节点）/07 §2
+  （循环依赖陷阱对策）/13 §3.2（类型检查器推迟行）/builtins.rs 52 内置
+  守卫逐项核对（one_arg/two_args/args.len/类型 match）——签名表口径
+  与运行时守卫一致
+- typecheck.rs（~600 行）：TcType 保守类型格（Unknown/Int/Float/Num/
+  Bool/Str/Nil/Symbol/Pair/Callable{min,max}）+ join 合并；R1-R8 规则
+  （if 条件/算术/比较族 TD-016 全操作数+TD-011 字符串边界/not/car-cdr/
+  不可调用/元数 lambda+内置/字符串符号族）；词法环境（params 装订
+  Unknown + define 顺序填充 + 内置遮蔽判定）；多错误收集（全量 +
+  Span 次序排序）；MAX_CHECK_DEPTH=512（Reader 256 上限 ×2——
+  2000 初值实测 debug 栈溢出，依据链写入常量文档）
+- BuiltinSig 数据驱动签名（TcParam/TcParams 规则枚举——检查器不含
+  内置名知识，§2.3-10 唯一可信源：表在 driver builtins.rs）
+- builtins.rs：BUILTIN_SIGS 49 项静态表 + builtin_sigs() 注入 + 双向
+  防漂移锚测试（签名表 ⊆ 注册表 + 运算符族全覆盖）
+- 深度预算程序化单测 ×3（源文本不可达 Reader 256 上限——构造面测试）
+
+Stage Summary:
+- 保守性契约成文：只报静态确定错误（运行期必然失败）——误报 = P1
+  的工程口径；零误报的机械验证 = 全部既有 408 套件零新诊断
+- 遵循原则：§21.6（外部 Rust 实现缓解循环依赖）、§11（签名表注入
+  而非 compiler 依赖 driver）、§2.3-10（表与注册表同文件唯一源）
+
+---
+Task ID: 25-b
+Agent: Super Z (main) — DEV-A
+Task: 批次 C MUV2——编译缓存落地（13 §3.1.4 三方法规格做实 + SHA-256 内容寻址 + 管线接线）
+
+Work Log:
+- hash.rs（~150 行）：SHA-256 零外部依赖自实现（FIPS 180-4：K 常数/
+  compress/填充）+ NIST 四向量锚 + content_hash64（摘要前 8 字节
+  大端——u64 冻结字段口径）+ 截断生日界文档
+- cache.rs（~300 行）：InMemoryCompilationCache（冻结 trait 实现
+  get_cached/store/invalidate 规格条款 1/2/3 + 管线富入口
+  lookup_front/store_front 携带 FrontOutput 完整快照）+ CacheStats
+  观测 + thread_local 会话实例（每测试线程天然隔离）+
+  COMPILE_CONFIG_SEED 常量（编译器升级 → 键变全量自然失效）
+- SymbolTable/ModuleRegistry/FrontOutput 补 Clone 派生（快照语义：
+  intern 幂等保证 ID 一致性；相位标记只作用副本）
+- driver 接线：compile_front_cached（cache_enabled 开关 + 命中克隆
+  + 未中编译存入 + 错误路径不缓存）；run/eval/compile_source 三入口
+  经缓存路径（eval 共享 run 条目——T1 双路径产物同源）
+- 键设计：config_fingerprint = SHA-256(种子 + 文件名)——产物内嵌
+  SourceMap 位置信息，「源不变+配置不变 → 产物必然等价」要求位置
+  一致（文档化裁定）
+- 单测 6（trait 规格）+ hash 2 + cache_tests 13（集成：同源二次
+  命中等价/确定性证明 cached_program_equals_fresh_compile——
+  BcProgram PartialEq 逐字段）
+
+Stage Summary:
+- §21.3 Stage 1 条件 4「增量编译基础设施可用」就位：内容寻址缓存 +
+  三方法冻结契约做实 + 确定性证明锁存
+- 遵循原则：§11（冻结 trait 与管线服务分离的两层入口）、§12（最优
+  >最小——缓存全前端而非仅产物）、13 §3.1.4（签名不动，行为规格
+  逐条落地）
+
+---
+Task ID: 25-c
+Agent: Super Z (main) — DEV-A/QA-A
+Task: 批次 C MUV3——TD-016 收紧（比较族全操作数前置校验，运行时+静态双侧）+ check CLI/API 升级
+
+Work Log:
+- builtins.rs cmp_builtin：前置全参数校验（全字符串+排序族 → TD-011
+  消息；其余首个非数值 → {op} 需要数值）——既有两参消息逐条兼容
+  （comparison_type_mismatch 30 case 全绿回归）；下方逐对比较错误臂
+  转为防御性路径
+- 行为收敛（TD-016 目标）：(< 3 1 "a") 静默 false → 结构化错误；
+  (= 1 2 "s") 同理；(< "a" "b" 1) 消息统一为「需要数值」（文档化
+  收敛，两参口径不变）
+- driver.rs：check_source（CheckReport{diagnostics/rendered/
+  cache_hit/统计四项}——编译缓存路径 + check_program + 渲染）+
+  lib.rs 导出
+- main.rs cmd_check：编译 + 静态报告双段（E0005 渲染到 stderr +
+  汇总行 stdout；发现问题 exit 1）+ 缓存观测行（会话命中 N/M）
+- CLI 冒烟：fib.krf → ok + 0 诊断；构造 3 错程序 → 3 条 E0005 全量
+  渲染（含 ^ 标记源摘录）；(< 3 1 "a") run → [run] E0004 需要数值
+- 测试：stdlib_tests +2 函数（TD-016 负例 9 case + 正向回归锚
+  4 case）；negative_vm_tests 头注 FS-5 边界更新（v5.5 语义）
+
+Stage Summary:
+- TD-016 双侧落地（运行时前置校验 + 静态 R3 规则同口径）——
+  09-stdlib §2 v5.5 重写、登记册转已解决
+- 遵循原则：§2.3-4（显式报错>静默——短路静默 false 即错误掩盖）；
+  保守消息兼容（回归锚先行验证再改语义）
+
+---
+Task ID: 25-d
+Agent: Super Z (main) — ARCH-A
+Task: 批次 C MUV4——TD-013 多错误收集设计批（设计冻结，实现绑定批次 E）
+
+Work Log:
+- docs/develop/v0/stage-1/multi-error-recovery-design.md（新撰）：
+  恢复粒度 = 形式级（表达式级不恢复——半展开状态重建成本 vs IDE
+  反馈收益不成比例）；恢复机制 = 编译期控制流（非 effect——§11
+  接口隔离，效应联动裁定归档：不把展开器内部控制流暴露到语言语义
+  面，Stage 2 复核点已记）；DiagCollector 契约（上限 128 + 截断
+  标记 + into_sorted Span 次序——与 check_program 一致）；消费面
+  四行表（kerf check 已实证——typecheck_tests 多错误断言锚定）；
+  验收标准 5 项（批次 E 实现时）；决策记录表 5 行
+- tech-debt-register：TD-013 → 设计完成（r7 注记 + 代码锚补
+  typecheck.rs）；TD-016 → 已解决（双侧偿还注记）
+- 设计依据链：§8.7（错误是数据）、§12（单批单恢复机制）、§21.7
+  （不为 Stage 2+ 预留投机钩子——效应重述属届时演进）
+
+Stage Summary:
+- TD-013 从 P2 开放债转为「设计完成 + 首消费面实证 + 批次 E 实现绑定」
+  ——check_source 多错误收集即活体设计样例（三错误全量 + Span 次序）
+
+---
+Task ID: 25-e
+Agent: Super Z (main) — QA-A/REC-A
+Task: 批次 C MUV5——§3.2 终验全绿 + 文档回写 + web 同步 + 打包 r7 + 浏览器验证
+
+Work Log:
+- §3.2 六命令实测（cargo clean 起步）：(1) clean ✅ (2) build
+  --release 0 警告 ✅ (3) check --all-targets 0/0 ✅ (4) fmt --check
+  零 diff ✅ (5) clippy -D warnings 0 ✅ (6) test --release
+  **408:0:1** ✅（356 基线 + 52：typecheck 24/cache 13/stdlib 2/
+  compiler 单元 3/builtins 2/cache 单元 6/hash 2）+ 审计集 41/41
+  EXIT 0
+- 零误报保守性双证明：examples/ 6 程序零诊断 + 既有 408 全套件
+  零新诊断（缓存行为等价 + 检查器保守性）；typecheck 68 负例全部
+  携带运行期反向锚
+- 测试文档：typecheck_tests.rs + cache_tests.rs 新套件（[[test]]
+  注册）+ tests/v0/stage1/plan.md 两行 + matrix.md r7（408 对账 +
+  逐二进制实测计数 + E0005 断言 + 正负比 1077/340 ≈1:3.2 维持）
+- 文档回写 13 处：09-stdlib v5.5（TD-016 语义段重写）/13 v5.3
+  （缓存做实 + 类型检查器引入两表行 + §3.1.4 交付注记）/12 v5.3
+  （矩阵行）/tech-debt-register（TD-016 解决 + TD-013 设计完成）/
+  RELEASE_NOTES r7/README（408 + 52 内置 + 新特性行）/graph
+  data-flow v0.1.1（缓存/检查器/签名表三节点）/calibration-data
+  （深度预算标定教训）/develop plan.md 批次 C 行 ✅/multi-error
+  design（25-d）
+- web 同步（Next.js / 路由）：kerf-data（roadmap 批次 C 两要点 +
+  Stage 1 状态/Stage 0 卡 408/PIPELINE 编译器步 + 检查器/crates
+  两行/RESERVATIONS 缓存做实/HERO 两徽章/PACKAGE 408）+ 新
+  POST /api/check 路由（zod 校验→临时文件→kerf check→E0005 诊断
+  与汇总行，路径重写 check.krf）+ playground 静态检查按钮（琥珀
+  ShieldCheck + 终端面板 check 模式渲染：诊断琥珀/汇总按 exit 着色）
+- stats API 自动化：matrix.md「408 通过」解析 + 包名正则取 r7
+  （mtime 降序）
+- git commit + §19 打包 r7 + 包内解压自举验证（见交付段）
+
+Stage Summary:
+- Stage 1 批次 C 交付闭环：类型检查器（保守静态 R1-R8 + 多错误
+  E0005）+ 编译缓存（内容寻址 + 确定性证明）+ TD-016 双侧收紧 +
+  TD-013 设计冻结——§21.3 条件 4 就位，408:0:1 全绿
+- 遵循原则：§3.2（六命令实测逐条记录）、§7.3.1（审计集 release
+  复跑）、§8.4.5（文档 13 处对账——代码-文档一致性）、§9.4.3
+  （正负比维持 + 反向锚新形态）、§19（打包 + 包内自举验证）

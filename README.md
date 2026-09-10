@@ -33,25 +33,28 @@ cargo build --release
 
 ```text
 源码 → kerf-reader（Token/Stx）→ kerf-expander（CoreExpr 9 原语 + 卫生宏）
-     → kerf-core（图 IR + CodeValue）→ kerf-compiler（字节码 40 操作码）
+     → kerf-core（图 IR + CodeValue）→ kerf-compiler（字节码 40 操作码 + 静态检查器）
      → kerf-vm（switch-dispatch + 元循环求值器双路径）→ kerf-runtime（GC 堆）
-编排: kerf-driver（管线 + 相位分离 + 四项接口预留 + 24 内置注册）  基础: kerf-span / kerf-syntax
+编排: kerf-driver（管线 + 相位分离 + 四项接口预留 + 52 内置注册 + 编译缓存）  基础: kerf-span / kerf-syntax
 ```
 
 - **9 个正交核心原语**（核心冻结）+ syntax-rules 卫生宏 + 相位分离（含模块循环依赖检测）
 - **双执行路径互查**：元循环求值器 vs 字节码 VM（结果逐字节一致；App 求值顺序双侧函数先）
 - **标记-清除 GC**：分配驱动 + 冷却退避 + 显式工作栈（根集五来源）
 - **Span 全管线传播**：词法→语法→IR→字节码→运行时错误反查（含调用点追踪 note 帧）
-- **四项接口预留冻结**（P2/P3）：Effect Handlers / 多阶段 / 能力模型 I/O / 编译缓存
+- **保守静态类型检查器**（r7）：`kerf check` 多错误收集（E0005，R1-R8
+  确定性规则——零误报契约，误报 = P1）；TD-016 全操作数比较前置校验（运行时 + 静态双侧）
+- **编译缓存**（r7，13 §3.1.4 做实）：内存内容寻址（SHA-256 键）+
+  管线复用（同源二次执行命中——确定性证明锁存）
 - **driver 公共调试 API**：`dump_tokens` / `dump_stx`（CLI `tokens` / `stx` 子命令经 driver 转发）
 
-## 质量状态（§3.2 验收全绿，r3 负测扩张后）
+## 质量状态（§3.2 验收全绿，r7）
 
 | 门禁 | 结果 |
 |------|------|
 | cargo build --release | ✅ 0 警告 |
 | cargo check | ✅ 0 errors / 0 warnings |
-| cargo test --workspace | ✅ **290 通过 / 0 失败 / 4 忽略**（294 函数；负向 case 483，正负比 ≈1:3.2） |
+| cargo test --workspace | ✅ **408 通过 / 0 失败 / 1 忽略**（409 函数；负向 case 1077，正负比 ≈1:3.2） |
 | cargo fmt --check | ✅ 零 diff |
 | cargo clippy -D warnings | ✅ 0 警告 |
 

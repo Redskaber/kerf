@@ -25,15 +25,22 @@
 
 pub mod bootstrap;
 pub mod builtins;
+pub mod cache;
 pub mod driver;
+pub mod hash;
 pub mod reserved;
 
 // 显式 re-export（§10.1 规则 4：禁止 glob re-export）。
 // 约定：本 crate 暴露驱动层全部公共类型与入口。
-pub use driver::{
-    compile_source, dump_stx, dump_tokens, eval_source, run_source, run_source_rendered,
-    CompileOutput, DriverError, RunOutcome, Stage,
+pub use cache::{
+    cache_enabled, cache_entry_count, cache_invalidate_all, cache_key, cache_reset, cache_stats,
+    set_cache_enabled, CacheStats, InMemoryCompilationCache, COMPILE_CONFIG_SEED,
 };
+pub use driver::{
+    check_source, compile_source, dump_stx, dump_tokens, eval_source, run_source,
+    run_source_rendered, CheckReport, CompileOutput, DriverError, RunOutcome, Stage,
+};
+pub use hash::{content_hash64, sha256, sha256_hex};
 pub use reserved::{
     CacheKey, CachedResult, CapabilityIO, CompilationCache, Effect, EffectFamily, EffectSystem,
     IOError, MultiStage, ReadCapability, WriteCapability,

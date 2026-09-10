@@ -1,8 +1,8 @@
 # 管线数据流图（§15 项目图）
 
 > **Author**: kerf-dev-agent
-> **Date**: 2026-09-10（r6：B3 自举 Reader 读路径——生产 read 经 kerf 源码 Reader（VM 上运行），种子保留为引导 + oracle）
-> **Version**: v0.1.0
+> **Date**: 2026-09-10（r7：批次 C——编译缓存旁路（compile_front_cached 内容寻址键命中返回前端快照）+ 静态检查器旁路（check_program）+ check 消费面；r6：B3 自举 Reader 读路径——生产 read 经 kerf 源码 Reader（VM 上运行），种子保留为引导 + oracle）
+> **Version**: v0.1.1
 > **Status**: Active
 
 ## 编译管线数据流
@@ -25,6 +25,10 @@ flowchart TD
     DRIVER -.->|"内置注册 + 卫生回退（含 4 Reader 原语）"| VM
     DRIVER -.->|"compile_front 快路径（TD-015：run/eval 不构造 IR）"| COMP
     SEED -.->|"parity oracle（bootstrap_reader_tests）"| BREADER
+    CACHE["InMemoryCompilationCache（r7）<br/>内容寻址键：SHA-256(源)+指纹(种子+文件名)<br/>FrontOutput 快照克隆"] -.->|"命中：跳过 read/expand/compile"| DRIVER
+    DRIVER -.->|"未中：编译后 store_front"| CACHE
+    TC["kerf-compiler::typecheck（r7）<br/>check_program R1-R8<br/>多错误收集（E0005）"] -.->|"check_source 消费（旁路报告，不影响执行产物）"| DRIVER
+    DRIVER -.->|"签名表注入（builtin_sigs）"| BUILTINS["kerf-driver::builtins<br/>BUILTIN_SIGS 49 项"]
 ```
 
 > **B3 读路径注记（r6）**：生产 read（`compile_front`/`dump_tokens`/

@@ -105,7 +105,9 @@ impl Keyword {
 /// 符号表：Symbol → 名字的唯一可信数据源。
 ///
 /// 关键字在构造时预内部化（`keyword_symbol` 查询为 O(1) 查表）。
-#[derive(Debug, Default)]
+/// Clone：编译缓存复用（Stage 1 批次 C——缓存命中返回表快照，ID 一致性
+/// 由 intern 幂等性保证：同名 → 同 Symbol）。
+#[derive(Debug, Default, Clone)]
 pub struct SymbolTable {
     names: Vec<Rc<str>>,
     map: HashMap<Rc<str>, Symbol>,

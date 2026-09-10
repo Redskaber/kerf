@@ -1,8 +1,8 @@
 # Stage 0 最小内置库边界
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.4：r6 B3 交付——高阶函数四件套以 kerf 源码实现于 reader.krf 序章（经自举桥直测）；+4 自举 Reader 原语；用户面 hof 注入推迟批次 E（TD-021））
-> **Version**: v5.3
+> **Date**: 2026-09-10（v5.5：r7 批次 C——TD-016 收紧：链式比较全操作数前置校验（运行时 + 静态面同步）；v5.4：r6 B3 交付——高阶函数四件套以 kerf 源码实现于 reader.krf 序章（经自举桥直测）；+4 自举 Reader 原语；用户面 hof 注入推迟批次 E（TD-021））
+> **Version**: v5.5
 > **Status**: Active
 > **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：高阶函数**用户面注入**（preamble/模块机制——批次 E，TD-021；P1 源码拼接/P3 跨程序全局合并/P5 builtin 调闭包三方案已否决）、中缀运算符宏（Stage 1+）、能力模型 I/O（Stage 2）
 
@@ -35,12 +35,15 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 | 算术（5） | `+` / `-` / `*` / `/` / `mod` | VM 操作码（ADD/SUB/MUL/DIV/MOD；数值塔 Int×Int→Int 溢出检查、任一 Float→Float；`mod` 拒绝浮点操作数） |
 | 比较（5） | `=` / `<` / `>` / `<=` / `>=` | VM 操作码（NUM_EQ/NUM_LT/NUM_GT/NUM_LE/NUM_GE；链式比较；字符串仅支持 `=`——TD-011） |
 
-> **链式比较短路语义（Stage 0 显式裁定，FS-5）**：比较操作数链在首对
-> 判定即终止整个链时（如 `(= 1 2 "s")` 首对不等 → false、`(< 3 2 "s")`
-> 首对为假 → false），**后续操作数不做类型检查**；仅当链继续时才逐对
-> 校验（`(< 1 2 "s")` 报类型错）。该值依赖的短路行为是 Stage 0 的既定
-> 语义（实测锚定于 negative_vm_tests 语义边界注记），Stage 1 与类型
-> 检查器联动时统一收紧为全操作数静态检查（TD-016）。
+> **链式比较全操作数前置校验（Stage 1 批次 C收紧，TD-016 已解决，v5.5）**：比较操作数链的
+> **全部操作数先做类型检查再逐对比较**（`cmp_builtin` 前置校验：全数值或（仅 `=`）全字符
+> 串；否则首个非数值操作数报 `{op} 需要数值`）。修复前的 Stage 0 短路语义（FS-5 边界：
+> `(< 3 1 "a")` 首对为假即静默返回 false、后续操作数不检查）已收敛——TD-016 登记项
+> 与类型检查器（r7 `kerf check` 静态面 R3 规则）同步落地。静态检查面对同样口径：
+> 混串排序链报「需要数值」、全字符串排序链报 TD-011 边界消息（口径与运行时一致）。
+> 消息兼容性：既有两参消息逐条保持（负例矩阵回归锚 negative_vm_tests）。
+> 顺带收敛：`(< "a" "b" 1)` 混串链由 TD-011 消息统一为「< 需要数值」
+> （首个非数值操作数归因——两参口径不变）。
 | 序对（4） | `cons` / `car` / `cdr` / `list` | VM 操作码（MAKE_PAIR/CAR/CDR）+ driver 注册（`list` 变长参数右折叠 cons；空参 → nil 值形态，r5） |
 | 列表操作（8，r5） | `length` / `append` / `reverse` / `list-ref` / `list-tail` / `member` / `assoc` / `last-pair` | driver 注册（堆序对链遍历；nil 终结契约——improper 拒绝，除 `append` 末参原样与 `member` 首匹配；`member`/`assoc` 按 `eq?` 查找，命中返回子表/点对、未命中 false） |
 | 谓词（6） | `null?` / `pair?` / `int?` / `bool?` / `procedure?` / `eq?` | VM 操作码（IS_NULL/IS_PAIR/IS_INT/IS_BOOL/IS_PROCEDURE）+ EQ（`eq?` 恰 2 参不可链；即时值按值、堆值按引用） |

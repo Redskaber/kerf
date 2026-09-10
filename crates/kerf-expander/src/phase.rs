@@ -48,7 +48,9 @@ pub struct ModuleEntry {
 }
 
 /// 模块注册表：相位分离的运行簿记（driver 在管线各阶段调用）。
-#[derive(Debug, Default)]
+/// Clone：编译缓存复用（Stage 1 批次 C——快照语义：instantiate 的相位
+/// 标记只作用于命中返回的副本，不污染缓存条目）。
+#[derive(Debug, Default, Clone)]
 pub struct ModuleRegistry {
     entries: Vec<ModuleEntry>,
 }

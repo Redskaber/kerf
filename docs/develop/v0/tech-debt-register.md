@@ -22,7 +22,7 @@
 | TD-010 | 闭包/内置函数装箱（pair 元素） | P3 | 开放 | Stage 1 |
 | TD-011 | 字符串全序比较 | P3 | 开放 | Stage 2 |
 | TD-012 | expander.rs 单文件拆分候选 | P3 | 开放 | Stage 1（切换期） |
-| TD-013 | 多错误收集 / Expander 恢复展开（单错误短路） | P2 | 开放 | Stage 1 |
+| TD-013 | 多错误收集 / Expander 恢复展开（单错误短路） | P2 | **设计完成**（实现绑定批次 E） | Stage 1 批次 E |
 | TD-014 | 展开期错误消息归因失真（嵌套 define） | P3 | 开放 | Stage 1 |
 
 ## 详情
@@ -133,15 +133,22 @@
   拆分前禁止向该文件继续新增职责（防 1500+ 失控）
 - **关联**：worklog Task 14-a（D1 架构审查）；TD-007（迭代式展开重写时自然触碰）
 
-### TD-013 多错误收集 / Expander 恢复展开未实现（r3 新增）
+### TD-013 多错误收集 / Expander 恢复展开未实现（r3 新增；r7 设计完成）
 - **描述**：stage0.md §8.7 / 02 §5 承诺「单次运行报告多个错误 + Expander 错误恢复后继续
   展开后续形式（IDE 增量反馈）」——实现为**单错误短路**（首个错误终止管线，后续形式不再
   展开/求值）。deep-review R1 存档确认，negative_semantics_tests::error_recovery_* 锚定
   当前事实行为（4 case）
 - **等级**：P2（设计承诺与实现存在可观测差距——诊断吞吐量面）
-- **目标时机**：Stage 1（与效应处理时机（§6.4）联动裁定：多错误收集的错误恢复策略与
-  handler continuation 语义同批设计，避免两套恢复机制）
-- **代码锚**：driver.rs（管线短路返回）；negative_semantics_tests.rs:433（存档注记）
+- **r7 设计批交付注记**（批次 C Task 25-d，2026-09-10）：设计已冻结于
+  [multi-error-recovery-design.md](./v0/stage-1/multi-error-recovery-design.md)——
+  恢复粒度=形式级（表达式级不恢复：半展开状态重建成本不成比例）；恢复机制=
+  编译期控制流（**非** effect——§11 接口隔离，效应联动裁定已归档）；收集上限
+  128 + 截断提示；输出次序按 Span（与 check_program 一致）。**首个消费面已实证**：
+  `kerf check`（r7）静态检查多错误全量收集（typecheck_tests::multi_error_collection_span_order
+  锚定三错误全量 + Span 次序）。实现绑定批次 E（Expander kerf 重写同批——避免双恢复机制）
+- **目标时机**：Stage 1 批次 E（验收标准 5 项见设计文档 §6）
+- **代码锚**：driver.rs（管线短路返回）；negative_semantics_tests.rs:433（存档注记）；
+  kerf-compiler/src/typecheck.rs（多错误收集的实证消费面）
 
 ### TD-014 展开期错误消息归因失真（r3 新增）
 - **描述**：嵌套 define 重复（`(define (f) (define x 1) (define x 2))` 类形态）在**展开期**
@@ -168,12 +175,19 @@
 ## TD-016：链式比较短路语义待静态收紧（P3）
 
 - **等级**：P3（语义已显式裁定，行为稳定）
-- **状态**：开放
+- **状态**：**已解决（r7，批次 C Task 25-c）**
 - **目标阶段**：Stage 1（类型检查器联动）
 - **描述**：比较链在首对判定终止时后续操作数不做类型检查
   （FS-5，09-stdlib §2 显式裁定段）。Stage 1 类型检查引入后统一为
   全操作数静态检查。
-- **偿还计划**：builtins.rs 比较族前置全参数数值校验 + 语义文档更新。
+- **r7 偿还注记**：双侧落地——① 运行时面：`cmp_builtin` 前置全参数
+  数值校验（全字符串+排序族 → TD-011 消息；其余首个非数值 →
+  `{op} 需要数值`；既有两参消息逐条兼容，负例矩阵回归锚全绿）；
+  ② 静态面：类型检查器 R3 规则（typecheck.rs Ordering/NumOrAllStr）
+  同口径。语义文档 09-stdlib §2 v5.5 重写（FS-5 边界收敛）；负例
+  +9 case（stdlib_tests comparison_chain_* 两函数）+ 静态面
+  typecheck_tests R3 四函数。
+- **偿还计划**：已交付（双侧 + 文档 + 测试）
 
 ## TD-017：eval 参考路径深度上限不对称（P3）
 
