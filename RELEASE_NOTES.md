@@ -469,6 +469,28 @@ Expander kerf 重写 + TD-004 scope-set 收口 + TD-021 hof 用户面注入 → 
 
 ---
 
+## v0.3.0-r12（2026-09-11）——接口预留完整性扩展轮（next4 第八轮：docs 三层 + 预留层代码冻结 + 500 全绿）
+
+### 交付一：next4.md 第八轮三层吸收（stage0 v6.1 + lang-design v6.1 + sop v11.4）
+
+- **stage0.md v6.0 → v6.1**（4216 → 4757 行）：新增 §9.3-§9.5 接口预留完整性审查（覆盖度评估六类 ~70% → 10 个新识别关键接口：LSP/IDE 查询/调试信息/FFI 边界/增量编译查询/编译器即服务/多目标后端/包管理/AI 辅助 + 效应扩展/能力委托增补 → 完整预留矩阵 14 项 → P0-P3 优先级 + ~3 周成本核算 + 全景图）；§9.2 边界调和（LSP/FFI 重分类——「完全推迟 = 未承诺采用」语义精确化）；§7.1 矩阵 4→14 项；§21.9 预留成本核算；原则 32「预留留白」；附录 E.8 + F 第八轮登记
+- **lang-design v6.1**（八文件）：13 主体（§1.1.1 矩阵 4→14 + §3.2 调和 + §3.3-§3.5 完整审查 + 测试锚点注记）；12 §2.9 成本核算 + Phase 4 更新；10 LSP 重分类注记；08 CodegenBackend 预留注记；15 预留层注记 + 查询双预留互链；17 原则 32 + 附三；18 §5 术语 13 条；19 §6 引用 3 条；00 v6.1 修订记录；kerf/docs/stage0.md 存档再生成 v6.1
+- **sop v11.3 → v11.4**：§2.2 三十二条（第 32 条预留留白 + 违反示例）；新增 §21.12 接口预留时机（能力引入时机 vs 数据结构冻结时机叠加规则 + §13.1/§6.2 双接线 + 成本口径）；§21.11 风险表「接口预留过多/不足」行对账（四项 → 14 项矩阵清单）；§8.4.5 查询表 + 接口预留行；§16.1 v11.4 行
+- **审计**：关键词矩阵 74/74（stage0）+ 29/29（lang-design 全集）全命中；LSP/FFI 陈旧行 0；全 20 文件锚点 GitHub 算法校验零坏链；三面原则编号链一致（29-31 → 32）
+
+### 交付二：预留层代码冻结（reserved/ 模块 4→14 项，P0 位置跨 crate 断言）
+
+- **重构 reserved.rs → reserved/ 模块目录**（§8.4.6 落位 + 既有四接口零迁移）：`mod.rs`（既有 4 项 + 文档 v6.1）+ `toolchain.rs`（P0 三项：LanguageService/IncrementalAst + DebugInfoGenerator/DebugTraceable + QuerySystem/Query；P1：CompilerService/Serializable；P2：PackageManager/ExternalModule/AiAssistant）+ `ffi.rs`（P1：ExternalType/FfiCall/FfiBoundary——GC pin/unpin 隔离协议 + 自举合规注记）+ `codegen.rs`（P1：CodegenBackend/WasmBackend——目标中立类型级证明）
+- **P0 数据结构位置对账**（集成断言 12 项）：每节点 Span ✓（CoreExpr::span()）/ 绑定作用域 ✓（NodeMetadata.scopes）/ 稳定 ID ✓（ir::NodeId）/ 函数边界 ✓（BcProgram::protos）/ 调试帧槽 ✓（VM ext3）/ 内容寻址口径统一 ✓（QueryDescriptor ↔ CacheKey）
+- **测试 +20（480 → 500）**：Probe 冻结 8（单元：toolchain 3 + ffi 3 + codegen 2——「测试实现体编译通过 = 契约冻结」先例沿用）+ 跨 crate 位置断言与形状行为 12（集成 tests/v0/stage1/plan/reserved_ext_tests.rs，经 runner.rs 总入口挂载）
+
+### 交付三：质量口径
+
+- cargo clean + build --release / check / fmt --check / clippy --all-targets -D warnings 全绿；**test --release --workspace 500:0:0**（单元 183 + 集成 317）；审计集 §7.3.1 配比满足 EXIT 0；CLI 冒烟 fib 75025 + kerf test 3/3
+- 语义核心冻结零变动（CoreExpr/9 原语/操作语义）；既有四预留契约签名零迁移（reserved_signatures_are_frozen 先例测试保持）
+- 下一步（批次 E，plan §5）：Expander kerf 重写 + TD-004 scope-set 收口 + TD-021 hof 用户面注入 → Stage 1 门审查（§7.3 + §21.3 四条）
+---
+
 ## v0.3.0-r11（2026-09-10）——吸收完整性复核轮 + 核心原语三面同步（docs / web / 打包）
 
 ### 交付一：next*.md 三源吸收完整性复核（审计轮，零实质缺口确认）

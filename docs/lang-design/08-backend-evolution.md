@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-09
-> **Version**: v5.0（源自 stage0.md v5.0 拆分）
+> **Version**: v6.1（v6.1 完整性审查：CodegenBackend/WasmBackend 预留注记）
 > **Status**: Active
 
 > 本文件收录 stage0.md §11「后端策略与性能演化分析」全文：Stage 0 自建字节码 VM 而不引入 LLVM 的策略论证（基于 Cone 编译器实测数据）、混合演进策略（QBE/Cranelift/C 转译/LLVM 的引入时机表）与性能演化路径（含 PyPy 元追踪数据）。Stage 0 字节码 VM 本体的设计见 [04-字节码 VM](./04-bytecode-vm.md)；各阶段能力引入的完整规划见 [12-路线图 §2](./12-roadmap.md)；开发语言选择见 [16-参照分析 §2](./16-reference-analysis.md)。
@@ -32,6 +32,8 @@
 | Stage 3 | LLVM（可选发布后端） | 极限优化 | 仅发布构建 |
 
 **关键约束**：后端永远可插拔、永远可替换；LLVM 永远不是必需品。
+
+**v6.1 接口预留注记**：后端可插拔性的 trait 形状已在完整性审查中冻结（[13-能力矩阵 §3.3.7](./13-capability-matrix.md)：`CodegenBackend` trait + `WasmBackend`——P1 级，Stage 0 预留 trait 定义，Stage 2 QBE 后端 / Stage 2+ WASM 可选后端按契约实现）；LLVM 永不进入自举链的裁定不变（[12-路线图 §2](./12-roadmap.md) 后端策略）。
 
 ## 3. 性能演化路径（原 §11.3）
 

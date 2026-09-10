@@ -1,7 +1,7 @@
 # Stage 0 阶段状态报告
 
 > **Author**: kerf-dev-agent（QA-A 角色）
-> **Date**: 2026-09-10（r10：吸收/审计轮——next3 七轮双层收敛 + 架构合规审计 4 测试，480 全绿；r6-r8 增量详见 RELEASE_NOTES 与 stage-1/plan.md 批次表）
+> **Date**: 2026-09-11（r12：接口预留完整性扩展轮——next4 第八轮吸收，预留层 4→14 项 trait 冻结 + 20 新测试，500 全绿；r10/r11 详见 RELEASE_NOTES；r6-r8 增量详见 stage-1/plan.md 批次表）
 > **Version**: v0.1.0-r10
 > **Status**: Active（Stage 0 终态保持；Stage 1 增量见 stage-1/plan.md 与 RELEASE_NOTES r4–r10）
 
@@ -10,7 +10,7 @@
 | 指标 | 值 |
 |------|-----|
 | 代码规模（Rust 生产代码，crates + src，不含 tests/examples） | 见 RELEASE_NOTES（r3 末实测口径 `wc -l`） |
-| 测试总数 | **480 全绿**（r10 架构合规审计 +4——十变体穷尽 match 冻结证明 / Reader-Stx 类型隔离 / Expander 唯一桥 / 同源同核；r9 测试入口架构重构（tests/runner.rs 单一总入口）组织收敛零语义变化；r8 476：批次 D +18（用例运行器 18 + cache 10 + capability 8）；r7 408：类型检查器 24 + 编译缓存 13 + stdlib 2 + 单元 10；r6 356：自举 Reader parity 28 + VM 4——**全套件经自举 Reader（kerf 源码）执行**；r5 324：TD-002 符号值 5 + 标准库最小集 15） |
+| 测试总数 | **500 全绿**（r12 接口预留扩展 +20：Probe 冻结 8 + P0 位置跨 crate 断言 12；r10 架构合规审计 +4——十变体穷尽 match 冻结证明 / Reader-Stx 类型隔离 / Expander 唯一桥 / 同源同核；r9 测试入口架构重构（tests/runner.rs 单一总入口）组织收敛零语义变化；r8 476：批次 D +18（用例运行器 18 + cache 10 + capability 8）；r7 408：类型检查器 24 + 编译缓存 13 + stdlib 2 + 单元 10；r6 356：自举 Reader parity 28 + VM 4——**全套件经自举 Reader（kerf 源码）执行**；r5 324：TD-002 符号值 5 + 标准库最小集 15） |
 | 负向测试 | 四文件 87 函数 / **489 case** + stdlib 172 case + bootstrap parity 307 case + 审计集 41 case（负 32）——正负比 **≈1:3.2**（§9.4.3 门限达标，r1 时 1:0.24） |
 | 门审计集 | examples/audit/stage0_gate_audit_r1.rs：41 case（§7.3.1 配比全满足） |
 | crates | 9 成员 + 1 根 crate（零外部依赖，DAG 无环） |

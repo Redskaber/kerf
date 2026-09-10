@@ -103,3 +103,9 @@ mod capability_tests;
 
 #[path = "v0/stage1/plan/test_runner_tests.rs"]
 mod test_runner_tests;
+
+// r12 批次（worklog Task 31-d）：接口预留扩展层（v6.1 完整性审查——
+// next4 第八轮；P0 位置断言 + 14 项预留 API 跨 crate 可达性）
+
+#[path = "v0/stage1/plan/reserved_ext_tests.rs"]
+mod reserved_ext_tests;

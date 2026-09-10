@@ -2,9 +2,9 @@
 
 **最小自举系统级编程语言**——Stage 0（语义验证，Rust 100% 实现）→ Stage 1（自举验证进行中）。
 
-> **设计蓝图**: docs/lang-design/（stage0.md v6.0 拆分，20 篇编号文档，v6.0——含 next3 七轮吸收：内部语法三原则 / 8 原语 Stage 2 迁移映射 / 原则 29-31）+ 上游蓝图存档 docs/stage0.md（v6.0 全文）
-> **流程管控**: docs/sop.md（v11.3——三十一条设计原则；原名 stage-committee-process.md）
-> **阶段状态**: Stage 1 批次 A-D 交付 + r9/r10 吸收审计轮（next3 双层收敛 + 架构合规审计 4 测试，480 全绿）——[阶段计划](docs/develop/v0/stage-1/plan.md)
+> **设计蓝图**: docs/lang-design/（stage0.md v6.1 拆分，20 篇编号文档，v6.1——含 next4 第八轮吸收：接口预留完整性审查 14 项 / 原则 32 预留留白 / 内部语法三原则 / 8 原语 Stage 2 迁移映射）+ 上游蓝图存档 docs/stage0.md（v6.1 全文）
+> **流程管控**: docs/sop.md（v11.4——三十二条设计原则 + §21.12 接口预留时机；原名 stage-committee-process.md）
+> **阶段状态**: Stage 1 批次 A-D 交付 + r9-r12 吸收审计轮（r12：next4 接口预留完整性扩展——预留层 4→14 项 trait 冻结 + 20 新测试，500 全绿）——[阶段计划](docs/develop/v0/stage-1/plan.md)
 
 ## 30 秒了解
 
@@ -40,6 +40,7 @@ cargo build --release
 
 - **9 个正交核心原语**（核心冻结——穷尽 match 机器证明，r10 架构合规审计）+ syntax-rules 卫生宏 + 相位分离（含模块循环依赖检测）
 - **核心原语演进登记**（v6.0）：8 原语形态 = Stage 2 评估目标（语义等价映射：SetBang→Perform(State) / Define→脱糖 / Begin→Let 链 + 新增 Let·Perform·Handle）；内部语法三原则即刻生效——类型安全优于命名安全 / 语义化命名 / 零冗余（类型安全 ADT）
+- **接口预留完整性扩展**（v6.1/r12）：预留层 4→14 项——P0 三项（LSP/IDE 查询 `LanguageService`+`IncrementalAst` / 调试信息 `DebugInfoGenerator`+`DebugTraceable` / 增量编译查询 `QuerySystem`+`Query`）+ P1（FFI 边界 `ExternalType`/`FfiCall`/`FfiBoundary` + 多目标后端 `CodegenBackend`/`WasmBackend` + 编译器即服务 `CompilerService`/`Serializable`）+ P2（包管理 `PackageManager`/`ExternalModule` + AI 辅助 `AiAssistant`）——reserved/ 模块三文件冻结，Probe 测试 + P0 位置跨 crate 断言 20 项交付
 - **自举 Reader**（r6）：reader.krf（~430 行 kerf 源码）在 Stage 0 VM 上运行——生产读路径整体切换，与种子逐字节等价（parity 正 87/负 307）
 - **能力门控 I/O**（r8）：(require io read|write) 声明 → R9 保守验证（E0006 编译期）→ 不可伪造令牌——fail-closed
 - **双执行路径互查**：元循环求值器 vs 字节码 VM（结果逐字节一致；App 求值顺序双侧函数先）
@@ -58,7 +59,7 @@ cargo build --release
 |------|------|
 | cargo build --release | ✅ 0 警告 |
 | cargo check | ✅ 0 errors / 0 warnings |
-| cargo test --workspace | ✅ **480 通过 / 0 失败 / 0 忽略**（480 函数 = 单元 175 + 集成 305，r9 起经 tests/runner.rs 单一总入口组织；含 r10 架构合规审计 4；负向 case ≈1118，正负比 ≈1:3.2） |
+| cargo test --workspace | ✅ **500 通过 / 0 失败 / 0 忽略**（500 函数 = 单元 183 + 集成 317，r9 起经 tests/runner.rs 单一总入口组织；含 r10 架构合规审计 4 + r12 预留扩展 20（Probe 冻结 8 + 跨 crate 位置断言 12）；负向 case ≈1118，正负比 ≈1:3.2） |
 | cargo fmt --check | ✅ 零 diff |
 | cargo clippy -D warnings | ✅ 0 警告 |
 

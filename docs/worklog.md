@@ -1910,3 +1910,254 @@ Stage Summary:
   浏览器验证标准（金路径 + 静态检查 + 文档 + 下载四流）
 - 下一步（批次 E，plan §5）：Expander kerf 重写 + TD-004 scope-set
   收口 + TD-021 hof 用户面注入 → Stage 1 门审查（§7.3 + §21.3 四条）
+
+---
+Task ID: 31-a
+Agent: Super Z (main) — ARCH-A（L3 多角色会话，吸收轮）
+Task: MUV 31-a：next4.md → upload/stage0.md v6.1 吸收（2026 接口预留完整性审查）
+
+Work Log:
+- §0 启动协议：磁盘态验证（upload/ 四源文件 + git a472d10 clean）→ sop.md §1
+  路由 L3 → worklog 摘 Task 30-a~d（r11 复核交付轮闭环）→ Task 31 六 MUV 拆分
+- next4.md 全文精读（415 行——第八轮：既有预留覆盖 ~70%，缺失 30% = 10 个
+  关键接口 + P0-P3 策略 + ~3 周成本 vs 数月级破坏性重构）
+- stage0.md v6.0 → v6.1 编辑（4216 → 4757 行，+541 行 / +18.5KB）：
+  ① 头部/版本历史/迁移注记（v6.1 条目 + 从 v6.0 迁移读者路径）
+  ② §7.1.1 三层矩阵：LSP/FFI 重分类 + 6 新行（调试/增量查询/服务化/多后端/
+  包管理/AI）→ 预留层 4→14 项；§7.1.2 前增补说明
+  ③ §7.2 接口先行原则扩容 + 章末 §9.4/原则 32 裁决基线注记
+  ④ §9 章首 v6.1 增补说明 + §9.1 尾交叉引用（缺失需求承接表）
+  ⑤ §9.2 边界调和（LSP/FFI 移出完全推迟 + 语义精确化：未承诺采用 vs 期票）
+  ⑥ 新增 §9.3（9.3.1 覆盖度评估表 + 9.3.2-9.3.9 八接口详细设计 + 9.3.10
+  效应扩展/能力委托边界增补）+ §9.4 完整预留矩阵（14 项唯一权威清单）+
+  §9.5 优先级策略（P0-P3 表 + 3 周成本核算 + 全景 mermaid）
+  ⑦ §13.1 查询式架构与 §9.3.5 互链（数据面 + 架构面双预留）
+  ⑧ 新增 §21.9 接口预留成本核算（成本/净影响关系表 + 处理程度标度接口维度
+  延伸：能力引入时机 vs 数据结构冻结时机）
+  ⑨ §23.1 三十一条 → 三十二条（原则 32「预留留白原则」）
+  ⑩ 附录 E.8 工具链生态接口文献（LSP/DWARF/WASM 组件模型/rust-analyzer
+  #59-62）+ 附录 F 第八轮登记（F.1 表 + F.2 链 + F.3 线程关系）
+- 吸收完整性审计（沿用 30-a 方法）：关键词矩阵 74/74 全命中（含全部 trait/
+  方法名/成本数字/引句）；§9 结构 9.1-9.5 完整无重复节号；160 代码栅栏
+  平衡；14 mermaid 块（+1 全景图）；伪代码 → 规范化 Rust（→ 箭头修正、
+  补签名，与 §9.1 既有风格一致）
+- 收敛裁定对齐：§9.5.3 图标注采用 §6.12.6 口径（Stage 0-1 冻结 9 原语 /
+  Stage 2 演进 8 原语形态）；FFI 预留加自举合规注记（不入自举链，§21 同口径）
+
+Stage Summary:
+- stage0.md v6.1 收敛完成：next4.md 第八轮意图与精华 100% 吸收（关键词矩阵
+  零缺口 + 结构映射完整）；接口预留层 4→14 项、完全推迟层 8→6 项；
+  §9.4 矩阵为预留层唯一权威清单
+- 遵循：§0（启动协议）、§8.4.5 规则 1（先查文档——比对 v6.0 既有裁定链）、
+  §2.3-9（正确>妥协——LSP/FFI 重分类直面矛盾而非含糊并存）、§14 审计
+  精神（关键词矩阵 + 结构双验证）
+- 下一步：31-b v6.1 → kerf/docs/lang-design/ 融合 + 20 文件系统审查
+
+---
+Task ID: 31-b
+Agent: Super Z (main) — ARCH-A/REV-A（L3 多角色会话，融合审查轮）
+Task: MUV 31-b：stage0.md v6.1 → kerf/docs/lang-design/ 融合 + 20 文件系统性审查
+
+Work Log:
+- 归档同步：kerf/docs/stage0.md 再生为 v6.1（归档说明更新——镜像声明 20 文件 v6.1 同步）
+- 13-capability-matrix（主体融合，v5.5 → v6.1，19.7KB → 36KB）：
+  ① 头部版本/日期；② §1.1.1 矩阵 LSP/FFI 重分类 + 6 新行（保留 r7/r8 做实注记）
+  ③ §1.1.2 前增补说明；④ §1.2 接口先行原则扩容 + 章末 §3.4/原则 32 裁决基线
+  ⑤ §3 章首 v6.1 增补说明 + §3.1 尾缺失需求承接交叉引用
+  ⑥ §3.2 边界调和（LSP/FFI 移出 + 完全推迟语义精确化 + 类型检查器 r7 注记保留）
+  ⑦ 新增 §3.3-§3.5（14KB——从 stage0 §9.3-§9.5 引用适配转换：§8.x→§2.x、
+  §13.1→15 §3.1、§11→08、§21.x→12 §2.x、原则→17、锚点全链转换，
+  零残留 §9.x 引用）；⑧ §3.3 测试锚点注记（reserved.rs Probe 先例 + r12 交付）
+- 12-roadmap：新增 §2.9 接口预留成本核算（21.9 适配）；Phase 4 描述 4→14 项更新
+- 10-toolchain：LSP 重分类注记（LanguageService/IncrementalAst trait + P0）
+- 08-backend-evolution：CodegenBackend/WasmBackend 预留注记（LLVM 不入自举链不变）
+- 15-architecture-layers：§3.1 查询双预留互链 + §1.1 总图预留层 4→14 注记
+- 17-principles：原则 32「预留留白」+ 附三 next4 对照（落地状态三行）
+- 00-overview：v6.1 修订记录（吸收内容/回写落点七处/关键裁定三段式）
+- 19-references：§6 next4 引用增补（LSP/DWARF/WASM 组件模型 #63-65；
+  rust-analyzer 已在 §3.6 不重复）；18-terminology：§5 增补术语 13 条
+- 系统性审查（12 维度）：关键词矩阵 29/29 全命中；LSP/FFI 陈旧「完全推迟」
+  行 0；全 20 文件内锚点 + 跨文件锚点经 GitHub 算法校验零坏链；代码栅栏
+  全平衡；版本声明分级合理（未触及文件保留自身版本史）
+
+Stage Summary:
+- lang-design 全集 v6.1 收敛完成：主体落位 13（矩阵 14 项 + §3.3-§3.5 完整
+  审查），联动七文件；三面裁定链一致（stage0 v6.1 §9.4 / lang-design 13 §3.4 /
+  sop 待 31-c）；零陈旧引用零坏链
+- 遵循：§8.4.5 规则 2（文档随代码同步）、§2.3-9（正确>妥协——重分类直面
+  边界矛盾）、§14 审计（关键词矩阵 + 锚点全链校验）、12 维度审查
+- 下一步：31-c 精华反哺 sop.md（接口预留原则 + §21.9 时机条款）
+
+---
+Task ID: 31-c
+Agent: Super Z (main) — ARCH-A/流程维护者（L3 多角色会话，反哺轮）
+Task: MUV 31-c：lang-design v6.1 精华反哺 sop.md（v11.3 → v11.4）
+
+Work Log:
+- §2.2 设计原则三十一条 → 三十二条：新增第 32 条「预留留白原则」（含违反
+  示例两则——以功能未实现为由拒绝冻结形状 / 预留实现成半成品）；来源注记
+  更新（stage0 v6.1 + next4 第八轮 + 17-principles 附三指针）
+- 新增 §21.12 接口预留时机（流程接入四条）：① 与 §21.7-§21.11 的叠加规则
+  （能力引入时机=实现推迟可协商；数据结构冻结时机=P0 必须Stage 0/P2 必须
+  Stage 1，不可协商）② §13.1 设计对齐接线（AST/IR/架构数据结构新设计须
+  显式声明 P0 预留挂点）③ §6.2 技术债接线（预留位置缺失按 P1 登记，
+  禁因「功能未实现」降 P3）④ 预留成本口径（~3 周 / 裁剪仅限 P2/P3）
+- §21.11 风险表对账（§8.4.5 规则 2 冲突修复）：「接口预留过多」行四项核心
+  清单 → 14 项矩阵清单（裁剪须走 §13.1 重裁）；「接口预留不足」行三项
+  不动摇 → P0 三项 + 既有四项不动摇
+- §8.4.5 查询时机表新增「修改/新增接口预留」行（13 §3.4 唯一权威清单 +
+  §3.5.1 优先级）；§8.4.1 目录树与 §8.1 文档清单蓝图存档 v6.0 → v6.1
+- §16.1 changelog v11.4 行（五点变更）；文档尾版本链注记前插 v11.4 摘要
+- 完整性验证：§2.2 表行 28-32 全在位；§21.12 位置正确（§21.11 后、footer
+  前）；代码栅栏计数与改动前一致（存量 127，行级深度平衡——非本轮引入）
+
+Stage Summary:
+- sop.md v11.4 完成：接口预留精华四点接入（原则 32 / §21.12 流程接线 /
+  风险表对账 / 查询表登记）；与 stage0 §23.1 / lang-design 17 §1 三面
+  原则编号链一致（29-31 → 32）
+- 遵循：§8.4.5 规则 2（文档与设计冲突——风险表旧口径本次修正）、
+  §3.3（演进原则：合并>新增——接入既有 §13.1/§6.2/§21 节点而非新开协议）、
+  原则 32 自身（本条款以预留挂点方式接入既有流程结构）
+- 下一步：31-d reserved.rs 扩展 10 接口冻结实现
+
+---
+Task ID: 31-d
+Agent: Super Z (main) — DEV-A/QA-A（L3 多角色会话，代码轮）
+Task: MUV 31-d：预留层代码冻结——reserved/ 模块 4→14 项接口 + Probe 冻结测试 + P0 位置断言
+
+Work Log:
+- §8.4.6 落位裁决：reserved.rs 单文件 → reserved/ 模块目录（mod.rs 保留
+  既有四接口零迁移 + toolchain.rs/ffi.rs/codegen.rs 三子模块）——
+  crate::reserved::X 路径全兼容，lib.rs 零改动
+- toolchain.rs（~740 行）：P0 三项 LanguageService+IncrementalAst /
+  DebugInfoGenerator+DebugTraceable / QuerySystem+Query（Query::execute
+  以 dyn QuerySystem<Input=Self::Input> 修正对象安全）；P1 CompilerService
+  +Serializable；P2 PackageManager+ExternalModule+AiAssistant；共享形状
+  类型复用 kerf 既有真实类型（FileId/Span/Diagnostic/NodeId/Symbol/
+  BcProgram）+ 20 个新形状类型（Position/Location/TextEdit/...）
+- ffi.rs（~200 行）：ExternalType（递归 C 类型子集）/FfiCall（外部调用
+  核心表达式表示——args 以 CoreExpr 承载）/FfiBoundary（GC pin/unpin
+  隔离协议 + 自举合规注记：不入自举链）；codegen.rs（~180 行）：
+  CodegenBackend/WasmBackend + AnnotatedANF 占位（原则 13 目标中立的
+  类型级证明——compile 入参是 IR 非 CoreExpr）
+- 集成测试 tests/v0/stage1/plan/reserved_ext_tests.rs（12 case，经
+  runner.rs 总入口挂载——§8.4.6 强制规则 8）：P0 位置跨 crate 断言
+  （Span/scopes/NodeId/protos/ext3/内容寻址统一）+ 14 项 API 外部
+  可达性 + 形状行为（含负向：空目标拒绝/空片段类型检查失败/rename 未
+  实现错误面）
+- 单元测试 +8（Probe 冻结——toolchain 3 + ffi 3 + codegen 2，沿用
+  reserved_signatures_are_frozen 先例）
+- 修复三处编译问题：TargetTriple 补 Default；doc 懒续行 clippy；mod.rs
+  再导出补包管理 6 类型 + NodeId 类型别名用法（u32 构造 → 字面量）
+- 验证：cargo check/clippy -D/fmt --check 全绿；test --release
+  --workspace **500:0:0**（480 基线 + 20：单元 183 + 集成 317）；
+  审计集 §7.3.1 配比满足 EXIT 0；CLI 冒烟 fib 75025 + test 3/3
+- 文档同步（§8.4.5 规则 2）：README（v6.1/v11.4/500 + 特性清单 +接口
+  预留完整性扩展）+ status.md（500 + r12 增量分项）+ plan.md（r12
+  吸收轮行）+ RELEASE_NOTES（r12 三节交付）
+- 效应扩展/能力委托（13 §3.3.10 裁定）：mod.rs 文档登记扩展方向，
+  不新增数据结构位置——按裁定执行零代码
+
+Stage Summary:
+- 预留层 14 项全部代码冻结（P0 三项 trait + 位置对账六项 ✓ + P1 三组 +
+  P2 两组）；500:0:0 全绿零回归；语义核心与既有四契约零变动
+- 遵循：§2.2 原则 27/28/32（接口稳定/渐进替换/预留留白——形状冻结
+  而非实现）、§8.4.6（落位 + 测试入口架构）、§10.1 规则 4（显式
+  re-export）、§9.4（设计-测试锚定——13 §3.3 测试锚点注记兑现）
+- 下一步：31-e worklog 管理机制设计（研究文档吸收 + docs/worklog/ 初始
+  结构 + sop §8.6 扩展）
+
+---
+Task ID: 31-e
+Agent: Super Z (main) — ARCH-A/PM-A（L3 多角色会话，机制设计轮；前置研究 31-e-research 已由子代理完成）
+Task: MUV 31-e：worklog 管理查询机制设计（docs/worklog/ rec 树）+ sop v12.0 集成 + 初始树落地
+
+Work Log:
+- 知识检索（用户指令要求）：31-e-research 子代理 22 次 web_search + 2 次深读
+  （Letta Filesystem 基准文全文），产出 docs/develop/v0/worklog-mechanism-research.md
+  （141 行：五领域 12 条借鉴理念 + 需求映射分析 + 10 条设计建议 + 三缺口）
+- 核心借鉴吸收：① LSM 追加写/分层压实/旧层不可变 → 三级读写路径；
+  ② Letta 文件记忆实证（grep 原语 74.0% > Mem0 68.5%）→ 不引入向量库；
+  ③ B+ 树稀疏索引 → l = 每层内部节点物化（用户方案最亮点确认）；④ 时间
+  分区裁剪 → 目录名即分区键；⑤ JD 编号 → 字典序=时间序 + 扇出 ≤12；
+  ⑥ ADR supersede → 修正不改历史；⑦ salsa 红/绿 → stale 对账可检测；
+  ⑧ 记忆三分 e/s/p → by-topic 第二入口补时间分区盲区
+- sop.md v11.4 → v12.0：§8.6 扩展为三路径协议（§8.6.1 写路径逐字不变 +
+  §8.6.2 rec 树文法 + §8.6.3 l 稀疏索引格式（≤8KB/扇出行数解耦）+
+  §8.6.4 三原语检索 + 冷启动 + §8.6.5 压实规则（时机挂 §19/§14.9/§6.3
+  既有节点 + stale 检测 + 里程碑不可变）+ §8.6.6 与既有协议关系表）；
+  §8.4.1 目录树 + §8.4.5 查询时机表接线；§16.1 v12.0 行；footer 版本链
+- 初始树 bootstrap（docs/worklog/）：根 l（2.4KB——未压实区间 + 树导航 +
+  by-topic 决策视图 6 行 + procedural 速查）+ 00_stage-0_语义验证/
+  （3 条目 r1-r3 + l 846B，封存只读）+ 01_stage-1_能力引入/（9 条目
+  r4-r12 + l 1771B，active + 未压实区间行）；条目 = 压实摘要（1:8 压缩
+  自 RELEASE_NOTES/flat Stage Summary）+ 溯源指针（Task ID → flat 节）
+- 三原语检索集成验证：① ls 枚举字典序=时间序 ✓；② 读 l 定位「预留 14
+  项」→ r12 行 ✓；③ grep -r 主题查询「TD-002 何时定的」→ r5 条目 +
+  l ✓、「自举边界」→ r6 条目 ✓（冷启动协议实操走通）
+- 打包含盖确认：§19.4 命令整目录含 docs/ → 树自动入包；根 worklog.md
+  排除不变；§8.4.1 树与根 l 体积均 ≤8KB 上限
+
+Stage Summary:
+- worklog 机制「文件/目录型知识数据库」设计闭环：研究 → 机制（时间×精度
+  双轴 + l 路由 + 三原语 + 压实对账）→ sop 规范（v12.0）→ 初始树落地
+  （12 条目）→ 检索实证；flat 协议零破坏（写路径不变）
+- 遵循：§3.3 演进原则（合并>新增——压实时机挂既有节点不新增会议；
+  精要>冗长——normative 条款入 sop、研究佐证留 develop 文档）、
+  §2.3-11（知识搜索>猜测——先检索后设计）、§8.6 自身（树条目含
+  溯源指针 + stale 边界）
+- 下一步：31-f §3.2 全绿 + r12 tar.gz + web 更新 + E2E + r12 终态压实
+
+---
+Task ID: 31-f
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，交付轮；含 r12 终态压实）
+Task: MUV 31-f：§3.2 全绿 + r12 tar.gz + web 同步 + E2E + r12 终态压实
+
+Work Log:
+- §3.2 六命令实跑全绿（clean 起步）：clean（470 files/127MB）→ build
+  --release 9.20s 零告警 → check 0/0 → fmt --check 零 diff → clippy
+  --all-targets -D warnings 0 → test --release --workspace **500:0:0**
+  （单元 183 + 集成 317）
+- 审计集 §7.3.1 配比满足 EXIT 0；CLI 冒烟：fib 75025 + ⇒ 144 + kerf
+  test 3/3（clean 重编后复跑）
+- r12 tar.gz 打包：780,157 B / 230 条目（根 worklog.md 排除 ✓；docs/
+  worklog/ rec 树入包 ✓）；**包内自举验证**：解压 → 500:0:0 + CLI 一致
+- 文档债清偿（31-f 发现，§8.4.5 规则 2）：docs/tests/matrix.md 停在 480
+  （31-d 遗漏）→ 500 全量对账（headline/历史链/单元 183 分项/driver 58/
+  集成 317/reserved_ext_tests 套件行 + 负向形状 case 行）
+- web 同步：kerf-data（RESERVATIONS 4→14 卡——P0 三项含位置对账 + P1
+  三组 + P2 两组 + 增补两项；ROADMAP Stage 0/1/2 更新——r12 吸收轮 +
+  预留冻结轮双行 + 500 基线；PACKAGE_CONTENTS 500/v6.1/worklog 树；
+  HERO +「接口预留 14 项」徽章）+ capabilities（14 预留卡注释）+
+  site-footer（v6.1/v12.0/500/原则 29-32/树）；动态面自动：stats 实时
+  500 + r12 包（761.9 KB）/ docs 读 v6.1 / download 流 r12
+- agent-browser E2E：页面加载零错误零 console 异常；14 项预留内容全
+  渲染（LSP/IDE 查询/增量编译查询/DebugInfoGenerator/接口预留 14 项/
+  预留留白 全 true）；footer 版本行 v6.1/v12.0/500 true；stats API
+  testCount 500 + packageName r12
+- r12 终态压实（§8.6.5 首次实操）：09_r12 条目扩展（31-e/31-f 增量 +
+  覆盖 Task 31-a~f）+ 层 l 行更新 + 根 l 未压实区间清零（flat 与树均
+  压实至 r12 终态）+ by-topic 增 worklog 树机制行
+- lint exit 0；download/README.md r12 节（五要点——三层吸收/代码冻结/
+  树机制/六命令/包内验证）
+
+Stage Summary:
+- r12 交付闭环：三层吸收（stage0 v6.1 + lang-design v6.1 + sop v12.0）
+  → 预留层代码冻结（500:0:0）→ worklog 树机制 → 打包（含包内自举验证
+  与 rec 树）→ web 同步 → E2E 全过 → 终态压实（树协议首次完整走通）
+- 遵循：§3.2（六命令逐条实测——clean 全量重编）、§19（打包 + 包内
+  验证 + README 归档）、§8.4.5 规则 2（matrix.md 陈旧对账）、§8.6.5
+  （压实规则首次实操——stale 区间清零）、浏览器验证标准（渲染/数据/
+  交互/响应式）
+- 下一步（批次 E，plan §5）：Expander kerf 重写 + TD-004 scope-set
+  收口 + TD-021 hof 用户面注入 → Stage 1 门审查（§7.3 + §21.3 四条）
+- E2E 修复附录（31-f 内补）：agent-browser 移动端 390px 检出横向溢出
+  （scrollWidth 716 > 390）——根因 = 本轮新增 RESERVATIONS 14 卡网格中
+  无空格长函数串（93 字符 AI 五方法链）不可折行 + grid item
+  min-width:auto；修复 = Card 加 min-w-0 + desc 段落加 break-words
+  （capabilities.tsx），修复后 scrollWidth=390 零溢出；另将演进表
+  wrapper 加 min-w-0（存量隐患顺带修复）；Playground 金路径（fib
+  递归 → 运行 → 6765 + 144）通过；footer 滚底双真（bottom=900=
+  viewport）；console/页面错误 0；VLM 双截图审查全 PASS（桌面 4/4 +
+  移动 3/3——卡片对齐/文字完整/表格可读/无溢出）
+

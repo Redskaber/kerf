@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-10（v6.0：next3 讨论引用增补 §5（de Bruijn 1972 / Flanagan 1993 ANF / Plotkin & Pretnar 2009）；v5.5：next2 讨论引用增补 §4（Koka/MLton/Unison/CompCert/Zig comptime——该轮未回写版本号，本版一并修正）；v5.0：源自 stage0.md v5.0 拆分）
-> **Version**: v6.0
+> **Version**: v6.1（§6 next4 引用增补）
 > **Status**: Active
 
 > 本文件收录 stage0.md 附录 B（参考案例与关键数据）、附录 C（代码量估算）与附录 E（参考文献、规范与相关链接，按主题分类）。各条目的「文档引用位置」已从 stage0.md 的内部锚点改写为指向本目录对应设计文件的相对链接。术语表与术语源流考见 [18-术语文档](./18-terminology.md)。
@@ -331,3 +331,21 @@ Stage 0 合计：约 7,000-7,300 行 = 6,500 行核心实现 + 500-800 行接口
 - **Flanagan, C., Sabry, A., Duba, B. & Felleisen, M. (1993)**. *The Essence of Compiling with Continuations*. PLDI 1993. ——A-范式（ANF）来源论文（[15 §5.2](./15-architecture-layers.md) Stage 2 ANF 层规划的理论出处）
 - **Plotkin, G. D. & Pretnar, M. (2009)**. *Handlers of Algebraic Effects*. ESOP 2009. ——代数效应处理程序理论奠基（[14 §4.2](./14-design-alternatives.md) 批判审查史与 [01 §7.3](./01-core-forms.md) 效应原语化的理论锚点）
 - 注：Racket `racket/kernel`（8 形式口径）已在 §3.1 第 7 条；Koka/MLton/Unison/CompCert/Zig comptime 已在 §4（v5.5）——next3 第七轮的引用增量仅上列三条
+
+---
+
+## 6. next4 讨论引用增补（v6.1 吸收——第八轮「2026 接口预留完整性审查」）
+
+63. **Language Server Protocol Specification**：https://microsoft.github.io/language-server-protocol/
+    - LSP 官方规范（[13-能力矩阵 §3.3.2](./13-capability-matrix.md) LanguageService 的协议生态基础）
+    - 文档引用位置：[13-能力矩阵 §3.3.2/§3.4](./13-capability-matrix.md)、[10-工具链 §1](./10-toolchain.md)
+
+64. **DWARF Debugging Standard**：https://dwarfstd.org/
+    - 源级调试信息标准（[13-能力矩阵 §3.3.3](./13-capability-matrix.md) DebugInfoGenerator 的目标格式）
+    - 文档引用位置：[13-能力矩阵 §3.3.3](./13-capability-matrix.md)
+
+65. **WebAssembly Component Model**：https://component-model.bytecodealliance.org/
+    - WASM 组件模型与接口类型（[13-能力矩阵 §3.3.7](./13-capability-matrix.md) WasmBackend 的目标形态）
+    - 文档引用位置：[13-能力矩阵 §3.3.7](./13-capability-matrix.md)、[08-后端演化 §2](./08-backend-evolution.md)
+
+（rust-analyzer——LanguageService + QuerySystem 联合实证——已于 §3.6 条目 44 收录，此处不重复。）

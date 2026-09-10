@@ -1,0 +1,19 @@
+# l — Stage 1 能力引入 里程碑路由
+
+覆盖：2026-09-10 ~ 09-11 · r4-r12 · Task 21-31 · 记忆类分布：e+s+p（r9/r12 含规程）
+
+| 编号 | 概述（检索关键词） | 类型 | 覆盖 | 记忆类 | 状态 |
+|------|-------------------|------|------|--------|------|
+| 01 | r4 批次 A·切换期重构·TD-015/012/007 清偿·expander -62% | file | r4 · Task 21,23 | e | active |
+| 02 | r5 批次 B·TD-002 符号值·标准库 48 内置·324 测试 | file | r5 · Task 22-x | e+s | active |
+| 03 | r6 自举 Reader·reader.krf 430 行·生产读路径切换·parity 28 函数 | file | r6 · Task 24-x | e+s | active |
+| 04 | r7 批次 C·类型检查器 R1-R8·编译缓存做实·408 测试 | file | r7 · Task 25-x | e+s | active |
+| 05 | r8 批次 D·能力 I/O 基础传递·require 声明·R9/E0006·内部效应·476 测试 | file | r8 · Task 27-x | e+s | active |
+| 06 | r9 next2 五轮吸收·lang-design v5.5·测试入口架构 runner.rs·476 零变化 | file | r9 · Task 26,28-x | e+s+p | active |
+| 07 | r10 next3 七轮吸收·收敛裁定（9 冻结/8 原语 Stage 2）·原则 29-31·架构审计·480 | file | r10 · Task 29-x | e+s | active |
+| 08 | r11 三源复核零缺口·核心原语三面同步·web 区块·r11 tar.gz | file | r11 · Task 30-x | e+s | active |
+| 09 | r12 next4 第八轮·接口预留 4→14 项·原则 32 预留留白·reserved/ 模块·worklog 树机制·500 全绿·r12 包交付 | file | r12 · Task 31-a~f | e+s+p | active |
+
+**状态**：active（Stage 1 进行中——批次 E 未收口）。
+**溯源**：详录 = docs/worklog.md 对应 Task 节 + RELEASE_NOTES r4-r12 节。
+**未压实区间**：无——flat 与树均压实至 r12 终态（Task 31-f，2026-09-11）。

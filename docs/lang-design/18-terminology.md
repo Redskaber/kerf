@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-10（v6.0：next3 讨论六术语增补——派生关键词/表面语法/内部语法/命名行为导向/类型安全优于命名安全/表面-内部语法严格分离；v5.5：next2 讨论八术语增补（ANF/CPS/de Bruijn/行多态/效应安全/闭包转换/comptime/continuation——§3，该轮未回写版本号，本版一并修正）；v5.0：源自 stage0.md v5.0 拆分）
-> **Version**: v6.0
+> **Version**: v6.1（§5 next4 增补术语 13 条）
 > **Status**: Active
 
 > 本文件收录 stage0.md 附录 A（关键术语表，42 条术语——与源文档逐条一致）与附录 D（术语源流考详细版：五大核心能力的命名起源、理论根基与历史演化路径）。附录 D 是对正文 [14-替代设计 §2（术语起源与历史脉络）](./14-design-alternatives.md) 的深化补充；参考文献与外部链接见 [19-参考文献](./19-references.md)。术语表中括注的文档引用已改写为指向本目录对应设计文件。
@@ -249,3 +249,23 @@ Landin 借用这个概念：**函数加上其捕获的环境，形成了一个"�
 | 命名行为导向原则 | 命名精确描述行为而非语法历史（`Branch`/`Apply` 而非 `if`/`App`）——原则 29（[17 §1.1](./17-principles.md)） |
 | 类型安全优于命名安全原则 | AST 安全性由类型系统（ADT 私有构造子）保证而非命名约定（`#%` 前缀）——原则 30（[17 §1.1](./17-principles.md)） |
 | 表面-内部语法严格分离原则 | 皮肤可替换、骨架不变，任何表面语法编译产物为相同核心形式——原则 31（[17 §1.1](./17-principles.md)） |
+
+---
+
+## 5. next4 讨论增补术语（v6.1 吸收——第八轮「2026 接口预留完整性审查」）
+
+| 术语 | 定义 |
+|------|------|
+| 接口预留完整性审查 | 对预留层覆盖度的系统评估：既有六类（效应/能力/多阶段/缓存/类型/IR）覆盖 ~70%，补齐工具链生态 30% 缺口（[13 §3.3](./13-capability-matrix.md)） |
+| 完全推迟（精确语义） | 尚未承诺采用的能力（保留选择权）；区别于接口预留的「已承诺采用、实现推迟」（期票语义，[13 §3.2](./13-capability-matrix.md) 边界调和） |
+| LanguageService | 编译器作为语言服务器的查询接口 trait：语法树/补全/文档符号 + 定义/引用/类型 + 诊断/快速修复 + 重命名（P0，[13 §3.3.2](./13-capability-matrix.md)） |
+| IncrementalAst | AST 增量更新接口：apply_edit / invalidate_range / reuse_unchanged——LSP 按需重析与增量编译的 AST 侧挂点（P0） |
+| DebugInfoGenerator / DebugTraceable | 调试信息生成接口：IR 节点 ↔ 源码位置映射、变量位置查询、DWARF/源映射生成；IR 节点反向链接 AST + 调试名（P0，[13 §3.3.3](./13-capability-matrix.md)） |
+| ExternalType / FfiBoundary | FFI 边界类型表示（CInt/CPointer/CStruct/CFunction/Opaque）与 GC 隔离协议（pin/unpin——外部引用不可回收）（P1，[13 §3.3.4](./13-capability-matrix.md)） |
+| QuerySystem / Query | 查询式增量编译接口：纯函数查询 + 依赖完整声明 + 按需失效传播（salsa 风格，与编译缓存构成数据面/架构面双预留）（P0，[13 §3.3.5](./13-capability-matrix.md)） |
+| CompilerService | 编译器即服务接口：提交/状态/结果/流式诊断/取消——可序列化状态 + 可中断恢复（P1，[13 §3.3.6](./13-capability-matrix.md)） |
+| CodegenBackend / WasmBackend | 多目标后端 trait：supported_targets + compile + 后端特有优化；WASM 组件模型目标（P1，[13 §3.3.7](./13-capability-matrix.md)） |
+| PackageManager / ExternalModule | 包管理接口：依赖图解析 + 产物获取 + 版本锁定；模块系统的包边界（P2，[13 §3.3.8](./13-capability-matrix.md)） |
+| AiAssistant | AI 辅助语义 API：语义摘要/签名查询/快速类型检查/重构建议/文档注释生成——复用 LanguageService 查询基建（P2，[13 §3.3.9](./13-capability-matrix.md)） |
+| P0-P3 预留优先级 | 按「不预留的破坏性代价」排序：P0 = 必须在 Stage 0 数据结构中预留位置（LSP/调试/增量）；P1 = 强烈建议 Stage 0 预留 trait（FFI/后端/服务化）；P2 = Stage 1 预留（包管理/AI）；P3 = Stage 3+ 可加（分布式效应）（[13 §3.5.1](./13-capability-matrix.md)） |
+| 预留留白原则 | 原则 32：接口预留的本质是「为未来留出空间」而非「提前实现」——要求数据结构与类型定义的兼容性，而非功能的完整性（[17 §1](./17-principles.md)） |

@@ -147,6 +147,7 @@ flowchart TD
 | C | 类型检查器（Rust 外部 + 循环依赖缓解落地）✅（25-a，r7：kerf-compiler/typecheck.rs 保守静态检查 R1-R8 + 多错误收集 + check CLI/API）→ 编译缓存（13 §3.1.4 三方法规格直落地）✅（25-b，r7：cache.rs + SHA-256 内容寻址 + 管线富入口 + 408 全绿）→ TD-016 收紧 ✅（25-c：比较族前置全参校验双侧）+ TD-013 设计批 ✅（25-d：multi-error-recovery-design.md 冻结） | §21.3 条件 4 增量编译可用 ✅（内存内容寻址缓存 + 确定性证明） | 25-x（plan 预排 23-x 已被 r5 闭环节点占用，按 §8.6 唯一性顺延） |
 | D | Effect 内部最小实现（编译器错误恢复用）+ 能力 I/O 基础传递（13 §3.1.3 规格）✅（27-x，r8：effects.rs 一次性逃逸层 + InternalEffectSystem；capability.rs require/R9-E0006/IoGrant + builtins 能力参数化 + kerf test 用例运行器——476 测试全绿） | §21.9 矩阵 Stage 1 列做实行不倒挂 ✅（Effect 编译器内部 + 能力 I/O 基础传递两项均兑现，sop.md v11.1 现状对账注记） | 27-x |
 | 吸收/审计轮（跨批次） | 测试入口架构重构 ✅（28-x，r9：tests/runner.rs 单一总入口 mod 树 + 根 Cargo.toml [[test]] 18 块清零 + common 单实例化——476 保持全绿，组织收敛零语义变化）→ next3 七轮双层吸收 ✅（29-x，r10：upload/stage0.md v6.0（§6.9-§6.12/§7.3/§7.4/附录 F）+ lang-design 19 文件 v6.0（12 维度审查六类缺陷修复）+ sop v11.3（§2.2 原则 29-31 + 蓝图存档登记）+ 架构合规审计 4 测试（十变体穷尽 match 冻结证明 / Reader-Stx 类型隔离 / Expander 唯一桥 / 同源同核）——480:0:0） | 语义核心冻结零变动 ✅（stage0 §6.12.6 收敛裁定：Stage 0-1 九原语不变，8 原语形态 = Stage 2 迁移映射登记）+ 核心原语相关变动三面同步（docs / web / 打包） | 28-x/29-x/30-x |
+| r12 吸收轮（next4） | ✅ 接口预留完整性审查吸收（stage0 v6.1 + lang-design v6.1 + sop v11.4 三层）+ 预留层代码冻结（reserved/ 模块 4→14 项，P0 三项 trait + P1 FFI/后端/服务化 + P2 包管理/AI）+ 500 全绿（+20：Probe 8 + 跨 crate 位置断言 12） | 13 §3.3-§3.5 / 31-d |
 | E | Expander kerf 重写 → Stage 1 门审查（§7.3 审计 ≥30 case + §21.3 四条） | 07 §3.3 全部 + §21.5 全部 | 25-x |
 
 ## 6. 量化验收标准（本会话批次 A）
