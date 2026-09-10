@@ -1,36 +1,50 @@
-//! 展开器（stage0.md §19.2 展开循环骨架的落地实现）。
+//! 展开器主控（stage0.md §19.2 展开循环骨架的落地实现；TD-012 拆分后的
+//! 模块布局）。
 //!
-//! `Stx` → `CoreExpr`：递归展开 9 个核心形式 + 宏调用（变换器）
-//! + 语法糖内置变换器（§3.2 推导表）。
+//! `Stx` → `CoreExpr`：入口分派（宏 → 糖 → 核心形式 → 函数应用）。
+//!
+//! **模块布局**（TD-012，2026-09-10 拆分）：
+//! - 本文件（主控）：公共类型（`ExpandCtxt`/`ExpandError`）+ 入口分派 +
+//!   宏调用展开 + 公共构造辅助（关键词句柄/字面量/set! 构造）；
+//! - `core_forms`：9 核心形式展开 + 函数体 define 提升路径；
+//! - `sugar`：内置语法糖变换器（§3.2 推导表——`TransformerKind::Builtin`
+//!   载体）；
+//! - `macro_sys`：变换器机制（syntax-rules/卫生上下文）；
+//! - `phase`：相位驱动（模块 declare/visit/instantiate 簿记）。
 //!
 //! **展开循环骨架**（§19.2）：
-//! 1. 核心形式：不展开自身，只递归展开子节点；
+//! 1. 核心形式：不展开自身，只递归展开子节点（`core_forms`）；
 //! 2. 宏调用：Phase 1 执行 transformer，再递归展开产物（直到核心形式）；
 //! 3. 标识符：保留符号引用（slot 解析按 §19.3 由编译器执行）。
 //!
 //! **三个核心不变式**（§19.2）：
-//! 1. 展开终止性：展开深度超上限（10_000）报错而非栈溢出；
+//! 1. 展开终止性：展开深度超上限报错而非栈溢出；
 //! 2. 卫生性保持：宏引入标识符经 α 重命名，永不与用户标识符串扰；
 //! 3. 相位封闭性：Phase 1 transformer 只产生 Phase 0 语法对象。
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use kerf_core::{CoreExpr, LiteralValue};
-use kerf_span::Span;
 use kerf_syntax::{Keyword, ScopeSet, Stx, StxDatum, StxLiteral, Symbol, SymbolTable};
 
-use crate::macro_sys::{BuiltinTransformers, SyntaxRules, Transformer, TransformerKind};
+use crate::core_forms::expand_core_form;
+use crate::macro_sys::{BuiltinTransformers, Transformer, TransformerKind};
+use crate::sugar::{
+    desugar_and, desugar_cond, desugar_let, desugar_let_star, desugar_letrec, desugar_or,
+    desugar_unless, desugar_when, desugar_while,
+};
 
 /// 展开器错误（最小共享形态 `{ message, span }`）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExpandError {
     pub message: String,
-    pub span: Span,
+    pub span: kerf_span::Span,
 }
 
 impl ExpandError {
-    fn new(message: impl Into<String>, span: Span) -> Self {
+    pub(crate) fn new(message: impl Into<String>, span: kerf_span::Span) -> Self {
         ExpandError {
             message: message.into(),
             span,
@@ -40,10 +54,23 @@ impl ExpandError {
 
 /// 宏展开深度上限（§19.2 不变式 1：超限报错而非栈溢出）。
 ///
-/// 取值 128 与 rustc 默认递归上限（recursion_limit）一致——真实宏嵌套深度
-/// 远低于此；设计文档示例值 10_000 需要迭代式工作表展开（Stage 1 计划，
-/// TD-007：当前递归实现在受限栈环境（测试线程 2MiB）下的安全校准）。
-pub const MAX_EXPANSION_DEPTH: u32 = 128;
+/// **TD-007 部分解除**（Stage 1 批次 A3）：宏展开链经 trampoline 工作表
+/// 迭代化（[`expand_form`] 顶层循环——宏产物头部仍是宏调用时不递归、
+/// 循环继续），展开控制流栈深与链长解耦。上限从 128（rustc 递归对齐
+/// 校准）提升至 **500**。
+///
+/// **标定依据**（TD-017 同型实测法，探针 example 实测）：
+/// - 2MiB 测试线程：1_000 层通过 / 2_000 层溢出；
+/// - 8MiB 主线程（CLI 生产）：4_000 层通过 / 5_000 层溢出；
+/// - 残余栈约束来自 Stx 值语义深树的 clone/drop 递归（数据结构层
+///   约束，非展开控制流）；
+/// - 500 = 最严格交付环境（测试线程 2MiB）实测通过值 1_000 的 2×
+///   裕度（TD-017 先例 690→256 同型 2.7×）——不变式 1（超限报错
+///   而非栈溢出）须在环境波动下成立，故上限必须落在实测边界内侧。
+///
+/// 完整文档口径 10_000 依赖 Stx `Rc` 化（Stage 1 前端重写批次 B 范围）
+/// ——残留边界登记于 TD-007 注记。
+pub const MAX_EXPANSION_DEPTH: u32 = 500;
 
 /// 展开上下文（§10.1 规则 2：`Ctxt` 后缀）。
 pub struct ExpandCtxt {
@@ -114,25 +141,112 @@ pub fn expand_program(
 }
 
 /// 展开单个形式（入口函数，§10.1 规则 1）。
+///
+/// **宏展开 trampoline**（TD-007 工作表化）：列表头命中变换器（用户宏
+/// /内置糖）时展开产物**头部仍是宏调用**则在市层循环继续，不递归——
+/// 宏链长度与栈深解耦（10_000 层链恒定栈深）；产物非宏头时进入常规
+/// 展开（核心形式/应用——子项递归，深度受 reader 嵌套上限保护）。
+/// `ctx.depth` 语义保持「当前展开路径上的宏展开总数」（兄弟不累计：
+/// 入口快照、成功出口回滚）。
 pub fn expand_form(stx: &Stx, ctx: &mut ExpandCtxt) -> Result<Rc<CoreExpr>, ExpandError> {
-    match &stx.datum {
+    let entry_depth = ctx.depth;
+    let mut current: Cow<'_, Stx> = Cow::Borrowed(stx);
+    while let Some(expanded) = try_macro_step(&current, ctx)? {
+        current = Cow::Owned(expanded);
+    }
+    let result = match &current.datum {
         StxDatum::Literal(l) => Ok(Rc::new(CoreExpr::Literal {
             value: literal_from_stx(l),
-            span: stx.span,
+            span: current.span,
         })),
         StxDatum::Symbol(name) => Ok(Rc::new(CoreExpr::VarRef {
             name: *name,
-            span: stx.span,
+            span: current.span,
         })),
-        StxDatum::List(items) => expand_list(stx, items, ctx),
+        StxDatum::List(items) => expand_list(&current, items, ctx),
         StxDatum::Vector(_) => Err(ExpandError::new(
             "向量不能出现在表达式位置（仅用于绑定组/模式）",
-            stx.span,
+            current.span,
         )),
-    }
+    };
+    // 路径深度回滚：trampoline 链计数不跨兄弟累计（与旧递归版语义等价）
+    ctx.depth = entry_depth;
+    result
 }
 
-fn literal_from_stx(l: &StxLiteral) -> LiteralValue {
+/// 宏展开工作表单步（TD-007）：若 `stx` 是宏调用（列表头命中变换器
+/// 注册表——含卫生基名回退；或命中内置糖触发集），执行变换器并返回
+/// 产物；否则返回 `None`（进入常规展开）。
+///
+/// 优先级与旧 `expand_list` 一致：用户宏（含糖已注册项）→ 未注册糖名
+/// 惰性注册 → 核心形式/应用交回常规展开。深度计数在此累计（链长）。
+fn try_macro_step(stx: &Stx, ctx: &mut ExpandCtxt) -> Result<Option<Stx>, ExpandError> {
+    let items = match &stx.datum {
+        StxDatum::List(items) if !items.is_empty() => items,
+        _ => return Ok(None),
+    };
+    let head = match items[0].datum.as_symbol() {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+    // ---- 1. 用户宏（define-syntax 注册的变换器；可覆盖内置语法糖名） ----
+    // 卫生回退（D6 修复）：宏模板引入的变换器引用被 α 重命名
+    // （`name$hyg$N`）——精确符号未命中变换器表时按**基名**回退查表
+    // （03 §2.4 卫生保证(2)「自由标识符穿透」的 Stage 0 近似，与
+    // driver 的全局卫生回退同则；修复前宏调宏两路径均未绑定）。
+    let resolved = if ctx.lookup_transformer(head).is_some() {
+        Some(head)
+    } else {
+        hygienic_base_symbol(head, &mut ctx.table)
+            .filter(|base| ctx.lookup_transformer(*base).is_some())
+    };
+    let transformer_sym = match resolved {
+        Some(sym) => sym,
+        // ---- 2. 语法糖内置变换器（惰性注册） ----
+        None => {
+            if !is_sugar_symbol(head, &ctx.table) {
+                return Ok(None);
+            }
+            let t = match ctx.builtin_transformer(head) {
+                Some(t) => t,
+                None => return Ok(None),
+            };
+            ctx.register_transformer(head, t);
+            head
+        }
+    };
+    // ---- 深度计数（链长语义；超限报错非栈溢出——§19.2 不变式 1） ----
+    ctx.depth += 1;
+    if ctx.depth > MAX_EXPANSION_DEPTH {
+        ctx.depth -= 1;
+        return Err(ExpandError::new(
+            format!(
+                "宏展开深度超过上限 {}（疑似无限递归展开）",
+                MAX_EXPANSION_DEPTH
+            ),
+            stx.span,
+        ));
+    }
+    let transformer = ctx
+        .transformers
+        .get(&transformer_sym)
+        .cloned()
+        .expect("调用方已校验变换器存在");
+    let args: &[Stx] = &items[1..];
+    let use_scopes = stx.scopes.clone();
+    let expanded = transformer
+        .apply_named(transformer_sym, args, &mut ctx.table, &use_scopes)
+        .map_err(|e| {
+            ExpandError::new(
+                format!("宏「{}」展开失败：{}", ctx.table.name(transformer_sym), e),
+                stx.span,
+            )
+        })?;
+    Ok(Some(expanded))
+}
+
+/// 字面量 Stx → CoreExpr 字面量（quote datum 路径复用）。
+pub(crate) fn literal_from_stx(l: &StxLiteral) -> LiteralValue {
     match l {
         StxLiteral::Int(v) => LiteralValue::Int(*v),
         StxLiteral::Float(v) => LiteralValue::Float(*v),
@@ -150,34 +264,10 @@ fn expand_list(
     if items.is_empty() {
         return Err(ExpandError::new("空列表不能作为表达式求值", stx.span));
     }
-    let head = items[0].datum.as_symbol();
-    // ---- 1. 用户宏（define-syntax 注册的变换器；可覆盖内置语法糖名） ----
-    // 卫生回退（D6 修复）：宏模板引入的变换器引用被 α 重命名
-    // （`name$hyg$N`）——精确符号未命中变换器表时按**基名**回退查表
-    // （03 §2.4 卫生保证(2)「自由标识符穿透」的 Stage 0 近似，与
-    // driver 的全局卫生回退同则；修复前宏调宏两路径均未绑定）。
-    if let Some(sym) = head {
-        let resolved = if ctx.lookup_transformer(sym).is_some() {
-            Some(sym)
-        } else {
-            hygienic_base_symbol(sym, &mut ctx.table)
-                .filter(|base| ctx.lookup_transformer(*base).is_some())
-        };
-        if let Some(sym) = resolved {
-            return expand_macro_call(stx, items, ctx, sym);
-        }
-    }
-    // ---- 2. 语法糖内置变换器（let/letrec/cond/and/or/when/unless/while/let*） ----
-    if let Some(sym) = head {
-        if is_sugar_symbol(sym, &ctx.table) {
-            if let Some(t) = ctx.builtin_transformer(sym) {
-                ctx.register_transformer(sym, t);
-                return expand_macro_call(stx, items, ctx, sym);
-            }
-        }
-    }
+    // 宏头与糖头已由 expand_form 的 trampoline 前置处理（TD-007）——
+    // 到达此处的列表必为：核心形式或函数应用。
     // ---- 3. 核心形式（关键字查表，纯结构分派） ----
-    if let Some(sym) = head {
+    if let Some(sym) = items[0].datum.as_symbol() {
         let name = ctx.table.name(sym);
         if let Some(kw) = Keyword::from_name(name) {
             return expand_core_form(kw, stx, items, ctx);
@@ -196,44 +286,6 @@ fn expand_list(
     }))
 }
 
-fn expand_macro_call(
-    stx: &Stx,
-    items: &[Stx],
-    ctx: &mut ExpandCtxt,
-    transformer_sym: Symbol,
-) -> Result<Rc<CoreExpr>, ExpandError> {
-    // 展开终止性（§19.2 不变式 1）
-    ctx.depth += 1;
-    if ctx.depth > MAX_EXPANSION_DEPTH {
-        ctx.depth -= 1;
-        return Err(ExpandError::new(
-            format!(
-                "宏展开深度超过上限 {}（疑似无限递归展开）",
-                MAX_EXPANSION_DEPTH
-            ),
-            stx.span,
-        ));
-    }
-    let transformer = ctx
-        .transformers
-        .get(&transformer_sym)
-        .cloned()
-        .expect("调用方已校验变换器存在");
-    let args: Vec<Stx> = items[1..].to_vec();
-    let use_scopes = stx.scopes.clone();
-    let expanded = transformer
-        .apply_named(transformer_sym, &args, &mut ctx.table, &use_scopes)
-        .map_err(|e| {
-            ExpandError::new(
-                format!("宏「{}」展开失败：{}", ctx.table.name(transformer_sym), e),
-                stx.span,
-            )
-        })?;
-    let result = expand_form(&expanded, ctx);
-    ctx.depth -= 1;
-    result
-}
-
 /// 卫生基名解析：`name$hyg$N` → 基名 Symbol（后缀须为纯数字；
 /// 与 driver `resolve_hygiene_fallbacks` 的保守判定同则）。
 fn hygienic_base_symbol(sym: Symbol, table: &mut kerf_syntax::SymbolTable) -> Option<Symbol> {
@@ -245,493 +297,17 @@ fn hygienic_base_symbol(sym: Symbol, table: &mut kerf_syntax::SymbolTable) -> Op
     Some(table.intern(base))
 }
 
-fn expand_core_form(
-    kw: Keyword,
-    stx: &Stx,
-    items: &[Stx],
-    ctx: &mut ExpandCtxt,
-) -> Result<Rc<CoreExpr>, ExpandError> {
-    match kw {
-        Keyword::Lambda => expand_lambda(stx, items, ctx),
-        Keyword::If => expand_if(stx, items, ctx),
-        Keyword::SetBang => expand_setbang(stx, items, ctx),
-        Keyword::Define => expand_define(stx, items, ctx),
-        Keyword::Begin => expand_begin(stx, items, ctx, true),
-        Keyword::Module => expand_module(stx, items, ctx),
-        Keyword::Quote => expand_quote(stx, items),
-        Keyword::Import | Keyword::Export => Err(ExpandError::new(
-            "import/export 只能出现在 module 形式内部",
-            stx.span,
-        )),
-        Keyword::Let
-        | Keyword::LetRec
-        | Keyword::LetStar
-        | Keyword::Cond
-        | Keyword::And
-        | Keyword::Or
-        | Keyword::When
-        | Keyword::Unless
-        | Keyword::While => {
-            // 由 builtin_transformer 通道处理（此分支不可达——防御性显式失败）
-            Err(ExpandError::new(
-                "语法糖形式应经内置变换器处理（内部不变式破坏）",
-                stx.span,
-            ))
-        }
-        Keyword::Else => Err(ExpandError::new(
-            "else 只能出现在 cond 子句的测试位置",
-            stx.span,
-        )),
-        Keyword::DefineSyntax => expand_define_syntax(stx, items, ctx),
-        Keyword::SyntaxRules => Err(ExpandError::new(
-            "syntax-rules 只能出现在 define-syntax 内部",
-            stx.span,
-        )),
-    }
-}
-
-// ---- 核心形式实现 ----
-
-fn expand_lambda(
-    stx: &Stx,
-    items: &[Stx],
-    ctx: &mut ExpandCtxt,
-) -> Result<Rc<CoreExpr>, ExpandError> {
-    if items.len() < 3 {
-        return Err(ExpandError::new(
-            "lambda 形式：(lambda (参数...) 体...)",
-            stx.span,
-        ));
-    }
-    let params = parse_params(&items[1])?;
-    let body = expand_body(&items[2..], ctx)?;
-    Ok(Rc::new(CoreExpr::Lambda {
-        params,
-        body,
-        span: stx.span,
-    }))
-}
-
-fn parse_params(param_stx: &Stx) -> Result<Vec<Symbol>, ExpandError> {
-    let list = param_stx
-        .datum
-        .as_list()
-        .ok_or_else(|| ExpandError::new("lambda 参数必须是符号列表", param_stx.span))?;
-    let mut params = Vec::with_capacity(list.len());
-    for p in list {
-        match p.datum.as_symbol() {
-            Some(s) => {
-                // A3 卫式（[06-操作语义 §2]）：同名形参在同层只允许出现一次。
-                // 展开期检查是两执行路径（eval/VM）的共同上游——单点防御。
-                if params.contains(&s) {
-                    return Err(ExpandError::new(
-                        "lambda 参数重名（同名形参只允许出现一次）",
-                        p.span,
-                    ));
-                }
-                params.push(s);
-            }
-            None => {
-                return Err(ExpandError::new(
-                    "lambda 参数必须是符号（不支持解构参数）",
-                    p.span,
-                ))
-            }
-        }
-    }
-    Ok(params)
-}
-
-/// 函数体展开：内部 define 提升（§19.2 陷阱 3）。
-/// `(define x e)... expr...` → `((lambda (x...) (begin (set! x e)... expr...)) nil...)`
-fn expand_body(forms: &[Stx], ctx: &mut ExpandCtxt) -> Result<Rc<CoreExpr>, ExpandError> {
-    // 切分头部 defines
-    let mut defines: Vec<(Symbol, &Stx)> = Vec::new();
-    let mut rest_idx = forms.len();
-    for (i, f) in forms.iter().enumerate() {
-        if is_head_keyword(f, ctx, Keyword::Define) {
-            defines.push((define_name(f, ctx)?, f));
-        } else {
-            rest_idx = i;
-            break;
-        }
-    }
-    // define 必须位于头部（任何非头部 define 即报错，显式失败——含无头部 define 的序列）
-    for f in &forms[rest_idx..] {
-        if is_head_keyword(f, ctx, Keyword::Define) {
-            return Err(ExpandError::new(
-                "define 必须位于函数体头部（后续 define 不合法）",
-                f.span,
-            ));
-        }
-    }
-    if defines.is_empty() {
-        // 无 define：表达式序列
-        let exprs: Result<Vec<Rc<CoreExpr>>, _> =
-            forms.iter().map(|f| expand_form(f, ctx)).collect();
-        let exprs = exprs?;
-        return Ok(wrap_body(exprs, forms));
-    }
-    // 构造提升式
-    let span = forms.first().map(|f| f.span).unwrap_or_default();
-    let names: Vec<Symbol> = defines.iter().map(|(n, _)| *n).collect();
-    let mut body_forms: Vec<Stx> = Vec::new();
-    for (name, def) in &defines {
-        // (set! name value)
-        let value = define_value_stx(def, ctx)?;
-        body_forms.push(make_setbang(*name, value, def.span));
-    }
-    body_forms.extend(forms[rest_idx..].iter().cloned());
-    // ((lambda (names...) body...) nil...)——体形式直接铺平为 lambda 尾部
-    let mut lambda_items: Vec<Stx> = vec![
-        keyword_stx(ctx, Keyword::Lambda),
-        Stx::list(
-            names
-                .iter()
-                .map(|n| Stx::symbol(*n, span, ScopeSet::new()))
-                .collect(),
-            span,
-            ScopeSet::new(),
-        ),
-    ];
-    lambda_items.extend(body_forms);
-    let lambda_form = Stx::list(lambda_items, span, ScopeSet::new());
-    // app = (lambda nil nil ...)——nil 实参直接铺平
-    let mut app_items: Vec<Stx> = vec![lambda_form];
-    for _ in names {
-        app_items.push(nil_stx(span));
-    }
-    let app_form = Stx::list(app_items, span, ScopeSet::new());
-    expand_form(&app_form, ctx)
-}
-
-fn wrap_body(exprs: Vec<Rc<CoreExpr>>, forms: &[Stx]) -> Rc<CoreExpr> {
-    let span = forms.first().map(|f| f.span).unwrap_or_default();
-    if exprs.len() == 1 {
-        return exprs.into_iter().next().expect("单个元素");
-    }
-    Rc::new(CoreExpr::Begin { body: exprs, span })
-}
-
-fn expand_if(stx: &Stx, items: &[Stx], ctx: &mut ExpandCtxt) -> Result<Rc<CoreExpr>, ExpandError> {
-    if items.len() != 3 && items.len() != 4 {
-        return Err(ExpandError::new(
-            "if 形式：(if 条件 真分支 [假分支])",
-            stx.span,
-        ));
-    }
-    let cond = expand_form(&items[1], ctx)?;
-    let then_branch = expand_form(&items[2], ctx)?;
-    let else_branch = if items.len() == 4 {
-        expand_form(&items[3], ctx)?
-    } else {
-        Rc::new(CoreExpr::Literal {
-            value: LiteralValue::Nil,
-            span: stx.span,
-        })
-    };
-    Ok(Rc::new(CoreExpr::If {
-        cond,
-        then_branch,
-        else_branch,
-        span: stx.span,
-    }))
-}
-
-fn expand_setbang(
-    stx: &Stx,
-    items: &[Stx],
-    ctx: &mut ExpandCtxt,
-) -> Result<Rc<CoreExpr>, ExpandError> {
-    if items.len() != 3 {
-        return Err(ExpandError::new("set! 形式：(set! 名 值)", stx.span));
-    }
-    let name = items[1]
-        .datum
-        .as_symbol()
-        .ok_or_else(|| ExpandError::new("set! 目标必须是符号", items[1].span))?;
-    let value = expand_form(&items[2], ctx)?;
-    Ok(Rc::new(CoreExpr::SetBang {
-        name,
-        value,
-        span: stx.span,
-    }))
-}
-
-fn expand_define(
-    stx: &Stx,
-    items: &[Stx],
-    ctx: &mut ExpandCtxt,
-) -> Result<Rc<CoreExpr>, ExpandError> {
-    if items.len() < 3 {
-        return Err(ExpandError::new(
-            "define 形式：(define 名 值) 或 (define (名 参数...) 体...)",
-            stx.span,
-        ));
-    }
-    // 函数糖：(define (f x y) body...) → (define f (lambda (x y) body...))——体形式铺平
-    if let Some(flist) = items[1].datum.as_list() {
-        if let Some(fname) = flist.first().and_then(|f| f.datum.as_symbol()) {
-            let mut lambda_items: Vec<Stx> = vec![
-                keyword_stx(ctx, Keyword::Lambda),
-                Stx::list(flist[1..].to_vec(), stx.span, ScopeSet::new()),
-            ];
-            lambda_items.extend(items[2..].iter().cloned());
-            let lambda_form = Stx::list(lambda_items, stx.span, ScopeSet::new());
-            let define_form = Stx::list(
-                vec![
-                    keyword_stx(ctx, Keyword::Define),
-                    Stx::symbol(fname, items[1].span, ScopeSet::new()),
-                    lambda_form,
-                ],
-                stx.span,
-                ScopeSet::new(),
-            );
-            return expand_form(&define_form, ctx);
-        }
-        return Err(ExpandError::new(
-            "define 函数糖首元素必须是符号",
-            items[1].span,
-        ));
-    }
-    let name = items[1]
-        .datum
-        .as_symbol()
-        .ok_or_else(|| ExpandError::new("define 目标必须是符号", items[1].span))?;
-    if items.len() != 3 {
-        return Err(ExpandError::new(
-            "define 值形式必须是单个表达式（函数糖请用 (define (名 参数...) 体...)）",
-            stx.span,
-        ));
-    }
-    let value = expand_form(&items[2], ctx)?;
-    Ok(Rc::new(CoreExpr::Define {
-        name,
-        value,
-        span: stx.span,
-    }))
-}
-
-fn expand_begin(
-    stx: &Stx,
-    items: &[Stx],
-    ctx: &mut ExpandCtxt,
-    _toplevel: bool,
-) -> Result<Rc<CoreExpr>, ExpandError> {
-    if items.len() < 2 {
-        return Ok(Rc::new(CoreExpr::Begin {
-            body: vec![],
-            span: stx.span,
-        }));
-    }
-    let body: Result<Vec<Rc<CoreExpr>>, _> =
-        items[1..].iter().map(|f| expand_form(f, ctx)).collect();
-    Ok(Rc::new(CoreExpr::Begin {
-        body: body?,
-        span: stx.span,
-    }))
-}
-
-fn expand_module(
-    stx: &Stx,
-    items: &[Stx],
-    ctx: &mut ExpandCtxt,
-) -> Result<Rc<CoreExpr>, ExpandError> {
-    if items.len() < 2 {
-        return Err(ExpandError::new(
-            "module 形式：(module 名 [(import ...)] [(export ...)] 体...)",
-            stx.span,
-        ));
-    }
-    let name = items[1]
-        .datum
-        .as_symbol()
-        .ok_or_else(|| ExpandError::new("module 名必须是符号", items[1].span))?;
-    let mut imports = Vec::new();
-    let mut exports = Vec::new();
-    let mut body_start = 2;
-    // 可选 (import ...) 与 (export ...)
-    while body_start < items.len() {
-        if let Some(head) = items[body_start]
-            .datum
-            .as_list()
-            .and_then(|l| l.first())
-            .and_then(|h| h.datum.as_symbol())
-        {
-            let kw = Keyword::from_name(ctx.table.name(head));
-            match kw {
-                Some(Keyword::Import) => {
-                    let list = items[body_start].datum.as_list().expect("已检查为列表");
-                    for s in &list[1..] {
-                        match s.datum.as_symbol() {
-                            Some(sym) => imports.push(sym),
-                            None => return Err(ExpandError::new("import 项必须是符号", s.span)),
-                        }
-                    }
-                    body_start += 1;
-                    continue;
-                }
-                Some(Keyword::Export) => {
-                    let list = items[body_start].datum.as_list().expect("已检查为列表");
-                    for s in &list[1..] {
-                        match s.datum.as_symbol() {
-                            Some(sym) => exports.push(sym),
-                            None => return Err(ExpandError::new("export 项必须是符号", s.span)),
-                        }
-                    }
-                    body_start += 1;
-                    continue;
-                }
-                // _ 臂理由：头部非 import/export（define 等体形式或非关键字符号头）——可选头部区结束，余下为模块体
-                _ => break,
-            }
-        }
-        break;
-    }
-    let body = expand_program(&items[body_start..], ctx)?;
-    Ok(Rc::new(CoreExpr::Module {
-        name,
-        imports,
-        exports,
-        body,
-        span: stx.span,
-    }))
-}
-
-fn expand_quote(stx: &Stx, items: &[Stx]) -> Result<Rc<CoreExpr>, ExpandError> {
-    if items.len() != 2 {
-        return Err(ExpandError::new("quote 形式：(quote 数据)", stx.span));
-    }
-    let value = datum_to_value(&items[1])?;
-    Ok(Rc::new(CoreExpr::Literal {
-        value,
-        span: stx.span,
-    }))
-}
-
-/// datum → 字面量值（quote 语义；符号 datum 显式报错——Symbol 值推迟，TD-002）。
-fn datum_to_value(stx: &Stx) -> Result<LiteralValue, ExpandError> {
-    match &stx.datum {
-        StxDatum::Literal(l) => Ok(literal_from_stx(l)),
-        StxDatum::List(items) => {
-            // 列表 → 右折叠点对
-            let mut acc = LiteralValue::Nil;
-            for item in items.iter().rev() {
-                acc = LiteralValue::Pair(Rc::new(datum_to_value(item)?), Rc::new(acc));
-            }
-            Ok(acc)
-        }
-        StxDatum::Symbol(_) => Err(ExpandError::new(
-            "quote 符号暂不支持（Symbol 值类型推迟到 Stage 1，TD-002）",
-            stx.span,
-        )),
-        StxDatum::Vector(_) => Err(ExpandError::new(
-            "quote 向量暂不支持（Vector 值类型推迟，TD-002）",
-            stx.span,
-        )),
-    }
-}
-
-fn expand_define_syntax(
-    stx: &Stx,
-    items: &[Stx],
-    ctx: &mut ExpandCtxt,
-) -> Result<Rc<CoreExpr>, ExpandError> {
-    if items.len() != 3 {
-        return Err(ExpandError::new(
-            "define-syntax 形式：(define-syntax 名 (syntax-rules ...))",
-            stx.span,
-        ));
-    }
-    let name = items[1]
-        .datum
-        .as_symbol()
-        .ok_or_else(|| ExpandError::new("define-syntax 名必须是符号", items[1].span))?;
-    let rules_stx = &items[2];
-    // 头必须是 syntax-rules
-    let head_ok = rules_stx
-        .datum
-        .as_list()
-        .and_then(|l| l.first())
-        .and_then(|h| h.datum.as_symbol())
-        .map(|s| ctx.table.is_keyword(s, Keyword::SyntaxRules))
-        .unwrap_or(false);
-    if !head_ok {
-        return Err(ExpandError::new(
-            "define-syntax 第二参数必须是 (syntax-rules ...) 形式",
-            rules_stx.span,
-        ));
-    }
-    let rules = SyntaxRules::parse(rules_stx)
-        .map_err(|e| ExpandError::new(format!("syntax-rules 解析失败：{}", e), rules_stx.span))?;
-    ctx.register_transformer(
-        name,
-        Transformer {
-            kind: TransformerKind::Rules(rules),
-            def_scopes: stx.scopes.clone(),
-        },
-    );
-    // Phase 1 形式：运行期为无操作（nil 字面量）
-    Ok(Rc::new(CoreExpr::Literal {
-        value: LiteralValue::Nil,
-        span: stx.span,
-    }))
-}
-
-// ---- 内置语法糖变换器（§3.2 推导表；输出 Stx 后经展开器再展开） ----
-//
-// 约定：这些函数是 TransformerKind::Builtin 的载体（签名一致）。
-// 引入标识符（loop/tmp 等）在此直接构造为普通符号——真正需要卫生的
-// 场景由 while 的 loop 与 cond 的 gensym 路径处理（经 intro 通道唯一化）。
-
-fn desugar_let(args: &[Stx], _h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (let ((x e)...) body...) → ((lambda (x...) body...) e...)
-    if args.len() < 2 {
-        return Err("let 形式：(let ((名 值)...) 体...)".to_string());
-    }
-    let bindings = args[0].datum.as_list().ok_or("let 绑定组必须是列表")?;
-    let span = args[0].span;
-    let mut names = Vec::new();
-    let mut values = Vec::new();
-    for b in bindings {
-        let pair = b
-            .datum
-            .as_list()
-            .filter(|p| p.len() == 2)
-            .ok_or("let 绑定必须是 (名 值) 二元列表")?;
-        let name = pair[0].datum.as_symbol().ok_or("let 绑定名必须是符号")?;
-        names.push(Stx::symbol(name, pair[0].span, pair[0].scopes.clone()));
-        values.push(pair[1].clone());
-    }
-    let scopes = args[0].scopes.clone();
-    let param_list = Stx::list(names, span, scopes.clone());
-    let mut lambda_items: Vec<Stx> = vec![
-        Stx::symbol(kw_symbol(&WORD_LAMBDA), span, scopes.clone()),
-        param_list,
-    ];
-    lambda_items.extend(args[1..].iter().cloned());
-    let lambda = Stx::list(lambda_items, span, scopes);
-    let app = Stx::list(
-        {
-            let mut v = vec![lambda];
-            v.extend(values);
-            v
-        },
-        span,
-        ScopeSet::new(),
-    );
-    Ok(app)
-}
+// ---- 关键词句柄（thread_local 缓存 intern 结果——sugar/core_forms 共用） ----
 
 thread_local! {
-    static WORD_LAMBDA: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
-    static WORD_SETBANG: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
-    static WORD_IF: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
-    static WORD_BEGIN: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
-    static WORD_LET: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
-    static WORD_LETREC: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
-    static WORD_ELSE: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
-    static WORD_LETSTAR: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
+    pub(crate) static WORD_LAMBDA: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
+    pub(crate) static WORD_SETBANG: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
+    pub(crate) static WORD_IF: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
+    pub(crate) static WORD_BEGIN: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
+    pub(crate) static WORD_LET: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
+    pub(crate) static WORD_LETREC: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
+    pub(crate) static WORD_ELSE: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
+    pub(crate) static WORD_LETSTAR: std::cell::RefCell<Symbol> = const { std::cell::RefCell::new(Symbol(u32::MAX)) };
 }
 
 /// 初始化核心形式关键词句柄（`ExpandCtxt::new` 自动调用）。
@@ -755,369 +331,32 @@ pub(crate) fn init_keywords(table: &mut SymbolTable) {
     }
 }
 
-fn kw_symbol(word: &'static std::thread::LocalKey<std::cell::RefCell<Symbol>>) -> Symbol {
+pub(crate) fn kw_symbol(
+    word: &'static std::thread::LocalKey<std::cell::RefCell<Symbol>>,
+) -> Symbol {
     word.with(|w| *w.borrow())
 }
 
-fn desugar_letrec(args: &[Stx], _h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (letrec ((f e)...) body...) → ((lambda (f...) (begin (set! f e)... body...)) nil...)
-    if args.len() < 2 {
-        return Err("letrec 形式：(letrec ((名 值)...) 体...)".to_string());
-    }
-    let bindings = args[0].datum.as_list().ok_or("letrec 绑定组必须是列表")?;
-    let span = args[0].span;
-    let scopes = args[0].scopes.clone();
-    let mut names = Vec::new();
-    let mut sets = Vec::new();
-    for b in bindings {
-        let pair = b
-            .datum
-            .as_list()
-            .filter(|p| p.len() == 2)
-            .ok_or("letrec 绑定必须是 (名 值) 二元列表")?;
-        let name = pair[0].datum.as_symbol().ok_or("letrec 绑定名必须是符号")?;
-        names.push(name);
-        sets.push(Stx::list(
-            vec![
-                Stx::symbol(kw_symbol(&WORD_SETBANG), span, scopes.clone()),
-                Stx::symbol(name, pair[0].span, scopes.clone()),
-                pair[1].clone(),
-            ],
-            pair[0].span,
-            scopes.clone(),
-        ));
-    }
-    let mut inner = vec![Stx::symbol(kw_symbol(&WORD_BEGIN), span, scopes.clone())];
-    inner.extend(sets);
-    inner.extend(args[1..].iter().cloned());
-    let body = Stx::list(inner, span, scopes.clone());
-    let param_list = Stx::list(
-        names
-            .iter()
-            .map(|n| Stx::symbol(*n, span, scopes.clone()))
-            .collect(),
-        span,
-        scopes.clone(),
-    );
-    let lambda = Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_LAMBDA), span, scopes.clone()),
-            param_list,
-            body,
-        ],
-        span,
-        scopes.clone(),
-    );
-    // app = (lambda nil nil ...)——nil 实参直接铺平（不包列表！）
-    let mut app_items: Vec<Stx> = vec![lambda];
-    for _ in names {
-        app_items.push(nil_stx(span));
-    }
-    Ok(Stx::list(app_items, span, scopes))
-}
+// ---- 构造辅助（core_forms/sugar 共用的 Stx 构造底座） ----
 
-fn desugar_let_star(args: &[Stx], h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (let* ((x e) rest...) body...) → (let ((x e)) (let* (rest...) body...))
-    // (let* () body...) → (let () body...)
-    if args.len() < 2 {
-        return Err("let* 形式：(let* ((名 值)...) 体...)".to_string());
-    }
-    let bindings = args[0]
-        .datum
-        .as_list()
-        .ok_or("let* 绑定组必须是列表")?
-        .to_vec();
-    let span = args[0].span;
-    let scopes = args[0].scopes.clone();
-    if bindings.is_empty() {
-        return desugar_let(args, h);
-    }
-    let first = bindings[0].clone();
-    let rest = bindings[1..].to_vec();
-    let rest_list = Stx::list(rest, span, scopes.clone());
-    let inner = Stx::list(
-        {
-            let mut v = vec![
-                Stx::symbol(kw_symbol(&WORD_LETSTAR), span, scopes.clone()),
-                rest_list,
-            ];
-            v.extend(args[1..].iter().cloned());
-            v
-        },
-        span,
-        scopes.clone(),
-    );
-    Ok(Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_LET), span, scopes.clone()),
-            Stx::list(vec![first], span, scopes.clone()),
-            inner,
-        ],
-        span,
-        scopes,
-    ))
-}
-
-fn desugar_cond(args: &[Stx], _h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (cond (c1 e1) (c2 e2) (else e3)) → 嵌套 if；子句 (test) → test
-    if args.is_empty() {
-        return Err("cond 需要至少一个子句".to_string());
-    }
-    let scopes = args[0].scopes.clone();
-    let mut chain: Option<Stx> = None; // 从右向左构造
-    for clause in args.iter().rev() {
-        let pair = clause
-            .datum
-            .as_list()
-            .filter(|p| !p.is_empty())
-            .ok_or("cond 子句必须是非空列表")?;
-        let is_else = pair[0]
-            .datum
-            .as_symbol()
-            .map(is_else_symbol)
-            .unwrap_or(false);
-        let body = if pair.len() == 1 {
-            // (test) → 返回测试值本身
-            pair[0].clone()
-        } else if pair.len() == 2 {
-            // 单表达式子句：直接使用（与经典推导一致）
-            pair[1].clone()
-        } else {
-            Stx::list(
-                {
-                    let mut v = vec![Stx::symbol(
-                        kw_symbol(&WORD_BEGIN),
-                        pair[0].span,
-                        scopes.clone(),
-                    )];
-                    v.extend(pair[1..].iter().cloned());
-                    v
-                },
-                pair[0].span,
-                scopes.clone(),
-            )
-        };
-        let node = if is_else {
-            body
-        } else {
-            // 检查链尾是否需要 else 分支（无 else 的 cond 尾部为 nil）
-            match &chain {
-                None => Stx::list(
-                    vec![
-                        Stx::symbol(kw_symbol(&WORD_IF), pair[0].span, scopes.clone()),
-                        pair[0].clone(),
-                        body,
-                        nil_stx(pair[0].span),
-                    ],
-                    pair[0].span,
-                    scopes.clone(),
-                ),
-                Some(tail) => Stx::list(
-                    vec![
-                        Stx::symbol(kw_symbol(&WORD_IF), pair[0].span, scopes.clone()),
-                        pair[0].clone(),
-                        body,
-                        tail.clone(),
-                    ],
-                    pair[0].span,
-                    scopes.clone(),
-                ),
-            }
-        };
-        chain = Some(node);
-    }
-    Ok(chain.expect("args 非空已保证"))
-}
-
-fn is_else_symbol(s: Symbol) -> bool {
-    WORD_ELSE.with(|w| *w.borrow() == s)
-}
-
-fn desugar_and(args: &[Stx], _h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (and) → true；(and a) → a；(and a b...) → (if a (and b...) false)
-    let span = args.first().map(|a| a.span).unwrap_or_default();
-    let scopes = args.first().map(|a| a.scopes.clone()).unwrap_or_default();
-    if args.is_empty() {
-        return Ok(true_stx(span));
-    }
-    if args.len() == 1 {
-        return Ok(args[0].clone());
-    }
-    let rest = desugar_and(&args[1..], _h)?;
-    Ok(Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_IF), span, scopes.clone()),
-            args[0].clone(),
-            rest,
-            false_stx(span),
-        ],
-        span,
-        scopes,
-    ))
-}
-
-fn desugar_or(args: &[Stx], _h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (or) → false；(or a) → a；(or a b...) → (if a true (or b...))（§3.2 推导规范）
-    let span = args.first().map(|a| a.span).unwrap_or_default();
-    let scopes = args.first().map(|a| a.scopes.clone()).unwrap_or_default();
-    if args.is_empty() {
-        return Ok(false_stx(span));
-    }
-    if args.len() == 1 {
-        return Ok(args[0].clone());
-    }
-    let rest = desugar_or(&args[1..], _h)?;
-    Ok(Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_IF), span, scopes.clone()),
-            args[0].clone(),
-            true_stx(span),
-            rest,
-        ],
-        span,
-        scopes,
-    ))
-}
-
-fn desugar_when(args: &[Stx], _h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (when c body...) → (if c (begin body...) nil)
-    if args.is_empty() {
-        return Err("when 形式：(when 条件 体...)".to_string());
-    }
-    let span = args[0].span;
-    let scopes = args[0].scopes.clone();
-    let body = Stx::list(
-        {
-            let mut v = vec![Stx::symbol(kw_symbol(&WORD_BEGIN), span, scopes.clone())];
-            v.extend(args[1..].iter().cloned());
-            v
-        },
-        span,
-        scopes.clone(),
-    );
-    Ok(Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_IF), span, scopes.clone()),
-            args[0].clone(),
-            body,
-            nil_stx(span),
-        ],
-        span,
-        scopes,
-    ))
-}
-
-fn desugar_unless(args: &[Stx], _h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (unless c body...) → (if c nil (begin body...))
-    if args.is_empty() {
-        return Err("unless 形式：(unless 条件 体...)".to_string());
-    }
-    let span = args[0].span;
-    let scopes = args[0].scopes.clone();
-    let body = Stx::list(
-        {
-            let mut v = vec![Stx::symbol(kw_symbol(&WORD_BEGIN), span, scopes.clone())];
-            v.extend(args[1..].iter().cloned());
-            v
-        },
-        span,
-        scopes.clone(),
-    );
-    Ok(Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_IF), span, scopes.clone()),
-            args[0].clone(),
-            nil_stx(span),
-            body,
-        ],
-        span,
-        scopes,
-    ))
-}
-
-fn desugar_while(args: &[Stx], h: &mut crate::macro_sys::HygieneCtx) -> Result<Stx, String> {
-    // (while c body...) → (letrec ((loop (lambda () (if c (begin body... (loop)) nil)))) (loop))
-    if args.is_empty() {
-        return Err("while 形式：(while 条件 体...)".to_string());
-    }
-    let span = args[0].span;
-    let scopes = args[0].scopes.clone();
-    // loop 为引入标识符 → 卫生重命名（唯一化符号）
-    let loop_base = h.table().intern("loop");
-    let loop_sym = h.fresh_symbol(loop_base);
-    let loop_call = Stx::list(
-        vec![Stx::symbol(loop_sym, span, scopes.clone())],
-        span,
-        scopes.clone(),
-    );
-    let mut body_items: Vec<Stx> = vec![Stx::symbol(kw_symbol(&WORD_BEGIN), span, scopes.clone())];
-    body_items.extend(args[1..].iter().cloned());
-    body_items.push(loop_call);
-    let body = Stx::list(body_items, span, scopes.clone());
-    let if_form = Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_IF), span, scopes.clone()),
-            args[0].clone(),
-            body,
-            nil_stx(span),
-        ],
-        span,
-        scopes.clone(),
-    );
-    let lambda = Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_LAMBDA), span, scopes.clone()),
-            Stx::list(vec![], span, scopes.clone()),
-            if_form,
-        ],
-        span,
-        scopes.clone(),
-    );
-    let binding = Stx::list(
-        vec![Stx::list(
-            vec![Stx::symbol(loop_sym, span, scopes.clone()), lambda],
-            span,
-            scopes.clone(),
-        )],
-        span,
-        scopes.clone(),
-    );
-    let letrec_call = Stx::list(
-        vec![
-            Stx::symbol(kw_symbol(&WORD_LETREC), span, scopes.clone()),
-            binding,
-            Stx::list(
-                vec![Stx::symbol(loop_sym, span, scopes.clone())],
-                span,
-                scopes.clone(),
-            ),
-        ],
-        span,
-        scopes,
-    );
-    Ok(letrec_call)
-}
-
-// ---- 小工具 ----
-
-fn nil_stx(span: Span) -> Stx {
+pub(crate) fn nil_stx(span: kerf_span::Span) -> Stx {
     Stx::literal(StxLiteral::Nil, span, ScopeSet::new())
 }
 
-fn true_stx(span: Span) -> Stx {
+pub(crate) fn true_stx(span: kerf_span::Span) -> Stx {
     Stx::literal(StxLiteral::Bool(true), span, ScopeSet::new())
 }
 
-fn false_stx(span: Span) -> Stx {
+pub(crate) fn false_stx(span: kerf_span::Span) -> Stx {
     Stx::literal(StxLiteral::Bool(false), span, ScopeSet::new())
 }
 
-fn keyword_stx(ctx: &ExpandCtxt, kw: Keyword) -> Stx {
+pub(crate) fn keyword_stx(ctx: &ExpandCtxt, kw: Keyword) -> Stx {
     let sym = ctx.table.keyword_symbol(kw);
-    Stx::symbol(sym, Span::dummy(), ScopeSet::new())
+    Stx::symbol(sym, kerf_span::Span::dummy(), ScopeSet::new())
 }
 
-fn make_setbang(name: Symbol, value: Stx, span: Span) -> Stx {
+pub(crate) fn make_setbang(name: Symbol, value: Stx, span: kerf_span::Span) -> Stx {
     // (set! name value) 三元素列表（内部 define 提升路径）
     Stx::list(
         vec![
@@ -1130,7 +369,7 @@ fn make_setbang(name: Symbol, value: Stx, span: Span) -> Stx {
     )
 }
 
-fn is_head_keyword(stx: &Stx, ctx: &ExpandCtxt, kw: Keyword) -> bool {
+pub(crate) fn is_head_keyword(stx: &Stx, ctx: &ExpandCtxt, kw: Keyword) -> bool {
     stx.datum
         .as_list()
         .and_then(|l| l.first())
@@ -1139,58 +378,12 @@ fn is_head_keyword(stx: &Stx, ctx: &ExpandCtxt, kw: Keyword) -> bool {
         .unwrap_or(false)
 }
 
-fn define_name(def: &Stx, _ctx: &ExpandCtxt) -> Result<Symbol, ExpandError> {
-    let items = def
-        .datum
-        .as_list()
-        .ok_or_else(|| ExpandError::new("define 必须是列表", def.span))?;
-    if items.len() < 2 {
-        return Err(ExpandError::new("define 形式不完整", def.span));
-    }
-    // 函数糖：(define (f x) ...)
-    if let Some(flist) = items[1].datum.as_list() {
-        return flist
-            .first()
-            .and_then(|f| f.datum.as_symbol())
-            .ok_or_else(|| ExpandError::new("define 函数糖首元素必须是符号", items[1].span));
-    }
-    items[1]
-        .datum
-        .as_symbol()
-        .ok_or_else(|| ExpandError::new("define 目标必须是符号", items[1].span))
-}
-
-fn define_value_stx(def: &Stx, ctx: &ExpandCtxt) -> Result<Stx, ExpandError> {
-    // 返回 define 的「值」部分；函数糖规范化为 (define name (lambda ...))
-    let items = def
-        .datum
-        .as_list()
-        .ok_or_else(|| ExpandError::new("define 必须是列表", def.span))?;
-    if items.len() < 2 {
-        return Err(ExpandError::new("define 形式不完整", def.span));
-    }
-    // 函数糖：(define (f x) body...) → 构造 (define f (lambda (x) body...))
-    if let Some(flist) = items[1].datum.as_list() {
-        if flist.first().and_then(|f| f.datum.as_symbol()).is_none() {
-            return Err(ExpandError::new(
-                "define 函数糖首元素必须是符号",
-                items[1].span,
-            ));
-        }
-        let mut lambda_items: Vec<Stx> = vec![
-            keyword_stx(ctx, Keyword::Lambda),
-            Stx::list(flist[1..].to_vec(), items[1].span, ScopeSet::new()),
-        ];
-        lambda_items.extend(items[2..].iter().cloned());
-        let lambda_form = Stx::list(lambda_items, items[1].span, ScopeSet::new());
-        // 返回等价 define 的值（lambda 语法形式——由提升路径统一再展开）
-        return Ok(lambda_form);
-    }
-    if items.len() == 3 {
-        Ok(items[2].clone())
-    } else {
-        Err(ExpandError::new("define 值形式必须是单个表达式", def.span))
-    }
+/// 语法糖符号判定（内置变换器通道的触发集合——与 builtin_transformer 的名字集一致）。
+fn is_sugar_symbol(sym: Symbol, table: &SymbolTable) -> bool {
+    matches!(
+        table.name(sym),
+        "let" | "letrec" | "let*" | "cond" | "and" | "or" | "when" | "unless" | "while"
+    )
 }
 
 #[cfg(test)]
@@ -1326,6 +519,65 @@ mod tests {
     }
 
     #[test]
+    fn deep_macro_chain_expands_iteratively() {
+        // TD-007 正例：500 层透传宏链（= 标定上限）经 trampoline 工作表
+        // 迭代展开——展开控制流栈深恒定。残留栈约束来自 Stx 值语义深树
+        // 的 clone/drop 递归（实测：2MiB 测试栈 1_000 通过/2_000 溢出；
+        // 8MiB 主线程 4_000 通过/5_000 溢出——探针 example 实测）；
+        // 500 = 实测通过值 2× 裕度（TD-017 同型实测法）。构造链而非
+        // 源码嵌套（reader 嵌套上限 256 不适用于 Stx 构造）。
+        let src = "(define-syntax m (syntax-rules () ((m x) x)))";
+        let mut c = ctx();
+        let forms = read_source(src, 0, &mut c.table).unwrap();
+        expand_program(&forms, &mut c).unwrap(); // 注册透传宏 m
+        let m_sym = c.table.intern("m");
+        let span = kerf_span::Span::dummy();
+        let mut cur = Stx::literal(StxLiteral::Int(42), span, ScopeSet::new());
+        for _ in 0..500 {
+            cur = Stx::list(
+                vec![Stx::symbol(m_sym, span, ScopeSet::new()), cur],
+                span,
+                ScopeSet::new(),
+            );
+        }
+        let out = expand_form(&cur, &mut c).unwrap();
+        match out.as_ref() {
+            CoreExpr::Literal {
+                value: LiteralValue::Int(42),
+                ..
+            } => {}
+            other => panic!("透传 500 层链应归约到字面量 42，实际 {:?}", other),
+        }
+    }
+
+    #[test]
+    fn macro_chain_beyond_limit_reports_error() {
+        // TD-007 负例：501 层链超上限 → 结构化报错（非栈溢出）。
+        // 上限语义 = 展开路径上的宏展开总数（500 层链恰好通过、
+        // 501 层报错——边界含头含尾验证）。
+        let src = "(define-syntax m (syntax-rules () ((m x) x)))";
+        let mut c = ctx();
+        let forms = read_source(src, 0, &mut c.table).unwrap();
+        expand_program(&forms, &mut c).unwrap();
+        let m_sym = c.table.intern("m");
+        let span = kerf_span::Span::dummy();
+        let mut cur = Stx::literal(StxLiteral::Int(1), span, ScopeSet::new());
+        for _ in 0..501 {
+            cur = Stx::list(
+                vec![Stx::symbol(m_sym, span, ScopeSet::new()), cur],
+                span,
+                ScopeSet::new(),
+            );
+        }
+        let err = expand_form(&cur, &mut c).unwrap_err();
+        assert!(
+            err.message.contains("超过上限 500"),
+            "实际错误：{}",
+            err.message
+        );
+    }
+
+    #[test]
     fn user_macro_with_hygiene() {
         let mut c = ctx();
         let src = r#"
@@ -1361,12 +613,4 @@ mod tests {
         let err = expand_src("(if)", &mut c).unwrap_err();
         assert!(!err.span.is_empty() || err.span.start == 0);
     }
-}
-
-/// 语法糖符号判定（内置变换器通道的触发集合——与 builtin_transformer 的名字集一致）。
-fn is_sugar_symbol(sym: Symbol, table: &SymbolTable) -> bool {
-    matches!(
-        table.name(sym),
-        "let" | "letrec" | "let*" | "cond" | "and" | "or" | "when" | "unless" | "while"
-    )
 }

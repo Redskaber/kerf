@@ -126,3 +126,32 @@ kerf-stage0-v0.1.0-stage0.1-12-caps-langdesign-v5.1-semantics-r2.tar.gz
 ### 下一步
 
 Gate R2 门审查复审（审计集就位后按 §7.3 重跑）→ §6.3 外循环投票 → Stage 1 规划输入。
+
+## v0.1.0-r4（2026-09-10）——Stage 1 批次 A：切换期重构 + 第一批工作项
+
+**SOP 流程**：Stage 1 启动（§21 规划 → §17 排版图 → §18 依赖审查 → §13.1 设计对齐 → §4 MUV 批次 A）。
+
+### 交付（3 MUV + 1 重排）
+
+- **TD-015 已解决**：`compile_source` 按消费方分流——run/eval 生产路径改走
+  `compile_front` 前段（不构造图 IR）；完整入口保留给 `ir`/`code`/`bc`/`check`
+  dump 与检查子命令；分流守护测试（快路径与完整编译字节码逐指令一致）。
+- **TD-012 已解决**：expander.rs 1372 → 517 行（-62%）——三职责分置
+  （core_forms.rs 511 / sugar.rs 426，crate 私有模块，公共 API 零变化）；
+  测试整体保留主控走公共入口（拆分等价性天然回归）。
+- **TD-007 部分解决**：宏展开 trampoline 工作表（宏产物头部仍是宏调用时
+  迭代继续，展开控制流栈深与链长解耦）；深度上限 128 → **500**（实测
+  标定：2MiB 测试线程 1_000 通过/2_000 溢出，2× 裕度——TD-017 同型
+  实测法；探针 example 双环境数据记录于 TD 登记）；完整 10_000 口径
+  依赖 Stx Rc 化（批次 B 前端重写）。
+- **TD-004 重排批次 B**：完整实现 = 绑定 scope 注入 + CoreExpr::VarRef
+  scope 桥 + 双路径解析体系切换（≥800 LOC 跨 5 crate）——超出单 MUV
+  容量，与 TD-002/标准库同批（依据 §1.2.1 只升不降 + §12 最优>最小）。
+
+### 质量口径
+
+- §3.2 全绿：build --release 0 警告 / check --all-targets 0/0 /
+  fmt 零 diff / clippy -D warnings 零警告 / test --release **304:0:1**
+- 审计集 41/41 复跑 EXIT 0；新增集成套件 expansion_worklist_tests（4 例）
+- SOP 文件更名：`stage-committee-process.md` → `sop.md`（引用同步 3 处）
+- worklog Task 18-21 全记录；lang-design 03-macro-system TD-007 注记回写

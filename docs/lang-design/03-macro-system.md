@@ -115,10 +115,14 @@ impl Transformer {
 
 ```rust
 /// 宏展开深度上限（本文 §4 不变式 1 的取值裁定）。
-/// 取值 128 与 rustc 默认递归上限一致——真实宏嵌套深度远低于此；
-/// 设计文档示例值 10_000 需迭代式工作表展开（TD-007：受限栈环境
-/// （测试线程 2MiB）下的安全校准，Stage 1 计划解除）。
-pub const MAX_EXPANSION_DEPTH: u32 = 128;
+/// TD-007 部分解除（Stage 1 批次 A3，2026-09-10）：宏展开链经
+/// trampoline 工作表迭代化（expand_form 顶层循环——产物头部仍是
+/// 宏调用时循环继续，不递归），展开控制流栈深与链长解耦；上限
+/// 128 → 500（实测标定：2MiB 测试线程 1_000 层通过/2_000 层溢出；
+/// 500 = 2× 裕度——TD-017 同型实测法）。完整 10_000 口径依赖
+/// Stx Rc 化（值语义深树 clone/drop 递归为残余栈约束）——Stage 1
+/// 前端重写批次 B 范围，残留边界登记 TD-007。
+pub const MAX_EXPANSION_DEPTH: u32 = 500;
 
 /// 展开上下文。
 pub struct ExpandCtxt {
@@ -232,7 +236,7 @@ fn expand(stx: &Stx, ctx: &mut ExpandCtx) -> Result<Stx, ExpandError> {
 ```
 
 **核心不变式**：
-1. **展开终止性**：每次宏调用产生的语法对象携带"展开代次 + 1"的 expansion_id（[02-语法模型 §2 的 Span 定义](./02-syntax-model.md)）；超过上限报错而非栈溢出（实现取值 128——rustc 默认对齐 + TD-007 迭代式解除计划，见本文 §2.2）
+1. **展开终止性**：每次宏调用产生的语法对象携带"展开代次 + 1"的 expansion_id（[02-语法模型 §2 的 Span 定义](./02-syntax-model.md)）；超过上限报错而非栈溢出（实现取值 500——TD-007 部分解除：trampoline 工作表迭代化后实测标定，见本文 §2.2）
 2. **卫生性保持**：宏引入的标识符作用域集 ≠ 用户代码作用域集，二者在 SyntaxObject 中永不合并为一个集合
 3. **相位封闭性**：Phase 1 的 transformer 只能产生 Phase 0 语法对象，不能反向执行 Phase 0 代码（本文 §1 规则 1）
 4. **同类路径审查（§20.3 迭代审计）**：lambda 体铺平（4 处构造点统一）、letrec 与提升路径 nil 包裹、while 递归裸符号、卫生一致性（同标识符 → 同一重命名符号）、宏自引用保留集、核心关键字重命名豁免——六项同类修复簇已全部落地（worklog Task 4-b）
@@ -248,7 +252,7 @@ fn expand(stx: &Stx, ctx: &mut ExpandCtx) -> Result<Stx, ExpandError> {
 |-----------|------------------------------|---------|
 | 卫生性保证（§2.4 三重保证） | plan 套件卫生宏用例：宏内外同名不串扰（集成验证）+ negative_semantics_tests::t1_regression_hygiene_fallback_dual_path（卫生回退双路径，v5.2 修复面） | 引入隔离 + 自由穿透 |
 | syntax-rules 匹配（§2.3 文法） | examples/usage/macros.krf + 展开单测（模式/字面量/省略号/模板实例化）+ negative_expander_tests::syntax_rules_misuse / macro_expansion_failures（模式不匹配/深度超限负例） | 首匹配 + 维度匹配报错 |
-| 展开终止性（§4 不变式 1） | 深度上限负例：超限报错而非栈溢出（negative_expander_tests 宏深度超限 case） | TD-007 校准值 128 |
+| 展开终止性（§4 不变式 1） | 深度上限负例：超限报错而非栈溢出（negative_expander_tests 宏深度超限 case）+ 深链正例（expander 单测 deep_macro_chain_expands_iteratively 500 层构造链）+ 端到端 200 层链（stage1/plan/expansion_worklist_tests） | TD-007 标定值 500（trampoline 工作表） |
 | 相位簿记（§1.1 契约） | phase 单测：declare/visit/instantiate 幂等 + 先行次序 + **模块循环依赖检测（DFS 灰标记 → 结构化 Err）+ 菱形依赖合法**（negative_expander_tests::module_cycle_dependency_errors / module_registry_phase_violations） | 传递依赖相位传播 + 无环不变式 |
 | 空应用（§7.1.1 类 3） | negative_expander_tests::empty_application_family（11 case——曾零测试的分类，v5.2 补齐） | `()` 展开期报错 |
 | 关键字误用矩阵（§2 核心形式卫式） | negative_expander_tests：lambda/if/set!/define/module/import/export/quote/let/letrec/let*/cond/else/define-syntax 等 21 关键字误用矩阵（96 case 覆盖） | 形式结构错误全部 E0002 |

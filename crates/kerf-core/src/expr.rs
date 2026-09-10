@@ -303,14 +303,6 @@ mod tests {
         })
     }
 
-    fn resolve(n: u32) -> String {
-        ((b'a' + n as u8) as char)
-            .to_string()
-            .chars()
-            .take(1)
-            .collect()
-    }
-
     #[test]
     fn free_variables_lambda_shadows() {
         // (lambda (a) (f a b)) → 自由变量 {f, b}（a 被参数屏蔽）

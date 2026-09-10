@@ -89,3 +89,8 @@ path = "tests/v0/stage0/plan/negative_vm_tests.rs"
 [[test]]
 name = "negative_semantics_tests"
 path = "tests/v0/stage0/plan/negative_semantics_tests.rs"
+
+# Stage 1 批次 A（sop.md §9.1：tests/v0/stage1/ 树——显式声明）
+[[test]]
+name = "expansion_worklist_tests"
+path = "tests/v0/stage1/plan/expansion_worklist_tests.rs"

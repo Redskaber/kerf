@@ -3,7 +3,7 @@
 **最小自举系统级编程语言**——Stage 0（语义验证，Rust 100% 实现）。
 
 > **设计蓝图**: docs/lang-design/（stage0.md v5.0 拆分，20 篇编号文档）
-> **流程管控**: docs/stage-committee-process.md（sop.md v11.0）
+> **流程管控**: docs/sop.md（v11.0；原名 stage-committee-process.md）
 > **阶段状态**: Stage 0 完成——[状态报告](docs/develop/v0/stage-0/status.md)
 
 ## 30 秒了解

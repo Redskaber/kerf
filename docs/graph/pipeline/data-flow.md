@@ -1,7 +1,7 @@
 # 管线数据流图（§15 项目图）
 
 > **Author**: kerf-dev-agent
-> **Date**: 2026-09-09
+> **Date**: 2026-09-10（r4：TD-015 分流注记——lower 从主链改为消费方旁路；主链 EXP→COMP 直连）
 > **Version**: v0.1.0
 > **Status**: Active
 
@@ -11,12 +11,13 @@
 flowchart TD
     SRC["源文本 .krf"] --> READER["kerf-reader<br/>词法 + 递归下降"]
     READER -->|"Vec<Stx>（Span+Scopes+Phase）"| EXP["kerf-expander<br/>展开 + 卫生宏 + 相位"]
-    EXP -->|"Vec<Rc<CoreExpr>>（9 原语）"| IR["kerf-core::lower<br/>图 IR（Arena+共享）"]
-    IR -->|"IrGraph"| COMP["kerf-compiler<br/>回填 + 捕获转换"]
+    EXP -->|"Vec<Rc<CoreExpr>>（9 原语）"| COMP["kerf-compiler<br/>回填 + 捕获转换"]
     COMP -->|"BcProgram（40 操作码 + debug_info）"| VM["kerf-vm<br/>switch-dispatch"]
     VM -->|"Value（堆引用）"| RT["kerf-runtime<br/>GC 堆 + I/O"]
+    EXP -.->|"仅消费方（ir/code dump）：compile_source 完整入口"| IR["kerf-core::lower<br/>图 IR（Arena+共享）"]
     DRIVER["kerf-driver（编排）"] -.->|"declare/visit/instantiate"| PH["kerf-expander::phase<br/>模块相位簿记"]
     DRIVER -.->|"内置注册 + 卫生回退"| VM
+    DRIVER -.->|"compile_front 快路径（TD-015：run/eval 不构造 IR）"| COMP
 ```
 
 ## 依赖图（Cargo Workspace，§18.5 的定向裁定）

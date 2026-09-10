@@ -404,7 +404,6 @@ mod tests {
         let mut t = SymbolTable::new();
         let mut g = register_globals(&mut t);
         let hyg = t.intern("+$hyg$3");
-        let plain = t.intern("+");
         let program = BcProgram {
             protos: vec![],
             consts: vec![],

@@ -1,9 +1,10 @@
 //! 驱动层：全管线编排（read → expand → lower → compile → run）。
 //!
 //! 入口（§10.1 规则 1 自由函数）：
-//! - `compile_source`：源文本 → `CompileOutput`（编译全管线，不执行）；
-//! - `run_source`：编译 + VM 执行（生产路径）；
-//! - `eval_source`：编译前端 + 元循环求值器执行（参考路径）。
+//! - `compile_source`：源文本 → `CompileOutput`（完整管线含图 IR——
+//!   dump/检查/CodeValue 消费方入口，TD-015 分流的完整出口）；
+//! - `run_source`：编译前段 + VM 执行（生产路径，不构造图 IR）；
+//! - `eval_source`：编译前段 + 元循环求值器执行（参考路径，同上）。
 //!
 //! 错误统一为 `DriverError`：阶段标识 + 已渲染诊断（含位置摘录，
 //! §2.2 原则 16：人类可感知输出是一等公民）。
@@ -144,12 +145,31 @@ impl CompileOutput {
     }
 }
 
-/// 编译源文本（全管线，不执行）。
+/// 编译前段产物（read → expand → 相位簿记 → 字节码；**不含图 IR lowering**）。
 ///
-/// 管线：read → expand（含相位 declare/visit 簿记）→ lower（图 IR）
-/// → compile（字节码）。instantiate 簿记在执行入口（run/eval）完成。
+/// TD-015 偿还：run/eval 生产路径消费本形态——`IrGraph` 仅在消费方
+/// （`kerf ir` 子命令 / CodeValue 检查 / 完整 dump）经 [`compile_source`]
+/// 按需计算，生产执行路径不再旁路构造后丢弃（恒定开销消除）。
+struct FrontOutput {
+    /// 展开后的核心表达式序列。
+    core: Vec<Rc<CoreExpr>>,
+    /// 字节码程序。
+    program: BcProgram,
+    /// 源映射（诊断渲染）。
+    source_map: SourceMap,
+    /// 符号表（渲染与调试）。
+    table: SymbolTable,
+    /// 模块注册簿记（declare/visit 已完成）。
+    registry: ModuleRegistry,
+}
+
+/// 编译前段（read → expand → 相位簿记 → 字节码，不含 lower）。
+///
+/// [`compile_source`]（完整管线，含图 IR）与 [`run_source`]/[`eval_source`]
+/// （生产执行路径，无需 IR）共用本前段——单一编译逻辑，两分流出口
+/// （字节码产物一致性由 `fast_path_bytecode_matches_full_compile` 守护）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
-pub fn compile_source(source: &str, filename: &str) -> Result<CompileOutput, DriverError> {
+fn compile_front(source: &str, filename: &str) -> Result<FrontOutput, DriverError> {
     let mut sm = SourceMap::new();
     let file_id = sm.add_file(filename, source);
     let mut table = SymbolTable::new();
@@ -204,19 +224,38 @@ pub fn compile_source(source: &str, filename: &str) -> Result<CompileOutput, Dri
         }
     })?;
 
-    // 4. Lower：CoreExpr → 图 IR（结构化形式 + 共享节点）
-    let ir = lower_program(&core);
-
-    // 5. Compile：图 IR 源（CoreExpr 树）→ 字节码
+    // 4. Compile：CoreExpr 树 → 字节码（lower 仅完整入口执行——见下）
     let program = compile_module(&core).map_err(|e| DriverError::from_compile(&e, &sm))?;
 
-    Ok(CompileOutput {
+    Ok(FrontOutput {
         core,
-        ir,
         program,
         source_map: sm,
         table,
         registry,
+    })
+}
+
+/// 编译源文本（全管线，不执行）。
+///
+/// 管线：read → expand（含相位 declare/visit 簿记）→ lower（图 IR）
+/// → compile（字节码）。instantiate 簿记在执行入口（run/eval）完成。
+///
+/// 消费方：`kerf ir`/`code`/`bc`/`check` 等 dump 与检查子命令、测试、
+/// CodeValue 检查——需要图 IR 或完整产物的场景。纯执行路径（run/eval）
+/// 走 [`compile_front`] 快路径（TD-015 分流）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
+pub fn compile_source(source: &str, filename: &str) -> Result<CompileOutput, DriverError> {
+    let front = compile_front(source, filename)?;
+    // Lower：CoreExpr → 图 IR（结构化形式 + 共享节点）——仅消费方按需计算
+    let ir = lower_program(&front.core);
+    Ok(CompileOutput {
+        core: front.core,
+        ir,
+        program: front.program,
+        source_map: front.source_map,
+        table: front.table,
+        registry: front.registry,
     })
 }
 
@@ -237,10 +276,13 @@ impl std::fmt::Debug for RunOutcome {
     }
 }
 
-/// 运行源文本（生产路径：编译 + VM 执行）。
+/// 运行源文本（生产路径：编译前段 + VM 执行）。
+///
+/// 走 [`compile_front`] 快路径——不构造图 IR（TD-015：执行路径无 IR
+/// 消费，旁路计算为恒定开销浪费）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 pub fn run_source(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
-    let out = compile_source(source, filename)?;
+    let out = compile_front(source, filename)?;
     let mut table = out.table;
     let mut globals = register_globals(&mut table);
     // 卫生回退解析（$hyg$N 后缀剥离）
@@ -256,10 +298,12 @@ pub fn run_source(source: &str, filename: &str) -> Result<RunOutcome, DriverErro
         .map_err(|e| DriverError::from_vm(&e, &source_map, &table))
 }
 
-/// 求值源文本（参考路径：编译前端 + 元循环求值器）。
+/// 求值源文本（参考路径：编译前段 + 元循环求值器）。
+///
+/// 同 [`run_source`]：走 [`compile_front`] 快路径，不构造图 IR（TD-015）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 pub fn eval_source(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
-    let out = compile_source(source, filename)?;
+    let out = compile_front(source, filename)?;
     let mut table = out.table;
     let globals = register_globals(&mut table);
     // eval 路径全局经根环境注入（宿主信任代码：内置名互不重复，
@@ -484,6 +528,23 @@ mod tests {
         assert!(out.disassemble().contains("CALL"));
         assert_eq!(out.render_core(), "(+ 1 2)");
         assert!(out.ir.len() >= 3);
+    }
+
+    #[test]
+    fn fast_path_bytecode_matches_full_compile() {
+        // TD-015 分流守护：run/eval 快路径（compile_front）与完整编译
+        // （compile_source）对同一源必须产出一致字节码——防止两出口
+        // 编译逻辑漂移（孤立正确 → 集成失败的 §7.2 防崩检查 Q2）。
+        let src = "(define (f x) (+ x 1)) (f 2)";
+        let full = compile_source(src, "t.krf").unwrap();
+        let front = compile_front(src, "t.krf").unwrap();
+        let full_text = full.disassemble();
+        let front_text =
+            disassemble_program(&front.program, &|s: Symbol| resolve_symbol(s, &front.table));
+        assert_eq!(
+            full_text, front_text,
+            "快路径与完整编译的字节码必须逐指令一致"
+        );
     }
 
     #[test]

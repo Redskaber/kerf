@@ -1,16 +1,16 @@
 # Stage 0 阶段状态报告
 
 > **Author**: kerf-dev-agent（QA-A 角色）
-> **Date**: 2026-09-10（r3 修复轮 + 负测扩张 + 审计集就位后对账）
-> **Version**: v0.1.0-r3
-> **Status**: Active
+> **Date**: 2026-09-10（r4：Stage 1 批次 A 交付 + §3.2 复验全绿）
+> **Version**: v0.1.0-r4
+> **Status**: Active（Stage 0 终态保持；Stage 1 批次 A 增量见 stage-1/plan.md 与 RELEASE_NOTES r4）
 
 ## 1. 交付概览
 
 | 指标 | 值 |
 |------|-----|
 | 代码规模（Rust 生产代码，crates + src，不含 tests/examples） | 见 RELEASE_NOTES（r3 末实测口径 `wc -l`） |
-| 测试总数 | **297 全绿**（单元 130 + 集成 168 函数 = 298，其中 1 个 #[ignore] 文档化存档；0 失败） |
+| 测试总数 | **304 全绿**（单元 132 + 集成 173 函数 = 305，其中 1 个 #[ignore] 文档化存档；0 失败——r4 批次 A 增量 +7） |
 | 负向测试 | 四文件 86 函数 / **483 case** + 审计集 41 case（负 32）——正负比 **≈1:3.2**（§9.4.3 门限达标，r1 时 1:0.24） |
 | 门审计集 | examples/audit/stage0_gate_audit_r1.rs：41 case（§7.3.1 配比全满足） |
 | crates | 9 成员 + 1 根 crate（零外部依赖，DAG 无环） |

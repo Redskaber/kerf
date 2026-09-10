@@ -1,14 +1,14 @@
 # 全局测试矩阵（覆盖率追踪）
 
 > **Author**: kerf-dev-agent（QA-A 角色）
-> **Date**: 2026-09-10（r3 负测扩张后全量对账——`cargo test --workspace` 实测复核）
-> **Version**: v0.1.0-r3
+> **Date**: 2026-09-10（r4：Stage 1 批次 A 交付后全量对账——`cargo test --release --workspace` 实测复核）
+> **Version**: v0.1.0-r4
 > **Status**: Active
 
 ## 总量
 
-**297 通过 / 0 失败 / 1 忽略**（298 个测试函数；忽略项均为文档化存档，见下）。
-§3.2 release 验收基线 204（r2）→ r3 负向测试扩张 + 审计集就位 + FS-1 守卫修复 + 糖正向锚点 + T17-a 六缺陷（D1-D7/D9）修复回归后 **297**。
+**304 通过 / 0 失败 / 1 忽略**（305 个测试函数；忽略项均为文档化存档，见下）。
+§3.2 release 验收基线 204（r2）→ r3 负向测试扩张 + 审计集就位 + FS-1 守卫修复 + 糖正向锚点 + T17-a 六缺陷（D1-D7/D9）修复回归后 297 → **r4（Stage 1 批次 A）304**：+1 TD-015 分流守护 + +2 TD-007 单元（500 层链正例/501 超限负例）+ +4 TD-007 集成（expansion_worklist_tests：端到端/双路径/自指宏报错/糖交错）。
 
 > 1 个 `#[ignore]`（实测确认的行为边界存档，不计 case 数，文件内注释说明理由）：
 > - negative_vm_tests::read_line_arity_ignored（read-line 元数不校验——语义发现 FS-4）
@@ -36,7 +36,9 @@
 > r2 基线 127 → r3 130：span +1（守卫）、core 11→10 / expander 23→26（含守护测试重写与循环依赖检测）、
 > compiler +1（app_evaluates_fn_then_args）等——逐项以 `cargo test --workspace` 输出为准。
 
-### 集成测试（166 函数 = 163 通过 + 3 忽略，tests/ 阶段树）
+### 集成测试（173 函数 = 172 通过 + 1 忽略，tests/ 阶段树）
+
+> r4 新增 `tests/v0/stage1/plan/expansion_worklist_tests.rs`（4 函数——TD-007 集成锚点：200 层链端到端 VM / 双路径一致 / 无限自指宏 Expand 结构化报错 / 宏链与糖交错推导）。Cargo.toml [[test]] 已显式声明。
 
 | 套件 | 文件 | 函数数 | 通过 | 忽略 |
 |------|------|--------|------|------|

@@ -454,3 +454,202 @@ Stage Summary:
   全修复）、§14.5.3（P1 本阶段修复不带入）、§6.3（外循环加权投票）、
   §2.3-9（D1/D2 按设计修实现侧）、§2.1.1-12（D3 守卫先实测后定值，
   4096 首测失败再校准——真实设计 vs 临时桩的判定留痕）
+
+---
+Task ID: 18
+Agent: Super Z (main) — REC-A（断档补落款）
+Task: r3 打包追认落款 + SOP 文件更名同步 + §3.2 前置清障
+
+Work Log:
+- 断档补记（§8.6 只追加）：final-assessment 预告「打包于 Task 18 执行」——
+  download/kerf-stage0-v0.1.0-stage0.1-langdesign-v5.2-gate-audit-r3.tar.gz
+  （443,174 B，2026-09-10 生成）实际存在但 worklog 无落款，本条目追认
+  该产出归属 Task 18（内容 = Stage 0 r3 交付包：lang-design v5.2 +
+  Gate R2 审计 + 297 测试基线）
+- 用户指令执行：docs/stage-committee-process.md 重命名为 docs/sop.md
+  （与 upload/sop.md 逐字节一致，cmp 验证）
+- 引用同步（§8.4.5 文档同步义务）：sop.md ×2（目录树自注 + §8.4.5
+  查询时机表）+ README.md ×1；历史记录保留原文不改（sop.md v10.0
+  变更日志行、worklog Task 6 历史条目、deep-review-round1.md）
+- §3.2 前置清障：cargo check --all-targets 发现 2 处测试残留警告
+  （builtins.rs:407 unused `plain` / expr.rs:306 dead `fn resolve`）——
+  清除后 --all-targets 0 警告；基线复验 297:0:1 不变（与 final-assessment
+  §3 终态指标一致）
+
+Stage Summary:
+- SOP 权威文件名统一为 docs/sop.md（本会话起所有引用以此为准）
+- 交付门清障完成：--all-targets 0 警告 + 297 基线确认，Stage 1 启动
+  前置条件就绪
+- 遵循原则：§8.6（worklog 只追加 + 断档补记先例 TD-001/006 同理）、
+  §8.4.5（活文档同步/历史保留）、§3.2（0 警告交付门前置清障）
+
+---
+Task ID: 19
+Agent: Super Z (main) — PM-A/ARCH-A/PL-A
+Task: Stage 1 启动规划套件（§21/§13.1/§17/§18/§4 五合一）
+
+Work Log:
+- §0 启动协议完成：自我定位声明 7 要素（L3 全量；多角色序列
+  PM-A→DEV-A→REV-A→QA-A→REC-A）
+- §21 阶段规划确认：目标=自举验证；Rust~70%+kerf~30%；后端=Stage 0 VM；
+  验收四条（§21.3）+ 切换信号 4/4 核对通过
+- §13.1 设计对齐：lang-design v5.2 十文档 → Stage 1 需求映射（结论：
+  无缺口阻塞——TD-004/007/012/015 均有契约锚点）
+- §17 七步排版图：Step 1 强制扫描 8 文档（技术债 16 项开放/校准基线
+  问题簇计轮/能力边界/测试 297:0:1/GO 判定/v0.5 路线图对齐）；
+  Step 2-4 依赖图 DAG 五批次（A 切换期重构 → B 标准库+Reader 重写 →
+  C 类型检查器+缓存 → D Effects+能力 → E Expander 重写+门审查）；
+  Step 5-7 三位一体节点流 + 缺陷纳入 + 审查通过
+- §18 依赖审查四项：基础设施/前置项/其他依赖（3 项非阻塞——栈约束/
+  值模型表达力/reserved 签名）/全面审查——结论无缺失项
+- §4 MUV 批次 A 六字段表（A1=20-b TD-015 / A2=20-a TD-012 /
+  A3=20-c TD-007 / A4=20-d TD-004）；批次 B-E 预留 Task ID 22-25
+- 产出 docs/develop/v0/stage-1/plan.md + tests/v0/stage1/plan/ 目录
+
+Stage Summary:
+- Stage 1 正式启动：GO 四条件全部映射到批次节点（条件 1→A3/A4；
+  条件 2→C3；条件 3→A1/A2；条件 4→C3）
+- 遵循原则：§21（规划先行）、§17.2（扫描强制 8 文档）、§13.1（设计
+  对齐 10 文档）、§18.1（依赖四项审查）、§4.1（六字段）、§8.4.5
+  （决策附条款号）
+
+---
+Task ID: 20-b
+Agent: Super Z (main) — DEV-A
+Task: TD-015 偿还——compile_source 按消费方分流（IrGraph 旁路计算消除）
+
+Work Log:
+- 病灶：compile_source 在 run/eval 生产路径无条件 lower_program 后旁路
+  丢弃（仅 kerf ir 子命令与 CodeValue 检查消费——后者自 lower）
+- 修复（登记册方案 A：拆分编译入口）：
+  - 抽取私有前段 compile_front（read → expand → 相位簿记 → 字节码，
+    不含 lower）+ FrontOutput 结构
+  - compile_source 公共 API 不变（完整管线含图 IR——dump/检查/CodeValue
+    消费方出口）
+  - run_source/eval_source 改走 compile_front 快路径（生产执行路径
+    不再构造 IrGraph）
+  - CLI check/core/bc/code 子命令维持 compile_source（§14.9 自调试
+    语义 = 完整管线检查，非病灶）
+- 新增守护测试 fast_path_bytecode_matches_full_compile：同一源两出口
+  字节码逐指令一致（防分流漂移——§7.2 Q2 孤立正确防线）
+- 回归：298 通过（297 基线 + 1 新增）/ 0 失败 / 1 ignored；CLI ir/code/
+  bc/check 输出不变（disassemble 等价验证于守护测试）
+
+Stage Summary:
+- TD-015 已解决（状态开放 → 已解决）；生产路径恒定开销消除
+- 遵循原则：§12（最优>最小：单一编译逻辑双出口而非复制管线）、
+  §2.1.1-11（确定性边界：病灶定义于登记册后动笔）、§7.2 Q2（孤立
+  正确防线——分流守护测试）、§10.1 规则 1（入口自由函数命名不变）
+
+---
+Task ID: 20-a
+Agent: Super Z (main) — DEV-A
+Task: TD-012 偿还——expander.rs 拆分（核心形式/糖推导/相位驱动三职责分置）
+
+Work Log:
+- 拆分前基线：expander.rs 1372 行（占 crate 58%——登记册 D1 风险项②）
+- 新模块布局（登记册方案落地）：
+  - expander.rs（主控，517 行）：公共类型（ExpandCtxt/ExpandError）+
+    入口分派（宏→糖→核心形式→函数应用）+ 宏调用展开 +
+    构造底座（WORD_* thread_local/init_keywords/kw_symbol/字面量构造/
+    make_setbang/is_head_keyword）+ mod tests 整体保留
+  - core_forms.rs（511 行，crate 私有）：expand_core_form 分派 +
+    lambda/if/set!/define/begin/module/quote/define-syntax 展开 +
+    parse_params/expand_body（define 提升路径）/define_name/
+    define_value_stx/datum_to_value
+  - sugar.rs（426 行，crate 私有）：desugar_let/letrec/let*/cond/and/
+    or/when/unless/while 九糖推导 + is_else_symbol
+  - phase.rs/macro_sys.rs 不动（相位驱动与变换器机制已独立）
+- 可见性裁定（§11 接口隔离）：core_forms/sugar 为 mod（crate 私有）——
+  外部仅见 expander 入口 re-export，公共 API 面零变化
+- 搬移原则：纯机械搬移（零逻辑修改）；仅可见性 pub(crate) 化 +
+  1 处 Ok 包装修正（literal_from_stx 返回值语义保持）
+- 回归：298 通过 / 0 失败 / 1 ignored（拆分前后逐一等价，测试零断言
+  修改）；clippy -D warnings 零警告；fmt 已应用
+
+Stage Summary:
+- TD-012 已解决：expander.rs 1372→517 行（-62%）；crate 2356→2451 行
+  （模块头 doc + use 声明的结构性增量）；单文件全部 ≤715 行
+- 拆分为 20-c（TD-007 迭代式展开）与 20-d（TD-004 scope-set）提供了
+  干净的实施基座（plan.md 批次 A 依赖拓扑 A2→A3/A4 就位）
+- 遵循原则：§11（接口隔离：内部模块私有化）、§12.3（重构治根：职责
+  分置而非行数切割）、§8.4.5（模块头 doc 职责边界声明）、§2.3-9
+  （正确>妥协：测试整体保留主控走公共入口=拆分等价性天然回归）
+
+---
+Task ID: 20-c
+Agent: Super Z (main) — DEV-A
+Task: TD-007 偿还（部分）——宏展开 trampoline 工作表 + 深度上限实测标定
+
+Work Log:
+- 设计：expand_form 重构为 trampoline（while let 循环）——宏产物头部
+  仍是宏调用（用户宏/糖）时迭代继续不递归；try_macro_step 单步
+  （宏头判定含卫生基名回退 + 糖惰性注册 + apply）；ctx.depth 语义
+  保持「展开路径宏总数」（入口快照/成功出口回滚——兄弟不累计）
+- expand_macro_call 删除（职责并入 trampoline）；expand_list 简化
+  为纯核心形式/应用分派；E1 修复：items[1..].to_vec() → &[Stx] 借用
+  （消除 trampoline 每步冗余深拷贝）
+- 深度上限标定（TD-017 同型实测法，探针 example + 测试线程双环境）：
+  - 2MiB 测试线程：1_000 层通过 / 2_000 层溢出
+  - 8MiB 主线程（CLI 生产）：4_000 层通过 / 5_000 层溢出
+  - 残余栈约束 = Stx 值语义深树 clone/drop 递归（数据结构层，非展开
+    控制流）——探针确认 trampoline 后溢出点来自 macro_sys 绑定
+    clone（match_datum arg.clone）与产物 drop 递归
+  - **裁定 500**（实测通过值 2× 裕度；不变式 1「超限报错而非栈溢出」
+    须在环境波动下成立——上限必须落在实测边界内侧）
+- 测试：单元 2 例（500 层构造链正例 + 501 层超限负例——构造 Stx
+  绕过 reader 256 嵌套限制）+ 集成 4 例（tests/v0/stage1/plan/
+  expansion_worklist_tests.rs：200 层链端到端 VM / 双路径一致 /
+  无限自指宏 Expand 阶段结构化报错 / 宏链与糖交错）+ Cargo.toml
+  [[test]] 声明
+- 负例消息同步：128→500（negative_expander_tests 深度超限 case）
+- 文档回写：03-macro-system（§2.2 契约 + §4 不变式 1 + §5 锚点表）；
+  TD 登记册 TD-007 → 部分解决（残留 10_000 完整口径绑定批次 B Rc 化）
+- 回归：300 通过（298 + 单元 2）/ 0 失败 / 1 ignored + 集成 4 例；
+  clippy -D 零警告；fmt 已应用
+
+Stage Summary:
+- TD-007 部分解决：128→500（3.9×）+ trampoline 工程价值交付（控制流
+  栈深与链长解耦）；完整解除依赖 Stx Rc 化（批次 B 前端重写范围）
+- 探针失误教训（worklog 透明记录）：sed 链式替换探针两次污染数据
+  （替换模式不匹配导致测错值）——改用独立探针 example（参数化 argv）
+  修正；最终标定基于双环境可靠数据点
+- 遵循原则：§2.1.1-12（守卫先实测后定值——4096 首测失败再校准的
+  TD-017 先例重演：10_000 目标 → 实测约束 → 500 落定）、§2.3-4
+  （报错>静默：超限结构化 E 错）、§7.2 Q5（栈溢出类崩溃为零——
+  双环境探针验证）、§9.4.3（正负例成对：500/501 边界含头含尾）
+
+---
+Task ID: 20-d（重排裁定）
+Agent: Super Z (main) — PM-A/ARCH-A
+Task: TD-004 scope-set 解析——批次重排裁定（A4 → 批次 B 头部）
+
+Work Log:
+- 执行前知识搜索（§2.3-11：先查文档与代码禁猜测）：
+  (1) grep 确认绑定形式 scope 注入现状：expander 全库 `scopes.add`/
+      `.add(` 零命中——ScopeSet 数据结构全程携带但**绑定形式从不
+      注入 scope mark**（scope.rs doc 的设计承诺未实现，即 TD-004 本体）
+  (2) 编译器 resolve_var 现状：纯名称基栈查找（Symbol 匹配，无 scope）
+  (3) CoreExpr::VarRef 现状：{name, span}——无 scopes 字段（展开层
+      语法对象的 scope 信息在 lowering 时丢失）
+- 完整实现量级评估（依据 §4.2 MUV 粒度）：
+  - 绑定形式（lambda/let/define）scope 注入基建（expander 遍历加 mark）
+  - CoreExpr::VarRef 携带 ScopeSet（**中枢类型变更**——波及 kerf-core/
+    expander/compiler/eval/CodeValue/IR 全链构造与消费点）
+  - 双路径解析体系切换：VM 侧 slot 解析（名称栈→(name,scopes⊆)匹配）
+    + eval 侧 Env 查找（名称基→scope 匹配）——T1 双路径一致要求
+    两侧同步切换
+  - 保守 ≥800 LOC / 跨 5+ crate / 全部 300+ 语义回归
+- 备选方案否决（§12 最优>最小）：无行为变化的「平行 scope 匹配解析
+  切片」（验证性绑定表）= 死代码路径 + 双解析体系漂移风险，违背
+  §11 接口隔离——正确 > 妥协的反面应用：不做看起来像但不是的
+  半吊子解析器
+- **裁定**：TD-004 移批次 B 头部（绑定表基建与 TD-002 符号值、标准库
+  同批——均为解析体系前置），批次 E Expander 重写时收口；
+  plan.md §5 批次 A 表 A4 行 + 批次 B 行同步修订（重排注记含依据）
+
+Stage Summary:
+- 批次 A 实际交付：A1/A2/A3 三 MUV（TD-015/012/007）；A4 重排
+- 复杂度发现升级遵循 §1.2.1（只升不降）；裁定依据引用 §2.3-11/
+  §12/§11/§4.2
+- 本条目为规划修订记录（无代码变更）

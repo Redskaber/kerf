@@ -984,7 +984,7 @@ docs/
 │   └── <sub_dirname>/
 ├── scripts/             # 脚本文档（§3.4）
 │   └── <sub_dirname>/
-├── stage-committee-process.md  # 本文件（流程管控）
+├── sop.md  # 本文件（流程管控；原 stage-committee-process.md，v11.0 起更名）
 ├── build-guide.md       # 构建指南
 └── testing-guide.md     # 测试指南
 ```
@@ -1084,7 +1084,7 @@ docs/lang-design/
 | 修改核心原语 | `docs/lang-design/01-core-forms.md` | 核心原语定义 |
 | 修改宏系统 | `docs/lang-design/03-macro-system.md` | 宏系统设计 |
 | 修改 VM | `docs/lang-design/04-bytecode-vm.md` | VM 设计 |
-| 修改流程 | `docs/stage-committee-process.md` | 当前流程版本 |
+| 修改流程 | `docs/sop.md` | 当前流程版本 |
 | 查看技术债状态 | `docs/develop/v0/tech-debt-register.md`（§6.2.1） | 已解决/剩余项 + 分类索引 |
 | 查看流程校准基线 | `docs/develop/v0/calibration-data.md`（§6.6.1） | L2/L3 轮次区间 + 误分类率告警阈值 |
 | 查看数据流 | `docs/graph/<sub_dirname>/` | 数据流图（§15） |
