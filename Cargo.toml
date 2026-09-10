@@ -1,0 +1,69 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kerf-span",
+    "crates/kerf-syntax",
+    "crates/kerf-core",
+    "crates/kerf-reader",
+    "crates/kerf-expander",
+    "crates/kerf-compiler",
+    "crates/kerf-runtime",
+    "crates/kerf-vm",
+    "crates/kerf-driver",
+]
+
+# 根 crate（kerf）：承载跨 crate 集成测试（tests/v0/stage-N 树，sop.md §8.4.6 规则 3）
+# 与 CLI 二进制入口（src/main.rs，编排 kerf-driver）。
+[package]
+name = "kerf"
+version = "0.1.0"
+edition = "2021"
+description = "kerf — 最小自举系统级编程语言（Stage 0：语义验证，Rust 100% 实现）"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+kerf-span = { path = "crates/kerf-span" }
+kerf-syntax = { path = "crates/kerf-syntax" }
+kerf-core = { path = "crates/kerf-core" }
+kerf-reader = { path = "crates/kerf-reader" }
+kerf-expander = { path = "crates/kerf-expander" }
+kerf-compiler = { path = "crates/kerf-compiler" }
+kerf-runtime = { path = "crates/kerf-runtime" }
+kerf-vm = { path = "crates/kerf-vm" }
+kerf-driver = { path = "crates/kerf-driver" }
+
+# 零外部依赖（自举信任根显式化，§2.2 原则 11）：全部 9 个成员 crate 与根 crate
+# 仅使用 Rust 标准库——构建可复现性优先于开发便利性（Stage 0 语义验证目标）。
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+
+# 测试目标（sop.md §9.1：tests/v0/stage-N 树——cargo 不自动发现嵌套目录，显式声明）
+[[test]]
+name = "reader_tests"
+path = "tests/v0/stage0/plan/reader_tests.rs"
+
+[[test]]
+name = "expander_tests"
+path = "tests/v0/stage0/plan/expander_tests.rs"
+
+[[test]]
+name = "compiler_tests"
+path = "tests/v0/stage0/plan/compiler_tests.rs"
+
+[[test]]
+name = "vm_tests"
+path = "tests/v0/stage0/plan/vm_tests.rs"
+
+[[test]]
+name = "gc_tests"
+path = "tests/v0/stage0/plan/gc_tests.rs"
+
+[[test]]
+name = "pipeline_tests"
+path = "tests/v0/stage0/plan/pipeline_tests.rs"
+
+[[test]]
+name = "gate_review_r1"
+path = "tests/v0/stage0/gate/gate_review_r1.rs"

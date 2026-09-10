@@ -1,0 +1,12 @@
+[package]
+name = "kerf-syntax"
+version = "0.1.0"
+edition = "2021"
+description = "Symbol 内部化、作用域集与语法对象 SyntaxObject（stage0.md §3.3）"
+publish = false
+
+[dependencies]
+kerf-span = { path = "../kerf-span" }
+
+[lints]
+workspace = true

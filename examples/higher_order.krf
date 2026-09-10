@@ -1,0 +1,11 @@
+; higher_order.krf —— 高阶函数（map/filter 经显式递归）
+(define (map f lst)
+  (if (null? lst)
+      nil
+      (cons (f (car lst)) (map f (cdr lst)))))
+(define (filter pred lst)
+  (cond ((null? lst) nil)
+        ((pred (car lst)) (cons (car lst) (filter pred (cdr lst))))
+        (else (filter pred (cdr lst)))))
+(define (even? n) (= (mod n 2) 0))
+(map (lambda (x) (* x x)) (quote (1 2 3 4 5)))

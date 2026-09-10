@@ -1,0 +1,14 @@
+[package]
+name = "kerf-compiler"
+version = "0.1.0"
+edition = "2021"
+description = "CoreExpr → 字节码直译式编译：跳转回填、常量池、闭包捕获转换、debug_info_table（stage0.md §19.3）"
+publish = false
+
+[dependencies]
+kerf-span = { path = "../kerf-span" }
+kerf-syntax = { path = "../kerf-syntax" }
+kerf-core = { path = "../kerf-core" }
+
+[lints]
+workspace = true

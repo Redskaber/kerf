@@ -1,0 +1,13 @@
+[package]
+name = "kerf-reader"
+version = "0.1.0"
+edition = "2021"
+description = "类型化 Token 流 Reader：词法器 + 递归下降语法器（stage0.md §8.1/§19.1）"
+publish = false
+
+[dependencies]
+kerf-span = { path = "../kerf-span" }
+kerf-syntax = { path = "../kerf-syntax" }
+
+[lints]
+workspace = true

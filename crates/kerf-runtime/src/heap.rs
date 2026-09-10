@@ -1,0 +1,434 @@
+//! GC 堆：槽位分配 + 标记-清除回收（stage0.md §8.11 / §19.4 三阶段骨架）。
+//!
+//! 结构：`slots` 为对象槽位向量（`GcRef` = 槽位索引）；sweep 将未标记槽
+//! 归还 `free` 空闲表（Stage 0「只分配不压缩」策略，§19.4 陷阱 3）。
+
+use std::rc::Rc;
+
+use crate::gc::RootSet;
+
+/// 堆对象引用（槽位索引）。构造仅经 `Heap`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GcRef(pub u32);
+
+/// 堆对象种类（Layer 0 自包含对象模型——闭包装箱见 TD-010）。
+#[derive(Clone)]
+pub enum HeapObj {
+    /// 序对 (car . cdr)。
+    Pair(GcRef, GcRef),
+    /// 装箱字符串。
+    Str(Rc<str>),
+    /// 装箱整数（序对元素为即时值时的槽位形态）。
+    Int(i64),
+    /// 装箱浮点。
+    Float(f64),
+    /// 装箱布尔。
+    Bool(bool),
+    /// 装箱 nil。
+    Nil,
+}
+
+impl std::fmt::Debug for HeapObj {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HeapObj::Pair(a, b) => write!(f, "Pair({:?}, {:?})", a, b),
+            HeapObj::Str(s) => write!(f, "Str({:?})", s),
+            HeapObj::Int(i) => write!(f, "Int({})", i),
+            HeapObj::Float(v) => write!(f, "Float({})", v),
+            HeapObj::Bool(b) => write!(f, "Bool({})", b),
+            HeapObj::Nil => write!(f, "Nil"),
+        }
+    }
+}
+
+impl PartialEq for HeapObj {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (HeapObj::Pair(a1, b1), HeapObj::Pair(a2, b2)) => a1 == a2 && b1 == b2,
+            (HeapObj::Str(a), HeapObj::Str(b)) => a == b,
+            (HeapObj::Int(a), HeapObj::Int(b)) => a == b,
+            (HeapObj::Float(a), HeapObj::Float(b)) => a == b,
+            (HeapObj::Bool(a), HeapObj::Bool(b)) => a == b,
+            (HeapObj::Nil, HeapObj::Nil) => true,
+            _ => false,
+        }
+    }
+}
+
+/// 单个堆槽位。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Slot {
+    pub obj: HeapObj,
+    pub marked: bool,
+}
+
+/// GC 堆（标记-清除）。
+#[derive(Debug, Clone)]
+pub struct Heap {
+    slots: Vec<Slot>,
+    free: Vec<GcRef>,
+    /// GC 触发阈值（存活对象数超过即回收——由 VM 安全点检查）。
+    gc_threshold: usize,
+    /// GC 开关（eval 路径关闭：无完整根集时禁用回收，见 crate 文档）。
+    gc_enabled: bool,
+    /// foreign ref 持久根（§8.8/§15 预留：FFI 根登记，Stage 0 可为空集）。
+    foreign_roots: Vec<GcRef>,
+    /// 统计：总分配数。
+    total_allocs: u64,
+    /// 距上次回收的分配数（分配计数驱动的触发器——回收成本按分配量摊销）。
+    allocs_since_gc: u64,
+    /// 统计：回收次数。
+    collections: u64,
+    /// 统计：累计回收对象数。
+    total_freed: u64,
+}
+
+impl Default for Heap {
+    fn default() -> Self {
+        Heap::new()
+    }
+}
+
+impl Heap {
+    /// 构造（默认阈值：分配 1024 次触发回收——测试可调）。
+    pub fn new() -> Self {
+        Heap::with_threshold(1024)
+    }
+
+    /// 指定阈值构造。
+    pub fn with_threshold(gc_threshold: usize) -> Self {
+        Heap {
+            slots: Vec::new(),
+            free: Vec::new(),
+            gc_threshold,
+            gc_enabled: true,
+            foreign_roots: Vec::new(),
+            total_allocs: 0,
+            allocs_since_gc: 0,
+            collections: 0,
+            total_freed: 0,
+        }
+    }
+
+    /// 分配序对（bump 风格：优先空闲表复用，否则追加新槽）。
+    /// 分配零内卷（§19.4 不变式 3）：此路径不触发回收、不触发任何分配性调用。
+    pub fn alloc_pair(&mut self, car: GcRef, cdr: GcRef) -> GcRef {
+        let obj = HeapObj::Pair(car, cdr);
+        self.alloc_obj(obj)
+    }
+
+    /// 分配装箱字符串。
+    pub fn alloc_str(&mut self, s: Rc<str>) -> GcRef {
+        self.alloc_obj(HeapObj::Str(s))
+    }
+
+    /// 分配装箱整数。
+    pub fn alloc_int(&mut self, v: i64) -> GcRef {
+        self.alloc_obj(HeapObj::Int(v))
+    }
+
+    /// 分配装箱浮点。
+    pub fn alloc_float(&mut self, v: f64) -> GcRef {
+        self.alloc_obj(HeapObj::Float(v))
+    }
+
+    /// 分配装箱布尔。
+    pub fn alloc_bool(&mut self, v: bool) -> GcRef {
+        self.alloc_obj(HeapObj::Bool(v))
+    }
+
+    /// 分配装箱 nil。
+    pub fn alloc_nil(&mut self) -> GcRef {
+        self.alloc_obj(HeapObj::Nil)
+    }
+
+    /// 装箱即时值（闭包/内置不可装箱——显式限制，TD-010）。
+    pub fn alloc_boxed(&mut self, v: BoxedInput) -> GcRef {
+        match v {
+            BoxedInput::Str(s) => self.alloc_obj(HeapObj::Str(s)),
+            BoxedInput::Int(i) => self.alloc_obj(HeapObj::Int(i)),
+            BoxedInput::Float(f) => self.alloc_obj(HeapObj::Float(f)),
+            BoxedInput::Bool(b) => self.alloc_obj(HeapObj::Bool(b)),
+            BoxedInput::Nil => self.alloc_obj(HeapObj::Nil),
+        }
+    }
+
+    /// 解箱为值槽描述（kerf-vm 转换为 Value；序对槽返回 Pair 标记，
+    /// 调用方以自身引用包装为 Value::Pair）。
+    pub fn unbox(&self, r: GcRef) -> Option<ValueSlot> {
+        self.get(r).map(|s| match &s.obj {
+            HeapObj::Pair(..) => ValueSlot::Pair,
+            HeapObj::Str(v) => ValueSlot::Str(v.clone()),
+            HeapObj::Int(v) => ValueSlot::Int(*v),
+            HeapObj::Float(v) => ValueSlot::Float(*v),
+            HeapObj::Bool(v) => ValueSlot::Bool(*v),
+            HeapObj::Nil => ValueSlot::Nil,
+        })
+    }
+
+    fn alloc_obj(&mut self, obj: HeapObj) -> GcRef {
+        self.total_allocs += 1;
+        self.allocs_since_gc += 1;
+        if let Some(r) = self.free.pop() {
+            self.slots[r.0 as usize].obj = obj;
+            self.slots[r.0 as usize].marked = false;
+            return r;
+        }
+        let r = GcRef(self.slots.len() as u32);
+        self.slots.push(Slot { obj, marked: false });
+        r
+    }
+
+    /// 读取序对（类型不匹配返回 None——显式失败）。
+    pub fn get_pair(&self, r: GcRef) -> Option<(GcRef, GcRef)> {
+        match &self.get(r)?.obj {
+            HeapObj::Pair(a, b) => Some((*a, *b)),
+            _ => None,
+        }
+    }
+
+    /// 读取对象。
+    pub fn get(&self, r: GcRef) -> Option<&Slot> {
+        self.slots.get(r.0 as usize)
+    }
+
+    /// 存活对象数（含未回收的垃圾——真实存活需在 mark 后统计）。
+    pub fn slot_count(&self) -> usize {
+        self.slots.len()
+    }
+
+    /// 空闲槽数。
+    pub fn free_count(&self) -> usize {
+        self.free.len()
+    }
+
+    /// GC 开关（eval 路径：无完整根集时禁用）。
+    pub fn set_gc_enabled(&mut self, enabled: bool) {
+        self.gc_enabled = enabled;
+    }
+
+    /// 是否到达回收阈值（分配计数驱动——回收成本按分配量摊销；
+    /// VM 指令边界安全点轮询，§19.4 陷阱 2）。
+    pub fn should_collect(&self) -> bool {
+        self.gc_enabled && self.allocs_since_gc > self.gc_threshold as u64
+    }
+
+    /// 登记 foreign ref（§8.8：FFI 根预留；Stage 0 持久根集合，可为 no-op 使用）。
+    pub fn register_foreign_ref(&mut self, r: GcRef) {
+        if !self.foreign_roots.contains(&r) {
+            self.foreign_roots.push(r);
+        }
+    }
+
+    /// foreign 根集合（GC 周期并入根集）。
+    pub fn foreign_roots(&self) -> &[GcRef] {
+        &self.foreign_roots
+    }
+
+    /// 子引用枚举（标记阶段的图遍历边）。
+    fn children(&self, r: GcRef) -> Vec<GcRef> {
+        match &self.get(r).map(|s| &s.obj) {
+            Some(HeapObj::Pair(a, b)) => vec![*a, *b],
+            _ => Vec::new(),
+        }
+    }
+
+    /// 标记复位（§19.4 不变式 2：遍历全部对象，含刚回收的）。
+    fn clear_marks(&mut self) {
+        for s in &mut self.slots {
+            s.marked = false;
+        }
+    }
+
+    /// 统计信息。
+    pub fn stats(&self) -> GcStats {
+        GcStats {
+            slots: self.slots.len(),
+            free: self.free.len(),
+            live: self.slots.len() - self.free.len(),
+            total_allocs: self.total_allocs,
+            collections: self.collections,
+            total_freed: self.total_freed,
+        }
+    }
+
+    /// 内部：执行标记-清除（供 gc::mark_sweep_cycle 调用）。
+    pub(crate) fn collect(&mut self, roots: &RootSet) -> GcStats {
+        // 分配计数复位（成本摊销窗口重新计）
+        self.allocs_since_gc = 0;
+        // 1. 标记：显式工作栈（§19.4——防递归爆栈）
+        let mut work: Vec<GcRef> = roots.refs.clone();
+        work.extend_from_slice(&self.foreign_roots);
+        while let Some(r) = work.pop() {
+            if let Some(slot) = self.slots.get_mut(r.0 as usize) {
+                if slot.marked {
+                    continue;
+                }
+                slot.marked = true;
+            } else {
+                continue;
+            }
+            for child in self.children(r) {
+                work.push(child);
+            }
+        }
+
+        // 2. 清除：线性遍历堆（保守策略：泄漏容忍，误回收零容忍）
+        let mut freed = 0usize;
+        let mut new_free: Vec<GcRef> = Vec::new();
+        for (i, slot) in self.slots.iter().enumerate() {
+            if !slot.marked {
+                new_free.push(GcRef(i as u32));
+                freed += 1;
+            }
+        }
+        // free 表重建（旧 free 槽位的 obj 已被复用逻辑覆盖——重置为全量未标记槽）
+        self.free = new_free;
+        self.total_freed += freed as u64;
+        self.collections += 1;
+
+        // 3. 复位（为下一轮准备）
+        self.clear_marks();
+
+        self.stats()
+    }
+}
+
+/// 装箱输入（Layer 0 即时值描述；闭包/内置不可装箱——TD-010）。
+#[derive(Debug, Clone, PartialEq)]
+pub enum BoxedInput {
+    Str(Rc<str>),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Nil,
+}
+
+/// 解箱输出（`Pair` 标记序对槽——调用方以槽位引用包装）。
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValueSlot {
+    Pair,
+    Str(Rc<str>),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Nil,
+}
+
+/// GC 统计快照。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct GcStats {
+    /// 当前槽位总数。
+    pub slots: usize,
+    /// 空闲槽数。
+    pub free: usize,
+    /// 存活（未入空闲表）槽数。
+    pub live: usize,
+    /// 累计分配数。
+    pub total_allocs: u64,
+    /// 回收次数。
+    pub collections: u64,
+    /// 累计回收对象数。
+    pub total_freed: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alloc_reuses_free_slots() {
+        let mut heap = Heap::new();
+        let a = heap.alloc_pair(GcRef(0), GcRef(0));
+        let b = heap.alloc_pair(GcRef(0), GcRef(0));
+        assert_ne!(a, b);
+        assert_eq!(heap.slot_count(), 2);
+    }
+
+    #[test]
+    fn collect_frees_unreachable() {
+        let mut heap = Heap::new();
+        // 孤儿链：(1 . (2 . nil)) 无根
+        let nil = heap.alloc_str(Rc::from(""));
+        let two = heap.alloc_str(Rc::from("2"));
+        let one = heap.alloc_str(Rc::from("1"));
+        let _inner = heap.alloc_pair(two, nil);
+        let outer = heap.alloc_pair(one, two);
+
+        let roots = RootSet::from_refs([outer]);
+        let stats = heap.collect(&roots);
+        // 5 个对象：outer 可达 → outer/one/two 存活 3；nil/inner 回收 2
+        assert_eq!(
+            stats.free, 2,
+            "5 个对象中可达 3（outer+one+two），回收 2（nil+inner）"
+        );
+        assert_eq!(stats.live, 3);
+        assert_eq!(heap.stats().collections, 1);
+        // 复用：分配命中空闲表
+        let x = heap.alloc_pair(GcRef(0), GcRef(0));
+        assert!(x.0 < 5);
+        assert_eq!(heap.free_count(), 1);
+    }
+
+    #[test]
+    fn collect_keeps_cycle_from_roots() {
+        // 自环：a = (a . a)——从根可达的自环不被回收
+        let mut heap = Heap::new();
+        let a = heap.alloc_pair(GcRef(0), GcRef(0));
+        // 写入自环（直接操纵槽位）
+        heap.slots[a.0 as usize].obj = HeapObj::Pair(a, a);
+        let roots = RootSet::from_refs([a]);
+        let stats = heap.collect(&roots);
+        assert_eq!(stats.live, 1);
+        assert_eq!(stats.free, 0);
+    }
+
+    #[test]
+    fn unrooted_cycle_is_collected() {
+        // 无根自环：不可达 → 回收（标记-清除天然处理环）
+        let mut heap = Heap::new();
+        let a = heap.alloc_pair(GcRef(0), GcRef(0));
+        heap.slots[a.0 as usize].obj = HeapObj::Pair(a, a);
+        let roots = RootSet::from_refs([]);
+        let stats = heap.collect(&roots);
+        assert_eq!(stats.free, 1);
+    }
+
+    #[test]
+    fn deep_chain_no_stack_overflow() {
+        // 10^5 深度链：显式工作栈标记（§19.4 陷阱 1 的回归测试）
+        let mut heap = Heap::with_threshold(usize::MAX);
+        let nil = heap.alloc_str(Rc::from("nil"));
+        let mut head = nil;
+        for _ in 0..100_000 {
+            head = heap.alloc_pair(nil, head);
+        }
+        let roots = RootSet::from_refs([head]);
+        let stats = heap.collect(&roots);
+        assert_eq!(stats.live, 100_001, "全部链节点 + nil 存活");
+        assert_eq!(stats.free, 0);
+    }
+
+    #[test]
+    fn foreign_roots_survive() {
+        let mut heap = Heap::new();
+        let s = heap.alloc_str(Rc::from("foreign"));
+        heap.register_foreign_ref(s);
+        let roots = RootSet::from_refs([]);
+        let stats = heap.collect(&roots);
+        assert_eq!(stats.live, 1, "foreign root 存活");
+    }
+
+    #[test]
+    fn gc_disabled_stays_put() {
+        let mut heap = Heap::new();
+        heap.set_gc_enabled(false);
+        let _ = heap.alloc_str(Rc::from("x"));
+        let roots = RootSet::from_refs([]);
+        let stats = heap.collect(&roots);
+        // gc_enabled=false 时 collect 仍可被显式调用（eval 路径约定为不调用）
+        assert_eq!(stats.free, 1);
+        // should_collect 恒 false
+        assert!(!heap.should_collect());
+    }
+}

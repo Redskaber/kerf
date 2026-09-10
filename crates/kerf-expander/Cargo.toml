@@ -1,0 +1,17 @@
+[package]
+name = "kerf-expander"
+version = "0.1.0"
+edition = "2021"
+description = "展开器骨架、卫生宏系统（syntax-rules）与相位分离（stage0.md §8.9/§8.10/§19.2）"
+publish = false
+
+[dependencies]
+kerf-span = { path = "../kerf-span" }
+kerf-syntax = { path = "../kerf-syntax" }
+kerf-core = { path = "../kerf-core" }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+kerf-reader = { path = "../kerf-reader" }

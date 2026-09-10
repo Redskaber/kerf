@@ -1,0 +1,13 @@
+[package]
+name = "kerf-core"
+version = "0.1.0"
+edition = "2021"
+description = "CoreExpr 九核心原语定义、图 IR（Arena + 共享节点）与结构化 CodeValue"
+publish = false
+
+[dependencies]
+kerf-span = { path = "../kerf-span" }
+kerf-syntax = { path = "../kerf-syntax" }
+
+[lints]
+workspace = true

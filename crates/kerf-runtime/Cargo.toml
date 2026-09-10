@@ -1,0 +1,9 @@
+[package]
+name = "kerf-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "运行时基座（Layer 0，无 crate 依赖）：GC 堆（标记-清除）+ 最小 I/O + foreign ref 登记"
+publish = false
+
+[lints]
+workspace = true

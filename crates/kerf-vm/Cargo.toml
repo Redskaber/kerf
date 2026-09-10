@@ -1,0 +1,16 @@
+[package]
+name = "kerf-vm"
+version = "0.1.0"
+edition = "2021"
+description = "双执行路径：元循环求值器（eval/apply）+ switch-dispatch 字节码 VM（含三扩展槽帧，stage0.md §8.4/§8.12/§19.5）"
+publish = false
+
+[dependencies]
+kerf-span = { path = "../kerf-span" }
+kerf-syntax = { path = "../kerf-syntax" }
+kerf-core = { path = "../kerf-core" }
+kerf-compiler = { path = "../kerf-compiler" }
+kerf-runtime = { path = "../kerf-runtime" }
+
+[lints]
+workspace = true

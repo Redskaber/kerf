@@ -1,0 +1,19 @@
+[package]
+name = "kerf-driver"
+version = "0.1.0"
+edition = "2021"
+description = "编译器入口（编排层）：read → expand → lower → compile → run 全管线 + 四项接口预留"
+publish = false
+
+[dependencies]
+kerf-span = { path = "../kerf-span" }
+kerf-syntax = { path = "../kerf-syntax" }
+kerf-core = { path = "../kerf-core" }
+kerf-reader = { path = "../kerf-reader" }
+kerf-expander = { path = "../kerf-expander" }
+kerf-compiler = { path = "../kerf-compiler" }
+kerf-runtime = { path = "../kerf-runtime" }
+kerf-vm = { path = "../kerf-vm" }
+
+[lints]
+workspace = true
