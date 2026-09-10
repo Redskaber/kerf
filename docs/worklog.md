@@ -1755,3 +1755,158 @@ Stage Summary:
   01 §8.5/02 §8.1 锚点全部兑现为可执行测试）
 - 下一步：MUV 29-e——r10 打包 tar.gz（不含根 worklog.md）+ web 完整
   更新（footer 下载）+ agent-browser E2E 验证
+
+---
+Task ID: 29-e
+Agent: Super Z (main) — DEV-A/QA-A/REC-A（L3 多角色会话）
+Task: MUV 29-e：r10 打包 tar.gz（不含根 worklog.md）+ web 完整更新（footer 下载）+ agent-browser E2E 验证
+
+Work Log:
+- **r10 打包（§19 规则）**：kerf-stage1-v0.3.0-r10-next3absorb-langdesign-v6-archaudit-480tests.tar.gz
+  （705,860 B / 212 条目）；--exclude 前置修正（tar 参数序）；**根 worklog.md
+  不入包**（用户指令 v3——docs/worklog.md 已镜像 ✓）；包内容 diff 对账：
+  -根 worklog.md + docs/stage0.md 蓝图存档 + architecture_audit_tests.rs
+- **包内自举验证**：解压 /tmp 全新构建 → cargo test --release --workspace
+  **480:0:0 与交付环境一致**；CLI 冒烟（run fib=75025 / test io 3/3 PASS）
+- **download/README.md r10 节**（四交付 + 质量口径 + 自举验证记录）
+- **web 更新**：kerf-data.ts（ROADMAP r9/r10 双吸收轮 + 审计轮条目、
+  PACKAGE_CONTENTS 480/v6.0/存档、HERO +类型安全 ADT 徽章、Stage 0 基线
+  480）+ site-footer.tsx（版本行 v6.0/v11.3/原则 29-31 + 480）；动态面
+  （/api/stats 按包 mtime 自动选 r10 / /api/docs 读 v6.0 内容 / /api/download
+  流式 705,860 B）零改动即生效
+- **lint 全绿**（eslint exit 0）
+- **agent-browser E2E（§3.2 交付后浏览器验证标准）**：页面加载零错误零
+  控制台异常；stats 实时 r10（689.3 KB/480 测试/15,867 LOC/9 crates）；
+  下载流 application/gzip 705,860 B ✓；Playground 黄金路径（fib 20=6765
+  渲染 + ⇒ 144）；footer 版本行 v6.0/v11.3 ✓；五项内容抽查（Hero/三十一条/
+  上游蓝图存档/穷尽 match/原则 29-31）全中；移动端 375×812 footer 自然
+  下推无重叠；双截图存档（desktop 171 KB / mobile 79 KB——实质渲染）
+- dev.log 终态：docs/stats/download/playground 四路由全 200 无错误
+
+Stage Summary:
+- r10 交付闭环：七轮吸收（stage0 v6.0 + lang-design v6.0 + sop v11.3）→
+  架构合规审计（480:0:0）→ 打包（自包含 + 自举验证一致）→ web 同步
+  （动态自动 + 静态更新）→ 浏览器 E2E 全过
+- 遵循原则：§19（打包规则——排除项/命名/包内验证）、§3.2（交付前实测
+  全绿）、浏览器验证标准（渲染/交互/数据/响应式/错误五面）、§8.6
+  （worklog 三份同步——根/kerf/docs 镜像）
+- 任务链 29-a~29-e 全部完成；下一会话：Stage 1 批次 E（Expander kerf
+  重写 + TD-004 + TD-021）→ Stage 1 门审查（§7.3 + §21.3）
+
+---
+Task ID: 30-a
+Agent: Super Z (main) — PM-A/ARCH-A/REV-A（L3 多角色会话，审计轮）
+Task: MUV 30-a：next*.md 三源吸收完整性复核（关键词矩阵 + 章节结构映射 + 核心原语专项）
+
+Work Log:
+- §0 启动协议：sop.md §1 路由 → L3（审计+交付型，跨 docs/web/打包三域）→
+  worklog 摘 Task 29-a~e（r10 基线，git clean 无在飞断点）→ MUV 30-a~d 四拆分
+- 初轮关键词矩阵（46 词）表观缺口甄别：src=N 猜测词判为审计噪声；
+  连字形式（S-表达式/9 正交原语）修正后重审
+- 章节结构映射：next.md 四文档 → stage0 Part II/III + lang-design 14/13/16；
+  next2 六轮 → stage0 §6.9-§6.12 + lang-design v5.5；next3 第七轮 →
+  stage0 v6.0 §7.3/§7.4 + lang-design 01 §8 等
+- 核心原语专项：三原则原文（类型安全而非命名安全/语义化命名/零冗余）+
+  CoreExpr 八变体 + 9→8 语义等价映射表（§6.12.6）在 stage0/lang-design/sop
+  三面全命中；四层正交/六 IR/MLton 闭包/Koka 效应消除/de Bruijn/continuation
+  类型安全/comptime/行多态/联合交叉类型全命中
+- 存档对账：kerf/docs/stage0.md ≡ upload/stage0.md v6.0（+496B 归档头，预期）；
+  Janet/Céu 归入 PEG/同步语言概念族（14/19 呈现）
+- sop v11.3 复核：§2.2 原则 29-31 + §16.1 changelog + §8.4.6 测试入口
+  架构意图（Cargo.toml 总入口）全在位
+
+Stage Summary:
+- 三源 → 三吸收面零实质缺口（关键词矩阵 + 结构映射双重验证）；
+  收敛裁定链一致（stage0 §6.12.6 / lang-design 01 §8 / sop v11.3）
+- 遵循：§0（启动协议）、§8.4.5 规则 1（先查文档）、§14 审查协议（审计轮
+  以 12 维度复核实质替代 §14.5——与交付轮先例一致）
+- 下一步：30-b 核心原语 docs/web 双面同步核查
+
+---
+Task ID: 30-b
+Agent: Super Z (main) — ARCH-A/DEV-A
+Task: MUV 30-b：核心原语变动 docs/ 与 web 双面核查 + 缺口修复（P2 文档债清偿）
+
+Work Log:
+- docs 侧核查：lang-design/stage0/sop/matrix/RELEASE_NOTES 完整；发现三处
+  §8.4.5 规则 2（文档随代码）违例——README.md（v5.4/v11.1/r7/476 停在 r8
+  之前口径 + 缺自举 Reader/能力门控/内部效应/v6.0 原语演进）、plan.md（批次
+  表止于 r8，r9/r10 两轮未登记）、status.md（测试总数 356 停在 r6）
+- 修复 README：版本行 v6.0/v11.3；状态行 r9/r10 吸收审计轮；架构行 driver
+  补 能力参数化/内部效应/kerf test；特性清单 +4（核心原语演进登记/自举
+  Reader r6/能力门控 I/O r8/内部效应 r8）；质量状态 r10/480（--workspace
+  口径注记）；markdown 链接全角括号笔误修复
+- 修复 plan.md：批次表 D 与 E 之间新增「吸收/审计轮」行（r9 测试入口重构 ✅
+  + r10 next3 双层吸收 + 架构合规审计 480:0:0 ✅ + 语义核心冻结零变动 +
+  核心原语三面同步验收）
+- 修复 status.md：header r6 → r10；测试总数 356 → 480（r5-r10 增量分项
+  详列）；§5 新增 架构合规审计测试 + 核心原语演进登记 两条；Status 行
+  RELEASE_NOTES r4–r10
+- web 侧核查：hero 徽章（9 正交原语/类型安全 ADT）与 footer 版本行（v6.0/
+  v11.3/29-31）r10 已同步；主内容区缺口——核心原语仅存在于 footer 包清单
+  括号注记，架构/能力两个 section 无正面呈现（不满足「完整且清晰」）
+- web 修复：kerf-data.ts 新增 CORE_PRIMITIVES（9 项：名称/元数/语义——与
+  lang-design 01 §2 逐项对齐）+ PRIMITIVE_EVOLUTION（收敛裁定/数量真相/
+  8 行迁移映射/三原则/四层正交+第五轴/审计 4 测试）；capabilities.tsx 新增
+  「核心原语 · 语义核心」网格区块 + 「核心原语演进登记」卡（映射表 + 三原则
+  列表 + 正交注记）；ROADMAP Stage 2 补核心原语演进迁移要点；section 标题
+  与描述更新；lint exit 0
+
+Stage Summary:
+- docs 三文件 P2 债清偿（§8.4.5）；web 核心原语从 footer 注记升级为主内容
+  区正面呈现（9 原语网格 + 演进登记卡 + 路线图要点）
+- 遵循：§8.4.5 规则 2（文档随代码——r6-r10 陈旧一次对账）、§2.3-4（报错
+  > 静默——测试口径 --workspace 显式注记）、§14.8 设计回写精神
+- 下一步：30-c §3.2 全绿 + r11 打包
+
+---
+Task ID: 30-c
+Agent: Super Z (main) — QA-A/REC-A
+Task: MUV 30-c：§3.2 六命令实跑全绿 + RELEASE_NOTES r11 + git commit
+
+Work Log:
+- cargo clean（Removed 400 files, 82.1MiB）→ build --release 9.37s 零告警
+- cargo check 0/0；cargo fmt --check 零 diff exit 0；cargo clippy
+  --all-targets -- -D warnings exit 0
+- cargo test --release --workspace **480:0:0**（305 集成 + 175 单元；根
+  package 单跑 305 属预期组织形态——runner.rs 单一总入口挂载全部集成文件）
+- 审计集 41 case EXIT 0（§7.1.1 七类覆盖 1/5/1/4/16/1/2——配比全满足）
+- CLI 冒烟：kerf run fib.krf → 75025 + ⇒ 144；kerf test → 通过 2/共 2
+- RELEASE_NOTES.md r11 段（复核轮交付三节 + 质量口径 + 下一步批次 E）
+- git commit 6f13dad：docs(r11) 核心原语三面同步（4 文件 +46/-11）
+
+Stage Summary:
+- §3.2 六命令全绿实测（480:0:0 + 审计 41 EXIT 0 + CLI 双冒烟）；
+  r10 质量基线保持零回归
+- 遵循：§3.2（六命令逐条实测——含 clean 全量重编）、§7.3.1（审计集
+  release 复跑）、§19.3 打包前检查（commit + RELEASE_NOTES + 版本）
+- 下一步：30-d web E2E + worklog + r11 tar.gz
+
+---
+Task ID: 30-d
+Agent: Super Z (main) — DEV-A/REC-A
+Task: MUV 30-d：web E2E 验证 + worklog 双镜像 + r11 打包交付
+
+Work Log:
+- agent-browser E2E：页面加载 0 console/0 页面错误；核心原语区块全文本
+  渲染（核心原语 · 语义核心/Lambda/SetBang/演进登记/语义核心不变/三原则/
+  四层正交/数量真相 全 true）
+- Playground 金路径：运行 fib → 6765 + ⇒ 144（POST /api/playground 200）；
+  静态检查错误程序 → E0005 全格式渲染（--> 3:6 + 源摘录 + ^ 标记 + 汇总
+  行「发现 1 个静态问题」；POST /api/check 200）
+- 文档区 01-核心原语 加载（九个核心原语/内部语法设计 命中）；stats API
+  实时（testCount 480——README 对账自动生效）
+- 响应式 390px：scrollWidth=390 零横向溢出；footer 滚底双真
+  （atDocBottom + footerAtViewportBottom）；桌面 1280 同过
+- VLM 双截图审查：桌面 PASS（3x3 网格对齐/表格完整/对比度达标）+ 移动
+  PASS（双列换行/文字完整）；lint exit 0
+- worklog：kerf/worklog.md 30-a~30-d 四节 + docs/worklog.md 镜像 +
+  根 worklog.md 摘要；r11 tar.gz 打包 + download/README.md r11 节
+
+Stage Summary:
+- E2E 全绿（渲染/交互/响应式/console 四面 + VLM 视觉双审）；任务链
+  30-a~d 闭环：吸收复核零缺口 → 三面同步 → §3.2 全绿 → 打包交付
+- 遵循：§8.6（worklog 协议 + 镜像）、§19（打包 + 包内自举验证）、
+  浏览器验证标准（金路径 + 静态检查 + 文档 + 下载四流）
+- 下一步（批次 E，plan §5）：Expander kerf 重写 + TD-004 scope-set
+  收口 + TD-021 hof 用户面注入 → Stage 1 门审查（§7.3 + §21.3 四条）
