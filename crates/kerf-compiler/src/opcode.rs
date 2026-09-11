@@ -65,6 +65,10 @@ pub enum Op {
     },
     /// 调用栈顶函数，`n` 个实参已按序压栈（被调者在栈顶第 n 项）。
     Call(u32),
+    /// **尾调用（TD-022/H2——TCO）**：语义同 Call，但帧复用——被调方
+    /// 返回直达当前帧的调用者（当前帧拆除，帧数净零）。编译器仅在
+    /// 函数体尾位（Lambda 体 / If 两臂 / Begin 末项）发射。
+    TailCall(u32),
     /// 返回：弹出返回值，恢复调用帧。
     Ret,
 
@@ -115,6 +119,7 @@ impl Op {
             Op::Pop => "POP",
             Op::Dup => "DUP",
             Op::Swap => "SWAP",
+            Op::TailCall(_) => "TAIL_CALL",
             Op::LoadLocal(_) => "LOAD_LOCAL",
             Op::StoreLocal(_) => "STORE_LOCAL",
             Op::LoadGlobal(_) => "LOAD_GLOBAL",

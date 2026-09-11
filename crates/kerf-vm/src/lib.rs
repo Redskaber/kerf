@@ -23,4 +23,6 @@ pub mod vm;
 pub use eval::{apply_value, eval_expr, eval_program, Env, EvalError};
 pub use value::{render_value, BuiltinFn, ClosureValue, Value};
 pub use vm::{box_value, unbox_slot};
-pub use vm::{call_closure, run_program, Frame, FrameExt, Rt, TraceFrame, VmError};
+pub use vm::{
+    call_closure, run_program, run_program_with_budget, Frame, FrameExt, Rt, TraceFrame, VmError,
+};

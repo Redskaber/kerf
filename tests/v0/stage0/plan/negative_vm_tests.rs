@@ -434,13 +434,16 @@ fn vm_error_code_is_e0004() {
     assert_eq!(err3.diagnostic.primary_span.start, 17);
 }
 
-/// 调用帧上限（1 case）：失控递归在 VM 路径报结构化错误
+/// 调用帧上限（1 case）：**非尾位**失控递归在 VM 路径报结构化错误
 /// （MAX_FRAMES = 100_000；迭代式循环——§8.12）。
-/// 注：eval 号径（递归求值器）在同深度 Rust 栈溢出 abort——分裂
-/// 存档于 `deep_recursion_eval_path_ignored`。
+/// H2/TCO 注记：尾递归（旧用例 `(c (- n 1))` 尾位）经帧复用恒定帧数
+/// 不再触发本上限——尾递归正例移驻 tco_tests（batch H2 交付物）；
+/// 此处改用非尾形态（`(+ 1 …)` 消费结果 → 每层实增一帧）保持
+/// 「帧上限结构化报错」验证意图。eval 号径（递归求值器）在同深度
+/// Rust 栈溢出 abort——分裂存档于 `deep_recursion_eval_path_ignored`。
 #[test]
 fn frame_limit_deep_recursion_vm_path() {
-    let src = "(define (c n) (if (= n 0) 0 (c (- n 1)))) (c 105001)";
+    let src = "(define (c n) (if (= n 0) 0 (+ 1 (c (- n 1))))) (c 105001)";
     expect_run_err(src, "调用帧超过上限 100000（失控递归）");
 }
 

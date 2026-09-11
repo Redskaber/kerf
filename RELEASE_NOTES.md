@@ -1,3 +1,38 @@
+## v0.4.0-r18（2026-09-11）——批次 H：语义演进评估轮 + 三债清偿 + HM PoC（TCO 尾调用优化 + TD-007 完整口径 + Effect 语言级设计 + HM 推断 PoC，634 全绿）
+
+### 交付一：H1 8 原语迁移五项语义层评估 + §6.3 全票投票（40-b）
+
+- `stage-2/primitive-migration-evaluation.md`（6 节）：五项评估 × 三段式（收益/成本/风险）+ §13.4 J1-J6 判据 30 检查点 + 五角色逐项投票 20 票全记录（5.5/5.5 × 5 全票——E1 DEFER-TO-STAGE3 / E2 GO-DESIGN / E3 分层 / E4 SPEC-ANCHOR / E5 REJECT-STANDALAND）+ 代码实况锚 3 项（A1 词法寻址已实现 / A2 块式 ANF 实化 / A3 parity 链在飞）
+- **总裁定：Stage 2 内原语集零变更**（核心冻结原则 9 维持）——8 原语形态整体迁移 = Stage 3 切换期候选（§13.2 登记）；§21.3 验收面与 12-roadmap 承诺面口径调和显式化
+
+### 交付二：H2 三债清偿 + 一裁定（TCO 落地——40-c）
+
+- **TD-022 resolved（TCO 兑现）**：VM `Op::TailCall` 帧复用（拆帧承返回地址——帧数净零）+ 编译器尾位穿线（`compile_expr(ctx, e, tail)`——Lambda 体 / If 两臂 / Begin 末项传递；顶层恒 false 主原型 Halt 终止）+ 内建尾调用隐式 RET + 指令预算护栏 `MAX_INSTRUCTIONS=10^9`（TCO 后帧数不增的无限尾循环兜底——结构化报错非挂死）+ `run_program_with_budget` 测试注入入口；实证：127,780B 源（5,000 define——>10^5 字符边界）自举管线完整通过 + 自举 expander 10_000 深度链端到端（TD-007/022 耦合解除）
+- **TD-007 resolved（完整 10_000 口径）**：Stx Rc 共享化（`List/Vector → Rc<Vec<Stx>>` clone O(1)）+ retag 迭代式重建（显式工作表后序——栈深恒定）+ **均匀标记** `uniform_tag`（retag 输出子树均匀作用域证书 + `add_scope_to_all` 注入清除保健全性——链 N 步总工作量 O(N)）+ 扁平 Drop（唯一持有脊柱工作表拆除）；上限 500→10_000（种子 + 自举 expander.krf 同步）；10_000 链 0.02s + 边界 10_001 报错
+- **TD-017 裁定维持 256**：eval 参考路径 I1 退役在即——大栈线程化不成立；T1 域注记（VM 尾递归超 256 深度域在双路径互查域外）
+- **TD-023 P2→P3 降级重定型**：TCO 副作用实测 gc_stress 61-62ms × 5 轮稳定（r16 回归值 207-235ms → **-70%**；Stage 0 基线 160.4ms → -62%）——原基准不再复现回归（P2 证据基础失效）；残留非尾形根扫描模式待新基准（绑定 I2）
+- **语义变更注记**：尾递归恒定帧（旧 105_001 尾递归报帧上限反转为通过项——tco_tests 正例；帧上限负例改非尾形态；尾调用帧不出现在追踪链——GCC/clang -O2 同行为）
+
+### 交付三：H3 Effect 语言级设计（E2 GO-DESIGN 兑现——40-d）
+
+- `stage-2/effect-language-design.md`（8 节）：设计裁定 12 项（D1 perform/handle 二形式 / D2 浅处理 / D3 continuation 线性唯一（Fresh→Resumed 动态防线 + E0008）/ D4 resume 非独立原语 / D5 set!→Perform(State) = 等价证明非实现 / D6 ext1 具体化 / D7 eval 逃逸映射 + T1 域收窄 / D8 TCO 正交 / D9 E0007-E0009 诊断族 + FFI 族 E0010-E0012 码位预留 / D10 能力-效应正交 / D11 多次恢复不实现 / D12 实现窗口 = 批次 I 后段）+ R10/R11 归约规则 6 条 + E4 三要素兑现表 + 迁移路径 M1-M5 + 风险 5 项全附缓解；实现窗口裁定 D12（设计做实 Stage 2 / 实现批次 I 后段——roadmap 口径回写）
+
+### 交付四：H4 HM 推断 PoC（38-d 设计 GO 有条件兑现——40-e）
+
+- `kerf-compiler/src/hm.rs`（~850 行）：**约束三段式**（生成 → worklist 求解 → zonk）——数值格扩展合一（Int/Float/Num 互匹）+ occurs check + 元数结构 + 失败逐条收集（多错误）；D2 值限制 / D3 set! join / D4 递归预置（define + letrec 双形状——sugar.rs 实况核对）/ D6 双点泛化（顶层序 + let 形状 App-of-Lambda 识别）/ D7 诊断（E0005 族 + 形式级桶隔离 + 512 生成期预算）；BUILTIN_SIGS 解释层重解释（cons/car/cdr 结构化 Pair(τ,τ) + NumOrAllStr/Ordering 变元锚点约束）
+- **双门全过**：超集门 29 程序（R1-R8 检出 → HM 亦检出——双检查器并行对照）+ 零误报门（examples 六件套 + 动态边界 15 case 零诊断）；**四类缺口检出证明**（用户 lambda 实参错 / car 元素类型 / 分支分歧 / 递归元数域错——R1-R8 静默放过面）；occurs ≥3 + 值限制 ≥2 + 多错误 Span 序；**验收口径（R4）**：fib : (num → num) 非 Dynamic（设计预期 Int→Int 修正——n 全用点数值域约束，格合一最小解 = Num）
+- 实现勘误实录：generalize 自污染（exclude + 泛化点前 solve_now）/ Ordering 变元锚点约束缺失两轮修复
+
+### 交付五：40-g 接口预留层标准化拆分（用户指令插入 MUV）
+
+- `reserved/mod.rs` 344 → **66 行纯声明**（模块声明 + re-export）：四能力族独立文件——`effect_handlers.rs`（79 行）/ `multistage.rs`（69 行）/ `capability_io.rs`（79 行）/ `compilation_cache.rs`（120 行），对齐 13 §3.1.1-§3.1.4 分节结构（§13.4 J1-J6 全过）；契约与实现的模块分离形态注记（P2 消费面 crate::capability/crate::cache）；**原则 27 兼容实证**：reserved_ext_tests 零改动通过（re-export 路径恒有效）；Probe 冻结测试随迁拆分（合并测试 → 4 子模块独立 Probe，净 +2）
+
+### 交付六：质量口径与收尾
+
+- **§3.2 六命令实跑全绿**（clean 起步：build --release 12.78s 零告警 / check 0/0 / fmt 0 diff / clippy -D 0 / **test --release --workspace 634:0:0**（34s——集成 438 = 409 + TCO 12 + HM 15 + Probe 拆分 2；单元 196——逐二进制实测：span 11 + syntax 11 + core 10 + reader 23 + expander 32 + compiler 15 + runtime 9 + vm 18 + driver 60 + backend 9））；CLI 冒烟：VM run fib ⇒ 144 / native fib exit 144 / check ok / 恢复模式 E0002 合并报告
+- TD-025 resolved（40-f 收尾轮补修）：krf 六头字段协议（`(tag s e exp scopes uni . fields)`——uni = ('uni . scopes) 均匀证书：make-node 默认 nil / retag 置位 / inject 清除 / 桥 stx_to_node 同步）+ retag-scope 快路径（种子 uniform_tag 镜像）——门审计 C02 包装链 **>540s → 7.37s（73×+）**；双审计集 EXIT 0（stage0 41 + stage1 51）；实现勘误实录：六头协议初版桥侧编辑未生效（fmt 重排致静默未匹配——最小形式全崩定位）+ 弱内容等快路径被 parity 套件捕获否决（def⊆use 顶层角共享过早——展开代次不提升分歧）→ 真标记协议
+- r18 tar.gz 打包（§19.4 r17 版命令——tools/ + scripts/ 入包）+ 包内自举验证（634:0:0 + CLI 冒烟）+ web 三层同步 + agent-browser E2E + git 入账 + worklog 树压实（38-g 补记 + 40-a~40-g 全条目）
+
 ## v0.4.0-r17（2026-09-11）——批次 G：后端 / FFI / 类型三主线（QBE 后端 PoC fib 本地码端到端 + FFI 所有权模型 + HM 设计轮 + TD-013 恢复实现，605 全绿）
 
 ### 交付一：G1 QBE 后端 PoC（首个非 VM 后端——§21.3 条件 3 兑现）

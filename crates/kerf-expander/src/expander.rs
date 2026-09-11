@@ -70,7 +70,11 @@ impl ExpandError {
 ///
 /// 完整文档口径 10_000 依赖 Stx `Rc` 化（Stage 1 前端重写批次 B 范围）
 /// ——残留边界登记于 TD-007 注记。
-pub const MAX_EXPANSION_DEPTH: u32 = 500;
+/// 展开深度上限（TD-007 完整口径，批次 H2）：trampoline 工作表（r4）+
+/// Stx Rc 共享化（H2——clone O(1)、旧树经共享免深 drop）双解除后，
+/// 10_000 层链实测恒定栈深（正例锚点 deep_macro_chain_expands_
+/// iteratively）。深度计数语义不变：当前展开路径上的宏展开总数。
+pub const MAX_EXPANSION_DEPTH: u32 = 10_000;
 
 /// 展开上下文（§10.1 规则 2：`Ctxt` 后缀）。
 pub struct ExpandCtxt {
@@ -536,12 +540,12 @@ mod tests {
 
     #[test]
     fn deep_macro_chain_expands_iteratively() {
-        // TD-007 正例：500 层透传宏链（= 标定上限）经 trampoline 工作表
-        // 迭代展开——展开控制流栈深恒定。残留栈约束来自 Stx 值语义深树
-        // 的 clone/drop 递归（实测：2MiB 测试栈 1_000 通过/2_000 溢出；
-        // 8MiB 主线程 4_000 通过/5_000 溢出——探针 example 实测）；
-        // 500 = 实测通过值 2× 裕度（TD-017 同型实测法）。构造链而非
-        // 源码嵌套（reader 嵌套上限 256 不适用于 Stx 构造）。
+        // TD-007 完整口径正例（H2）：10_000 层透传宏链 = 文档示例口径。
+        // r4 trampoline 解除控制流递归后，残留栈约束为 Stx 值语义深树
+        // clone/drop（实测 8MiB 主线程 4_000 通过/5_000 溢出）——H2
+        // Rc 共享化（List/Vector → Rc<Vec<Stx>>，clone O(1) + 旧树共享
+        // 免深 drop）解除后本测试在 2MiB 测试线程通过（恒定栈深）。
+        // 构造链而非源码嵌套（reader 嵌套上限 256 不适用于 Stx 构造）。
         let src = "(define-syntax m (syntax-rules () ((m x) x)))";
         let mut c = ctx();
         let forms = read_source(src, 0, &mut c.table).unwrap();
@@ -549,7 +553,7 @@ mod tests {
         let m_sym = c.table.intern("m");
         let span = kerf_span::Span::dummy();
         let mut cur = Stx::literal(StxLiteral::Int(42), span, ScopeSet::new());
-        for _ in 0..500 {
+        for _ in 0..10_000 {
             cur = Stx::list(
                 vec![Stx::symbol(m_sym, span, ScopeSet::new()), cur],
                 span,
@@ -562,15 +566,15 @@ mod tests {
                 value: LiteralValue::Int(42),
                 ..
             } => {}
-            other => panic!("透传 500 层链应归约到字面量 42，实际 {:?}", other),
+            other => panic!("透传 10_000 层链应归约到字面量 42，实际 {:?}", other),
         }
     }
 
     #[test]
     fn macro_chain_beyond_limit_reports_error() {
-        // TD-007 负例：501 层链超上限 → 结构化报错（非栈溢出）。
-        // 上限语义 = 展开路径上的宏展开总数（500 层链恰好通过、
-        // 501 层报错——边界含头含尾验证）。
+        // TD-007 负例（H2 口径）：10_001 层链超上限 → 结构化报错
+        // （非栈溢出）。上限语义 = 展开路径上的宏展开总数（10_000 层
+        // 链恰好通过、10_001 层报错——边界含头含尾验证）。
         let src = "(define-syntax m (syntax-rules () ((m x) x)))";
         let mut c = ctx();
         let forms = read_source(src, 0, &mut c.table).unwrap();
@@ -578,7 +582,7 @@ mod tests {
         let m_sym = c.table.intern("m");
         let span = kerf_span::Span::dummy();
         let mut cur = Stx::literal(StxLiteral::Int(1), span, ScopeSet::new());
-        for _ in 0..501 {
+        for _ in 0..10_001 {
             cur = Stx::list(
                 vec![Stx::symbol(m_sym, span, ScopeSet::new()), cur],
                 span,
@@ -587,7 +591,7 @@ mod tests {
         }
         let err = expand_form(&cur, &mut c).unwrap_err();
         assert!(
-            err.message.contains("超过上限 500"),
+            err.message.contains("超过上限 10000"),
             "实际错误：{}",
             err.message
         );

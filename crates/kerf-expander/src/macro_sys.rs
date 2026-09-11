@@ -136,21 +136,77 @@ impl<'t> HygieneCtx<'t> {
 }
 
 /// 递归重打作用域标签（保持 datum/span/phase，仅更新 scopes 字段）。
+///
+/// **迭代式 + 均匀标记共享（TD-007/H2 双解除）**：
+/// 1. **迭代式**：显式工作表后序重建（`Visit` 下行 / `Assemble` 组装），
+///    Rust 栈深恒定——旧递归版在 10_000 层链上溢出；
+/// 2. **均匀标记快路径**：输入节点 `uniform_tag == Some(target)`（整棵
+///    子树作用域均匀 = target——由本函数重建时设置、`add_scope_to_all`
+///    注入时清除）时直接浅共享返回（Rc 计数 +1）。trampoline 链各步的
+///    产物（前步 retag 输出）命中共几何：链长 N 的总工作量 O(N)（旧版
+///    每步全树重建 O(N²)）。
 fn retag_scopes(stx: &Stx, scopes: &ScopeSet) -> Stx {
+    // 快路径：均匀命中——整棵子树作用域已 = target，浅共享。
+    if stx.uniform_tag.as_ref() == Some(scopes) {
+        return stx.clone();
+    }
+    // 工作表：后序重建（子先建、父组装）；栈深恒定。
+    enum Task<'a> {
+        Visit(&'a Stx),
+        Assemble { input: &'a Stx, child_count: usize },
+    }
+    let mut tasks: Vec<Task<'_>> = vec![Task::Visit(stx)];
+    let mut out: Vec<Stx> = Vec::new();
+    while let Some(task) = tasks.pop() {
+        match task {
+            Task::Visit(node) => {
+                // 子级均匀命中可整体共享（免重建子树）
+                if node.uniform_tag.as_ref() == Some(scopes) {
+                    out.push(node.clone());
+                    continue;
+                }
+                match &node.datum {
+                    StxDatum::Symbol(s) => out.push(retag_leaf(StxDatum::Symbol(*s), node, scopes)),
+                    StxDatum::Literal(l) => {
+                        out.push(retag_leaf(StxDatum::Literal(l.clone()), node, scopes))
+                    }
+                    StxDatum::List(items) | StxDatum::Vector(items) => {
+                        let n = items.len();
+                        tasks.push(Task::Assemble {
+                            input: node,
+                            child_count: n,
+                        });
+                        for item in items.iter().rev() {
+                            tasks.push(Task::Visit(item));
+                        }
+                    }
+                }
+            }
+            Task::Assemble { input, child_count } => {
+                // 子项按序位于 out 顶部（LIFO 处理顺序保证）
+                let start = out.len() - child_count;
+                let items: Vec<Stx> = out.drain(start..).collect();
+                let datum = match &input.datum {
+                    StxDatum::List(_) => StxDatum::List(std::rc::Rc::new(items)),
+                    _ => StxDatum::Vector(std::rc::Rc::new(items)),
+                };
+                out.push(retag_leaf(datum, input, scopes));
+            }
+        }
+    }
+    out.pop().expect("根重建产物不变式")
+}
+
+/// 叶/组装节点重建：datum 给定，scopes → target，span 提升展开代次，
+/// phase 保持；**uniform_tag 置 Some(target)**（子树均匀性由构造保证：
+/// 叶自身 / 组装的子项均为 target 标记节点或共享均匀子树）。
+fn retag_leaf(datum: StxDatum, input: &Stx, scopes: &ScopeSet) -> Stx {
     Stx {
-        datum: match &stx.datum {
-            StxDatum::Symbol(s) => StxDatum::Symbol(*s),
-            StxDatum::Literal(l) => StxDatum::Literal(l.clone()),
-            StxDatum::List(items) => {
-                StxDatum::List(items.iter().map(|x| retag_scopes(x, scopes)).collect())
-            }
-            StxDatum::Vector(items) => {
-                StxDatum::Vector(items.iter().map(|x| retag_scopes(x, scopes)).collect())
-            }
-        },
-        span: stx.span.bumped_expansion(),
+        datum,
+        span: input.span.bumped_expansion(),
         scopes: scopes.clone(),
-        phase: stx.phase,
+        phase: input.phase,
+        uniform_tag: Some(scopes.clone()),
     }
 }
 
@@ -197,7 +253,7 @@ impl SyntaxRules {
         let lits = match &items[1].datum {
             StxDatum::List(lits) => {
                 let mut out = Vec::new();
-                for l in lits {
+                for l in lits.iter() {
                     match l.datum.as_symbol() {
                         Some(s) => out.push(s),
                         None => return Err("syntax-rules 字面量必须是符号".to_string()),
@@ -422,6 +478,7 @@ fn instantiate_template(
                 span: template.span,
                 scopes: template.scopes.clone(),
                 phase: template.phase,
+                uniform_tag: None,
             }
         }
         StxDatum::Literal(l) => Stx {
@@ -429,6 +486,7 @@ fn instantiate_template(
             span: template.span,
             scopes: template.scopes.clone(),
             phase: template.phase,
+            uniform_tag: None,
         },
         StxDatum::List(items) | StxDatum::Vector(items) => {
             let mut out: Vec<Stx> = Vec::new();
@@ -471,15 +529,16 @@ fn instantiate_template(
                 })
                 .unwrap_or(template.span);
             let datum = if is_vector {
-                StxDatum::Vector(out)
+                StxDatum::Vector(std::rc::Rc::new(out))
             } else {
-                StxDatum::List(out)
+                StxDatum::List(std::rc::Rc::new(out))
             };
             Stx {
                 datum,
                 span,
                 scopes: template.scopes.clone(),
                 phase: template.phase,
+                uniform_tag: None,
             }
         }
     }

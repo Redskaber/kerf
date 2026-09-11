@@ -200,10 +200,11 @@ impl<'t, 'i> Parser<'t, 'i> {
                     let scopes = open.scopes.clone();
                     let stx = if is_vector {
                         Stx {
-                            datum: StxDatum::Vector(items),
+                            datum: StxDatum::Vector(std::rc::Rc::new(items)),
                             span,
                             scopes,
                             phase: kerf_syntax::Phase::Runtime,
+                            uniform_tag: None,
                         }
                     } else {
                         Stx::list(items, span, scopes)

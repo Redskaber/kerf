@@ -33,6 +33,7 @@ pub mod compile;
 // 编译入口（§10.1 规则 1）单独导出便于路径导入。
 pub use compile::{compile_module, CompileCtxt, CompileError};
 
+pub mod hm;
 pub mod typecheck;
 
 // 静态检查域（Tc 前缀——§10.1 域前缀约定）公共类型显式导出。

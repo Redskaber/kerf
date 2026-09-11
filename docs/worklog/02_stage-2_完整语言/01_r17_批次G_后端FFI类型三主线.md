@@ -1,6 +1,6 @@
 # r17 批次 G：后端 / FFI / 类型三主线（QBE 后端 PoC + FFI 所有权模型 + HM 设计 + TD-013 resolved）
 
-> Task ID: 38-a ~ 38-f · 2026-09-11 · 溯源：flat worklog（kerf/docs/worklog.md 尾部六条目）· RELEASE_NOTES v0.4.0-r17
+> Task ID: 38-a ~ 38-g · 2026-09-11 · 溯源：flat worklog（kerf/docs/worklog.md 尾部七条目）· RELEASE_NOTES v0.4.0-r17
 
 ## 概要（1:8 压缩——详录见 flat）
 
@@ -44,7 +44,21 @@
 
 测试 553 → **605:0:0**（净 +52：集成 +40（qbe 24 + 恢复 16）+ 单元
 +12）；CLI 13 子命令；crate 10 成员；QBE 1.3（670,544B）；r17 包
-282 条目 / 1,504,494B；TD-013 resolved + TD-024 登记（P3）。
+282 条目 / 1,504,494B（终态刷新版含 38-g）；TD-013 resolved +
+TD-024 登记（P3）。
+
+## 38-g 终验补记（批次 H 40-a——上下文耗尽落账缺口清偿）
+
+- 缺口：38-f 引用「38-g 终验条目」但上会话打包+git 后上下文耗尽未落
+  账（P2 记录债——flat/树/包均无）；代码面 git 干净零未提交。
+- 补记证据：r17-web-mobile.png（03:08 与 79591d5 同分钟）+ 本轮全新
+  agent-browser 复验（渲染/console 零错/Playground 6765/footer 双
+  形态/390×844 截图 40a-r17-reverify-mobile.png）+ dev.log 零错误。
+- r17 终态包刷新：38-g 入 flat 后重跑 §19.4（r17 版含 tools/+
+  scripts/）→ 同名覆盖 + 包内复验 605:0:0 + CLI 四冒烟（代码树零
+  变更仅文档增量）。
+- 规程教训：**上下文耗尽前最后动作 = 先落账再打包**（PHASE 4 执行
+  顺序强调）。
 
 ## 勘误实录（规程记忆——下轮直接避坑）
 

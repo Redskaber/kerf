@@ -129,6 +129,12 @@ impl VmError {
 /// 帧数上限（迭代式循环下防护失控递归的显式上限）。
 pub const MAX_FRAMES: usize = 100_000;
 
+/// 指令预算上限（TD-022/H2——TCO 尾循环护栏）：帧数不再增长的无限
+/// 尾循环（如 `(define (l) (l))`）由指令预算兜底（结构化报错非挂死）。
+/// 量级标定：gc_stress ≈ 5×10^5 / 自举 Reader 100KB 源 ≈ 10^7 —— 10^9
+/// = 两个数量级裕度（约数十秒量级执行上限，捕获真无限循环）。
+pub const MAX_INSTRUCTIONS: u64 = 1_000_000_000;
+
 /// GC 安全点轮询间隔（指令数）。
 const GC_POLL_INTERVAL: u64 = 256;
 
@@ -154,7 +160,7 @@ pub fn run_program(
         ext: FrameExt::new(),
         call_span: Span::dummy(),
     }];
-    let outcome = execute(program, globals, heap, &mut frames);
+    let outcome = execute(program, globals, heap, &mut frames, MAX_INSTRUCTIONS);
     outcome.map_err(|mut e| {
         // 调用点追踪（§8.12 运行时错误捕获）：错误发生时的活跃帧链。
         // 跳过主帧；保留最内 16 帧（深递归下外层无信息量，防诊断爆炸）；
@@ -176,6 +182,28 @@ pub fn run_program(
 
 /// 调用点追踪截断上限（深递归诊断防爆——仅保留最内 N 帧）。
 const MAX_TRACE_FRAMES: usize = 16;
+
+/// 预算参数化执行入口（TD-022/H2——测试面）：与 [`run_program`] 同构，
+/// 但指令预算可注入（无限尾循环负例用小预算快速触发护栏——38-c
+/// find_qbe 纯函数注入同型）。生产路径恒用 [`MAX_INSTRUCTIONS`]。
+#[doc(hidden)]
+pub fn run_program_with_budget(
+    program: &BcProgram,
+    globals: &mut HashMap<Symbol, Value>,
+    heap: &mut Heap,
+    max_instructions: u64,
+) -> Result<Value, VmError> {
+    let mut frames: Vec<Frame> = vec![Frame {
+        ret_proto: 0,
+        ret_pc: 0,
+        proto: program.entry as usize,
+        locals: Vec::new(),
+        captures: Vec::new(),
+        ext: FrameExt::new(),
+        call_span: Span::dummy(),
+    }];
+    execute(program, globals, heap, &mut frames, max_instructions)
+}
 
 /// 宿主侧闭包调用入口（自举 Reader 等宿主消费方使用，B3）。
 ///
@@ -251,7 +279,7 @@ pub fn call_closure(
         ext: FrameExt::new(),
         call_span: Span::dummy(),
     }];
-    let outcome = execute(program, globals, heap, &mut frames);
+    let outcome = execute(program, globals, heap, &mut frames, MAX_INSTRUCTIONS);
     outcome.map_err(|mut e| {
         // 调用点追踪：与 run_program 同构（内层 16 帧）
         if e.trace.is_empty() && frames.len() > 1 {
@@ -275,6 +303,7 @@ fn execute(
     globals: &mut HashMap<Symbol, Value>,
     heap: &mut Heap,
     frames: &mut Vec<Frame>,
+    max_instructions: u64,
 ) -> Result<Value, VmError> {
     let mut stack: Vec<Value> = Vec::new();
     let mut pc: u32 = 0;
@@ -302,6 +331,16 @@ fn execute(
         // pc 单调性例外（§19.5 不变式 2）：JUMP/RET/CALL 改变 pc；其余 +1
         pc += 1;
         instructions += 1;
+        // 指令预算护栏（TD-022/H2）：TCO 后帧数不增的无限尾循环在此兜底
+        if instructions > max_instructions {
+            return Err(VmError::new(
+                format!(
+                    "指令数超过上限 {}（疑似无限循环——TCO 尾循环护栏）",
+                    max_instructions
+                ),
+                span,
+            ));
+        }
 
         macro_rules! pop {
             () => {
@@ -552,6 +591,84 @@ fn execute(
                             call_span: span,
                         };
                         let _ = &rc;
+                        frames.push(frame);
+                        pc = 0;
+                    }
+                    Value::Closure(rc) if matches!(rc.as_ref(), ClosureValue::Eval { .. }) => {
+                        return Err(VmError::new(
+                            "跨路径闭包调用不支持（eval 闭包不可在 VM 中调用——双路径用于互查）",
+                            span,
+                        ))
+                    }
+                    other => {
+                        return Err(VmError::new(
+                            format!("不可调用的值：{}", other.type_name()),
+                            span,
+                        ))
+                    }
+                }
+            }
+            Op::TailCall(n) => {
+                // TD-022/H2——TCO 帧复用：语义同 Call，但当前帧拆除、被调方
+                // 返回直达当前帧的调用者（帧数净零——尾递归 O(1) 帧）。
+                // 自举 Reader/Expander 的尾调用链主循环（10^5 字符级源）
+                // 与用户尾递归程序由此解除帧消耗（TD-022 兑现）。
+                let n = *n as usize;
+                if stack.len() < n + 1 {
+                    return Err(VmError::new("TAIL_CALL 栈深度不足", span));
+                }
+                let mut args: Vec<Value> = Vec::with_capacity(n);
+                for _ in 0..n {
+                    args.push(stack.pop().expect("上方已检查"));
+                }
+                args.reverse(); // arg0 在局部槽 0
+                let callee = stack.pop().expect("上方已检查");
+                match callee {
+                    // 内建函数尾调用 = 计算结果后立即执行隐式 RET（等价语义）
+                    Value::Builtin(b) => match b.call(heap, args) {
+                        Ok(v) => {
+                            if frames.len() <= 1 {
+                                return Ok(v);
+                            }
+                            let frame = frames.pop().expect("上方已检查");
+                            pc = frame.ret_pc;
+                            push!(v);
+                        }
+                        Err(e) => return Err(VmError::new(e.message, span)),
+                    },
+                    Value::Closure(rc) if matches!(rc.as_ref(), ClosureValue::Bytecode { .. }) => {
+                        let (p, captures) = match rc.as_ref() {
+                            ClosureValue::Bytecode { proto, captures } => {
+                                (*proto, captures.clone())
+                            }
+                            _ => unreachable!("上方已窄化"),
+                        };
+                        let target = &program.protos[p as usize];
+                        if target.params.len() != args.len() {
+                            return Err(VmError::new(
+                                format!(
+                                    "过程参数数量不匹配：期望 {} 实际 {}",
+                                    target.params.len(),
+                                    args.len()
+                                ),
+                                span,
+                            ));
+                        }
+                        // 帧替换（净零）：拆除当前帧，继承其返回地址——被调方
+                        // RET 直达当前帧的调用者。MAX_FRAMES 不检查（帧数
+                        // 恒定）；失控尾循环由指令预算护栏兜底。
+                        let local_cells: Vec<Rc<RefCell<Value>>> =
+                            args.into_iter().map(|v| Rc::new(RefCell::new(v))).collect();
+                        let old = frames.pop().expect("尾调用帧存在");
+                        let frame = Frame {
+                            ret_proto: old.ret_proto,
+                            ret_pc: old.ret_pc,
+                            proto: p as usize,
+                            locals: local_cells,
+                            captures,
+                            ext: FrameExt::new(),
+                            call_span: span,
+                        };
                         frames.push(frame);
                         pc = 0;
                     }

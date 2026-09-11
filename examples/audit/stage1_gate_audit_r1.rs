@@ -416,7 +416,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::MacroDepth),
         src: "(define-syntax loop2 (syntax-rules () ((loop2) (loop2)))) (loop2)",
-        expect: Expect::Err { stage: Stage::Expand, msg: "宏展开深度超过上限 500" },
+        expect: Expect::Err { stage: Stage::Expand, msg: "宏展开深度超过上限 10000" },
     },
     Case {
         id: "C03",
@@ -456,7 +456,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: None,
         src: "(define-syntax m (syntax-rules () ((m x) (m (m x))))) (m 1)",
-        expect: Expect::Err { stage: Stage::Expand, msg: "宏展开深度超过上限 500" },
+        expect: Expect::Err { stage: Stage::Expand, msg: "宏展开深度超过上限 10000" },
     },
     Case {
         id: "C08",

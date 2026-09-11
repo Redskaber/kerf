@@ -3,7 +3,7 @@
 > **Author**: Super Z（PM-A/ARCH-A/PL-A 联合）
 > **Date**: 2026-09-11
 > **Version**: v0.4.0-plan
-> **Status**: Active（批次 F r16 交付闭环；**批次 G r17 交付**（38-a~f：G3 FFI 模型 + G1 QBE PoC fib 端到端 + G2 HM 设计 GO 有条件 + TD-013 resolved，605:0:0）；批次 H-I 待细化——H4 HM PoC 为 38-d 裁定新增 MUV）
+> **Status**: Active（批次 F r16 交付闭环；批次 G r17 交付（38-a~g：605:0:0）；**批次 H r18 交付**（40-a~g：38-g 补记清偿 + H1 五项评估全票 + H2 三债清偿（TCO + TD-007 完整口径 + TD-017 裁定 + TD-023 降级）+ H3 Effect 设计冻结 + H4 HM PoC 双门全过 + 40-g 用户指令预留层拆分，**634:0:0**）；批次 I 待细化——Effect 实现窗口 D12 = I 后段）
 > **输入**: sop.md §21（阶段推进规划）、§17（任务规划排版图）、§18（依赖审查）、§13.1（设计对齐）、§14（深度审查协议——阶段末环）、§4（MUV）、§19（打包）；[12-roadmap §1.3/§2.5](../../lang-design/12-roadmap.md)；[08-后端策略](../../lang-design/08-backend-evolution.md)；[13-能力矩阵 §3.3-§3.5](../../lang-design/13-capability-matrix.md)；[stage-1/plan](../stage-1/plan.md)（批次 A-E 交付实录 + 批次 F 注记）；r15 门审查（Task 34-d APPROVED + §6.3 五角色全票 GO）；r16 批次 F 深审环（deep-review-round1 + 偏差清单 17 项 + TD-023 新登记）
 > **上游**: Stage 1 r15（553:0:0 全绿 / 读+展开两段全自举 / stage1_gate_audit_r1 50 case APPROVED）
 
@@ -156,6 +156,7 @@ G3 先于 G1（FFI 所有权模型是后端 FFI 交互面的前置裁定）；�
 | G | G3 FFI 所有权模型定义（GC pin/unpin 跨边界语义 + 线性令牌裁定——13 §3.3.4 行为补全）→ G1 QBE 后端 PoC（CodegenBackend trait 做实 + AnnotatedANF 入参验证 + fib 端到端本地码）→ G2 HM 推断设计轮（保守 R1-R8 → HM 升级评估 + 16 参照复核）+ **TD-013 多错误恢复实现（r16 深审改判绑定——expander 恢复展开与推断升级同为前端诊断主线）** | §21.3 条件 3（首个非 VM 后端）+ 条件 4 前半（FFI 契约做实）+ 阻塞项解除 + TD-013 偿还 | 38-x |
 | **G 执行注记（r17）** | 38-a G3 ✅（ffi-ownership-model.md 216 行——pin/unpin 形式化 + 线性令牌 + 13 边界 case + 19 决策；回写义务 4 处登记批次 I）/ 38-b·c G1 ✅（QBE 1.3 落位 tools/qbe + kerf-backend 第 10 crate：契约迁移（原则 27 re-export）+ AnnotatedANF 实化 + phi 合成 + QbeBackend + aot 编排；CLI +2 命令（anf/native）；**fib(12) ⇒ exit 144 本地码端到端 + VM 一致**；TD-024 PoC 边界 B1 登记）/ 38-d G2 ✅（hm-inference-design.md 303 行——约束三段式裁定 + GO 有条件：PoC 排批次 H 新增 MUV H4）/ 38-e TD-013 ✅ **resolved**（双路径恢复 + check_source_recover 合并报告 + CLI check 切换）/ 38-f ✅（605:0:0 + §3.2 全绿 + 对账 + tar.gz + web） | 全验收过 + 605 基线 | 38-x |
 | H | H1 8 原语迁移五项评估（Let/Perform·Handle/de Bruijn/continuation/语义化命名——§13.2 切换期重构流程 + §6.3 投票逐项）∥ H2 TCO 决策（TD-022 帧消耗 + TD-007 Rc 化 10_000 口径同轮 + TD-017 eval 深度裁定随 eval 重写评估——r16 改判注记）∥ H3 Effect 语言级设计（Perform/Handle 原语化对照 06 现行语义） | §6.3 逐项投票记录 + 语义变更零静默（GATE 3） | 40-x |
+| **H 执行注记（r18）** | 40-a ✅（38-g 终验补记 + r17 终态包刷新复验——上会话落账缺口 P2 清偿）/ 40-b H1 ✅（primitive-migration-evaluation.md——五项三段式 + J1-J6 30 点 + 投票 20 票全票：E1 DEFER-STAGE3 / E2 GO-DESIGN / E3 分层 / E4 SPEC / E5 REJECT；**总裁定 Stage 2 原语集零变更**）/ 40-c H2 ✅（**TCO 落地**：TailCall 帧复用 + 尾位穿线 + 指令预算护栏；**TD-007 resolved**（Rc + 均匀标记 + 迭代 retag + 扁平 Drop——10_000 口径 0.02s）；TD-017 裁定维持 256；TD-023 P2→P3（gc_stress -70% 实测）+ TD-025 登记（自举侧包装链 O(N²)））/ 40-d H3 ✅（effect-language-design.md 12 裁定——实现窗口 D12 = 批次 I 后段）/ 40-e H4 ✅（hm.rs 约束三段式 PoC——**双门全过**（超集 29 + 零误报）+ 四类缺口检出 + fib : (num→num)）/ 40-g ✅（用户指令插入：reserved/ 标准化拆分——mod.rs 344→66 行 + 4 能力族独立文件 + reserved_ext_tests 零改动兼容实证）/ 40-f ✅（634:0:0 + §3.2 全绿 + 对账六面 + r18 tar.gz + web + E2E + git） | 全验收过 + 634 基线 | 40-x |
 | I | I1 编译器 kerf ~80% 迁移收口（compiler 本体 kerf 化 + 两次编译自身字节一致）→ I2 标准库完整化 + TD-008 分代 GC 评估（**+ TD-023 gc_stress 回归根扫描对症——r16 深审新登记绑定本节点**）+ TD-009/010/011 P3 批量清偿 + TD-014/018 消息质量批 → I3 Stage 2 门审查（§7.3 ≥30 新 case + §21.3 四条锚定） | §21.3 条件 1/2 + Stage 3 切换信号就位 + TD-023 偿还 | 42-x 起 |
 
 ## 6. 量化验收标准（本规划轮）

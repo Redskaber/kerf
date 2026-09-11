@@ -152,7 +152,9 @@ next2 讨论的最终推荐（不考虑兼容性的重新设计）为 8 原语�
 - **de Bruijn 索引**（消除变量名）：Stage 1 Expander 重写（批次 E）与 Stage 2 ANF 层的共同评估主题——"允许替换而不做 lambda 转换"（简化求值器与闭包转换）；
 - **continuation 类型安全**（`Handle` 携带 resumption 类型三要素 + 线性唯一性）：Stage 2 效应安全的设计规格锚点——OCaml 5 已知缺陷（不静态确保效应被处理）的规避方案。
 
-**本设计的对照结论**：冻结 9 原语（+Require 声明变体）在 Stage 0-1 不变；上列四项作为 **Stage 2 「目标语言完整化」门审查的评估清单**登记于 [12-路线图 §2.5.1](./12-roadmap.md) 演进矩阵注记。核心冻结原则（§2/原则 9）的精确化表述（v5.4 §6）不变：语义原语集冻结 + 声明变体可追加；效应原语化属于 Stage 2 语义层变更，须经 §13.2 切换期重构流程 + 委员会投票。8 原语语义等价迁移映射（9 冻结原语 → 8 原语形态的逐项映射表）见 §8.3 与 [upload/stage0.md §6.12.6](../stage0.md)。
+**本设计的对照结论**：冻结 9 原语（+Require 声明变体）在 Stage 0-1 不变；上列四项作为 **Stage 2 「目标语言完整化」门审查的评估清单**登记于 [12-路线图 §2.5.1](./12-roadmap.md) 演进矩阵注记。
+
+> **r18 批次 H 评估裁定注记（H1 交付——[primitive-migration-evaluation.md](../develop/v0/stage-2/primitive-migration-evaluation.md)）**：五项评估经 §13.4 J1-J6 判据 + §6.3 五角色全票（5.5/5.5 × 5）裁定——E1 Let **DEFER-TO-STAGE3**（IR 层 AnnotatedANF 已承载 ANF 锚点；Core 层引入破坏自举 parity 链时机）/ E2 Perform/Handle **GO-DESIGN**（设计做实 Stage 2（r18 effect-language-design.md 交付）；实现窗口 D12 = 批次 I 后段）/ E3 de Bruijn **分层裁定**（**展开层命名制永久保持**——ScopeSet 卫生机制载体不可牺牲；IR 层编码化 = Stage 3 优化器伴生评估）/ E4 continuation **SPEC-ANCHOR**（三要素 + 线性唯一性规格入 H3 设计）/ E5 语义化命名 **REJECT-STANDALONE**（名实不符——8 形态命名前提是结构就位；绑定 E1-E4 全落地后 Stage 3 切换期一次性迁移）。**总裁定：Stage 2 内原语集零变更**（核心冻结原则 9 维持）。核心冻结原则（§2/原则 9）的精确化表述（v5.4 §6）不变：语义原语集冻结 + 声明变体可追加；效应原语化属于 Stage 2 语义层变更，须经 §13.2 切换期重构流程 + 委员会投票。8 原语语义等价迁移映射（9 冻结原语 → 8 原语形态的逐项映射表）见 §8.3 与 [upload/stage0.md §6.12.6](../stage0.md)。
 
 ## 8. 内部语法设计：类型安全 ADT 与语义化命名（v6.0 吸收自 next3.md 第七轮）
 

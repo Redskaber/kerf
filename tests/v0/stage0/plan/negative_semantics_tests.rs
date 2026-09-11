@@ -319,10 +319,16 @@ fn message_shape_call_site_trace() {
         "函数内错误应含调用点 note：\n{}",
         one.rendered
     );
-    // 双层调用链：g→f，错误在 f 体内 → 2 个调用点 note
-    let two = run_source("(define (f n) (car n)) (define (g) (f 5)) (g)", "t.krf")
-        .err()
-        .unwrap();
+    // 双层调用链：g→f，错误在 f 体内 → 2 个调用点 note。
+    // （H2/TCO 注记：`(+ 0 (f 5))` 使调用非尾位——尾调用经帧复用会从
+    // 追踪链消失（优化帧不出栈迹——GCC/clang -O2 同行为）；本测试
+    // 验证的是多帧追踪渲染面，故走非尾形态。）
+    let two = run_source(
+        "(define (f n) (car n)) (define (g) (+ 0 (f 5))) (g)",
+        "t.krf",
+    )
+    .err()
+    .unwrap();
     let notes = two.rendered.matches("note: 调用点").count();
     assert!(
         notes >= 2,
@@ -330,8 +336,11 @@ fn message_shape_call_site_trace() {
         notes,
         two.rendered
     );
-    // 深递归：帧上限错误 + 追踪截断（≤16 帧渲染，防诊断爆炸）
-    let deep = run_source("(define (f n) (f n)) (f 1)", "t.krf")
+    // 深递归（**非尾位**）：帧上限错误 + 追踪截断（≤16 帧渲染，防诊断爆炸）。
+    // H2/TCO 注记：旧用例 `(f n)` 自尾调无限循环经 TCO 帧复用不再耗帧——
+    // 改由指令预算护栏接管（tco_tests 的 instruction_budget 负例锚定）；
+    // 本块保持「帧上限 + 截断渲染」验证意图，走非尾位形态。
+    let deep = run_source("(define (f n) (+ 1 (f n))) (f 1)", "t.krf")
         .err()
         .unwrap();
     assert!(

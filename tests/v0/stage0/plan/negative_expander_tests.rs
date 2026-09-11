@@ -399,7 +399,7 @@ fn macro_expansion_failures() {
         ),
         (
             "(define-syntax lo (syntax-rules () ((lo) (lo)))) (lo)",
-            "宏展开深度超过上限 500（疑似无限递归展开）",
+            "宏展开深度超过上限 10000（疑似无限递归展开）",
         ),
         (
             "(define-syntax lo (syntax-rules () ((lo) (lo lo)))) (lo)",

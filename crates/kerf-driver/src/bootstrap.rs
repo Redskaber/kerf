@@ -423,10 +423,11 @@ fn convert_node(
         "vec" => {
             let items = convert_node_items(&fields[3..], heap, file_id, table)?;
             Ok(Stx {
-                datum: StxDatum::Vector(items),
+                datum: StxDatum::Vector(std::rc::Rc::new(items)),
                 span,
                 scopes,
                 phase: Phase::Runtime,
+                uniform_tag: None,
             })
         }
         other => Err(ReadError::new(

@@ -5,7 +5,8 @@
 ; define-syntax/syntax-rules 宏系统：模式匹配（通配/字面量/省略号/
 ; 嵌套列表/向量）+ 模板实例化（模式变量替换/省略号拼接）+ 卫生
 ; α 重命名（$hyg$N——同标识符同次实例化恒同映射）+ 展开深度计数
-; （500 上限——超限报错非栈溢出，§19.2 不变式 1），在 Stage 0 VM 上
+; （10_000 上限——TD-007 完整口径 H2：Rc 化 + 均匀标记共享后提升；
+; 超限报错非栈溢出，§19.2 不变式 1），在 Stage 0 VM 上
 ; 运行（07-bootstrap §3.2 混合期构成：Expander 属新语言子集）。
 ; 行为与种子实现（kerf-expander/*.rs，Rust）对齐——CoreExpr（原语
 ; 形态 + Span(start,end) + 作用域集 + param_scopes）与错误（消息 +
@@ -35,7 +36,7 @@
 ;     宏产物 Span 展开代次（expansion_id）不参与 parity 判据（r6
 ;     Reader parity 同口径——start/end 逐字一致）；嵌套省略号
 ;     （两级 ellipsis）与 syntax-parse 显式推迟（TD-005 口径不变）；
-;     深度上限 500 经宏展开计数可达且必达（超限报错非栈溢出）。
+;     深度上限 10_000 经宏展开计数可达且必达（超限报错非栈溢出）。
 ; - 语义基准：变换器注册表 = 名字str 单表（用户宏 'rules / 糖惰性注册
 ;     'builtin——镜像 ctx.transformers HashMap 替换语义）；卫生基名
 ;     回退（name$hyg$N → 基名查表，后缀纯数字保守校验）对两类同权。
@@ -74,6 +75,7 @@
 (define (third x) (car (cdr (cdr x))))
 (define (fourth x) (car (cdr (cdr (cdr x)))))
 (define (fifth x) (car (cdr (cdr (cdr (cdr x))))))
+(define (sixth x) (car (cdr (cdr (cdr (cdr (cdr x)))))))
 
 ; 节点固定字段：tag s e exp scopes；fields = 其后内容（exp = 展开代次，
 ; 镜像 Span.expansion_id——仅参与 instantiate 的 Span 并集守卫：代次
@@ -83,14 +85,15 @@
 (define (node-e n) (third n))
 (define (node-exp n) (fourth n))
 (define (node-scopes n) (fifth n))
-(define (node-fields n) (cdr (cdr (cdr (cdr (cdr n))))))
+(define (node-uni n) (sixth n))
+(define (node-fields n) (cdr (cdr (cdr (cdr (cdr (cdr n)))))))
 ; 字段访问：cdr 步进（算术索引不经 int 参数内置——保守类型检查的
-; num 联合边界，与种子行为等价：list-ref n (+ 5 i)）
+; num 联合边界，与种子行为等价：list-ref n (+ 6 i)——六头字段协议）
 (define (drop-k lst k)
   (if (= k 0)
       lst
       (drop-k (cdr lst) (- k 1))))
-(define (node-field n i) (car (drop-k n (+ 5 i))))
+(define (node-field n i) (car (drop-k n (+ 6 i))))
 (define (node-count n) (+ 1 (length (node-fields n))))
 (define (sym-name n) (node-field n 0))
 
@@ -124,9 +127,10 @@
               (cons (node-e node)
                     (cons (node-exp node)
                           (cons (cons s (node-scopes node))
-                                (inject-children (node-tag node)
-                                                 (node-fields node)
-                                                 s)))))))
+                                (cons nil    ; 均匀性破坏——标记清除
+                                      (inject-children (node-tag node)
+                                                       (node-fields node)
+                                                       s))))))))
 
 (define (inject-children tag fields s)
   (if (or (eq? tag 'list) (eq? tag 'vec))
@@ -135,15 +139,49 @@
 
 ; 重打作用域标签（镜像 macro_sys::retag_scopes：作用域替换 + 展开代次
 ; +1（bumped_expansion——§19.2 不变式 1））
+;
+; 快路径（r18/40-f——TD-025 对症，镜像种子侧 uniform_tag O(1) 共享）：
+; 节点作用域集已 = 目标（内容等）时整棵子树原样共享——trampoline 链
+; 各步产物（前步 retag 全量重建 = 子树恒已统一目标）命中共几何：
+; 链长 N 总工作量 O(N)（旧每步全树重建 O(N²)——门审计 C02 包装链
+; 实测 >540s → 本路径 O(N)）。种子侧 uniform_tag 快路径同型（共享
+; 免重建 + 展开代次不提升——双侧同语义）；作用域集比较序不敏感
+;（subset 双向——scope-union 输出序确定但比较取内容口径更稳）。
 (define (retag-scope node scopes)
-  (cons (node-tag node)
-        (cons (node-s node)
-              (cons (node-e node)
-                    (cons (+ (node-exp node) 1)
-                          (cons scopes
-                                (retag-children (node-tag node)
-                                                (node-fields node)
-                                                scopes)))))))
+  (if (uni-matches? node scopes)
+      node
+      (cons (node-tag node)
+            (cons (node-s node)
+                  (cons (node-e node)
+                        (cons (+ (node-exp node) 1)
+                              (cons scopes
+                                    (cons (cons 'uni scopes)
+                                          (retag-children (node-tag node)
+                                                          (node-fields node)
+                                                          scopes)))))))))
+
+; 均匀标记命中：node 的整棵子树作用域已 = scopes（retag 重建时设置的
+; 证书——('uni . scopes) 形；inject 注入清除）
+(define (uni-matches? node scopes)
+  (let ((u (node-uni node)))
+    (if (pair? u)
+        (if (eq? (car u) 'uni)
+            (scopes-eq? (cdr u) scopes)
+            false)
+        false)))
+
+; 作用域集内容等（序不敏感双向子集——scope 集为小列表）
+(define (scopes-eq? a b)
+  (if (eq? (length a) (length b))
+      (scopes-subset? a b)
+      false))
+
+(define (scopes-subset? a b)
+  (if (null? a)
+      true
+      (if (bool? (member (car a) b))
+          (scopes-subset? (cdr a) b)
+          false)))
 
 (define (retag-children tag fields scopes)
   (if (or (eq? tag 'list) (eq? tag 'vec))
@@ -169,8 +207,12 @@
 (define (err? v) (and (pair? v) (eq? (car v) 'err)))
 (define (xperr msg s e) (list 'err msg s e))
 
+; 六头字段协议（r18/40-f——TD-025 对症）：(tag s e exp scopes uni . fields)
+; uni = 均匀作用域标记（('uni . scopes) 形——retag 重建时设置、inject
+; 注入时清除；与种子侧 Stx.uniform_tag: Option<ScopeSet> 同语义镜像：
+; Some(∅) ≠ None 的空集区分由 'uni 包装承载）
 (define (make-node tag s e exp scopes fields)
-  (cons tag (cons s (cons e (cons exp (cons scopes fields))))))
+  (cons tag (cons s (cons e (cons exp (cons scopes (cons nil fields)))))))
 
 (define (sym-node s e exp name) (make-node 'sym s e exp nil (list name)))
 ; 注意：true/false/nil 在 kerf 源码中是字面量（Bool/Nil）而非符号——
@@ -429,7 +471,7 @@
 ; 入口快照、出口回滚（兄弟不累计——当前展开路径上的宏/糖步总数），
 ; 镜像 expand_form 的 entry_depth / 出口回写）
 (define DEPTH 0)
-(define MAX-EXP-DEPTH 500)
+(define MAX-EXP-DEPTH 10000)
 
 ; 变换器注册表与卫生上下文（每次宏应用重置——镜像 HygieneCtx::new 于
 ; apply_named；renames 每子句实例化复位、计数器跨子句保持）

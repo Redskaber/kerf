@@ -199,6 +199,9 @@ fn stx_to_node(stx: &Stx, table: &SymbolTable, heap: &mut Heap) -> Value {
     let e = Value::Int(stx.span.end as i64);
     let exp = Value::Int(stx.span.expansion_id as i64);
     let scopes = scope_list_value(&stx.scopes, heap);
+    // 六头字段协议（r18/40-f）：uni = 均匀作用域标记（种子侧
+    // uniform_tag 的镜像；桥入口恒 nil——标记由 krf 侧 retag 设置）
+    let uni = Value::Nil;
     let tag = |name: &str| Value::Symbol(Rc::from(name));
     let items: Vec<Value> = match &stx.datum {
         StxDatum::Symbol(sym) => vec![
@@ -207,28 +210,36 @@ fn stx_to_node(stx: &Stx, table: &SymbolTable, heap: &mut Heap) -> Value {
             e,
             exp,
             scopes,
+            uni,
             Value::Str(Rc::from(table.name(*sym))),
         ],
         StxDatum::Literal(l) => match l {
-            StxLiteral::Int(v) => vec![tag("int"), s, e, exp, scopes, Value::Int(*v)],
+            StxLiteral::Int(v) => vec![tag("int"), s, e, exp, scopes, uni, Value::Int(*v)],
             StxLiteral::Float(v) => {
-                vec![tag("float"), s, e, exp, scopes, Value::Float(*v)]
+                vec![tag("float"), s, e, exp, scopes, uni, Value::Float(*v)]
             }
             StxLiteral::Str(v) => {
-                vec![tag("str"), s, e, exp, scopes, Value::Str(v.clone())]
+                vec![tag("str"), s, e, exp, scopes, uni, Value::Str(v.clone())]
             }
             StxLiteral::Bool(b) => {
-                vec![tag(if *b { "true" } else { "false" }), s, e, exp, scopes]
+                vec![
+                    tag(if *b { "true" } else { "false" }),
+                    s,
+                    e,
+                    exp,
+                    scopes,
+                    uni,
+                ]
             }
-            StxLiteral::Nil => vec![tag("nil"), s, e, exp, scopes],
+            StxLiteral::Nil => vec![tag("nil"), s, e, exp, scopes, uni],
         },
         StxDatum::List(children) => {
-            let mut v = vec![tag("list"), s, e, exp, scopes];
+            let mut v = vec![tag("list"), s, e, exp, scopes, uni];
             v.extend(children.iter().map(|c| stx_to_node(c, table, heap)));
             v
         }
         StxDatum::Vector(children) => {
-            let mut v = vec![tag("vec"), s, e, exp, scopes];
+            let mut v = vec![tag("vec"), s, e, exp, scopes, uni];
             v.extend(children.iter().map(|c| stx_to_node(c, table, heap)));
             v
         }

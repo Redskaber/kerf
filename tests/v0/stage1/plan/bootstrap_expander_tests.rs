@@ -727,7 +727,7 @@ fn behavior_macro_depth_limit_structured_error() {
     .expect("读取失败");
     let err = expand_program(&forms, 0, &mut t).expect_err("应报深度上限错误");
     assert!(
-        err.message.contains("宏展开深度超过上限 500"),
+        err.message.contains("宏展开深度超过上限 10000"),
         "实际错误：{}",
         err.message
     );

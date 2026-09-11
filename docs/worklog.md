@@ -3018,3 +3018,329 @@ Stage Summary:
   文档随代码 R4）、GATE 1-5（全程实测口径）
 - 下一步：批次 H（H1 原语评估 ∥ H2 TCO+TD-007 ∥ H3 Effect 设计 ∥
   **H4 HM PoC（38-d 裁定新增）**）
+
+---
+Task ID: 38-g
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，r17 终验补记轮——批次 H 40-a 缺口补救）
+Task: MUV 38-g：r17 终验条目补记（上会话上下文耗尽未落账——38-f 悬空引用清偿）+ r17 终态包刷新复验
+
+Work Log:
+- **缺口声明（诚实记录）**：38-f 条目两处引用「38-g 终验条目」，但上会话
+  在终态重打包（03:09）与 git 入账（79591d5，03:08:55）之后、38-g 落账
+  之前上下文耗尽——flat/树/包内均无 38-g，构成 §8.6 只追加纪律的落账
+  缺口（P2 记录债，非代码缺陷——代码面 git 干净零未提交变更）
+- 补记依据证据链：r17-web-mobile.png（03:08 存档，与 79591d5 同分钟）
+  + 本轮**全新复验**（agent-browser 实跑）：页面渲染 ✓（title + r17/605/
+  v0.4.0 关键词全命中）/ console 零错误零告警 / Playground fib 出参
+  6765（VM 路径）✓ / footer 双形态（长页 9525px 自然推底 + sticky 断言
+  通过）/ 移动端 390×844 截图 tool-results/40a-r17-reverify-mobile.png
+  存档 + dev.log 运行期零错误（API 200 全链）
+- rec 树同步：01_r17 条目 38-g 补记节追加 + 覆盖 38-a~g + 02 层 l /
+  根 l 路由行更新（索引元数据维护，非条目改写）
+- r17 终态包刷新：38-g 入 flat 后重跑 §19.4 命令（r17 版——含
+  tools/ + scripts/ 扩展）→ 同名包覆盖（download/kerf-stage2-v0.4.0-
+  r17-batchG-qbepoc-native-fib-td013resolved-605tests.tar.gz）
+- 包内复验（§19 实跑）：解压 → build --release 零告警 → test --release
+  --workspace 605:0:0 → CLI 四冒烟（native fib exit 144 / run ⇒ 144 /
+  check ok / 恢复模式 E0002 合并报告）——与 38-f 首次包内验证等价
+  （代码树零变更，仅 worklog 文档增量）
+
+Stage Summary:
+- 38-f 悬空引用清偿：r17 记录链完整（38-a~g 七条目全落 flat + 树 +
+  终态包）；P2 记录债闭环（依据 §8.6——只追加纪律 + 镜像同步 + 树
+  压实对账；GATE 3——补记条目含条款号）
+- 教训入规程记忆：**上下文耗尽前的最后动作必须是「先落账再打包」**
+  （PHASE 4 既有条款的执行顺序强调——终态包承诺与落账承诺不可交叉）
+- 下一步：批次 H 主体（40-b H1 五项评估 ∥ 40-c H2 TCO+TD-007 ∥
+  40-d H3 Effect 设计 ∥ 40-e H4 HM PoC）
+
+---
+Task ID: 40-b
+Agent: Super Z (main) — ARCH-A/PM-A（L3 多角色会话，批次 H1 评估轮 + 五角色投票）
+Task: MUV 40-b（H1）：8 原语迁移五项语义层评估 + §6.3 逐项投票（primitive-migration-evaluation.md 交付）
+
+Work Log:
+- 前置阅读按序：sop §13.2/§13.4/§6.3、01 §7.2/§7.3/§8.2-§8.5、
+  stage0 §6.12.6（收敛裁定 + 语义等价映射表）、12-roadmap §2.4/§2.5.1
+  （演进矩阵 Stage 2 承诺面）、stage-2/plan H1 节
+- 代码实况锚 3 项（§8.4.5 实锚零猜测）：A1 词法寻址已实现（compile.rs
+  VarSource::Local(u32) + opcode LoadLocal/StoreLocal 槽索引——de Bruijn
+  运行期收益已既得）/ A2 块式 ANF 实化（anf.rs ABlock/APhi r17——Let 的
+  ANF 锚在 IR 层）/ A3 parity 链在飞（expander.krf 生产路径 + 双审计
+  91 + 605 基线——mid-Stage-2 新核心形式 = 最坏时机）
+- 五项评估 × 三段式（收益/成本/风险）+ J1-J6 判据 30 检查点（E1/E5
+  J6 ⚠️ 如实标注计入裁定理由）
+- §6.3 五角色逐项投票 20 票全记录：E1 DEFER-TO-STAGE3 / E2 GO-DESIGN
+  （唯一 Stage 2 roadmap 承诺项——设计本批次 H3 兑现）/ E3 分层裁定
+  （展开层命名永久 + IR 层 Stage 3）/ E4 SPEC-ANCHOR / E5 REJECT-
+  STANDALONE——全部 5.5/5.5 全票，零 NEEDS REVISION
+- 口径调和显式化：§21.3 验收面（四条件不含效应）vs 12-roadmap 承诺面
+  （Stage 2 语言级）→「设计做实 Stage 2 / 实现窗口 H3 迁移路径裁定并
+  回写」——GATE 3（无静默偏差）
+
+Stage Summary:
+- primitive-migration-evaluation.md 交付（6 节；五项三段式 15 段 + 判据
+  30 点 + 投票 20 票 + 回写义务 3 处 + 量化对账 5 项）
+- **总裁定：Stage 2 内原语集零变更**（核心冻结原则 9 维持）；8 原语形态
+  整体迁移 = Stage 3 切换期重构候选（§13.2 登记——届时 J1-J6 重走）
+- 遵循：§13.2（时点规则——当前非切换期）、§13.4.1（判据全查）、§6.3
+  （投票全落）、§2.3-1（E5 名实相符）、§2.3-11（E4 提前实现否决）
+- 下一步：40-c H2（TCO 裁定 + TD-007 Rc 化 + TD-017 eval 深度——代码轮）
+
+---
+Task ID: 40-c
+Agent: Super Z (main) — DEV-A/ARCH-A/QA-A（L3 多角色会话，批次 H2 代码轮）
+Task: MUV 40-c（H2）：TCO 裁定 GO 落地 + TD-007 Stx Rc 化完整口径 + TD-017 eval 深度裁定（P2/P3 三债同轮清偿）
+
+Work Log:
+- **TD-007（P2 resolved）**：四层修复——① StxDatum::List/Vector →
+  Rc<Vec<Stx>>（clone O(1) 浅共享）；② retag_scopes 迭代式重建
+  （显式工作表后序 Visit/Assemble——Rust 栈深恒定；旧递归版 10_000
+  链 2MiB 测试栈溢出实测复现）；③ 均匀标记 uniform_tag: Option<
+  ScopeSet>（retag 输出子树均匀作用域证书 + add_scope_to_all 注入
+  清除保健全性——trampoline 链 N 步总工作量 O(N)（旧 O(N²) 全树
+  重建）；手写 PartialEq 忽略性能字段）；④ 扁平 Drop（impl Drop for
+  Stx——Rc::try_unwrap 唯一持有脊柱工作表拆除，共享子树计数递减零
+  递归）；上限 500→10_000 种子 + 自举 expander.krf（MAX-EXP-DEPTH
+  + 消息串）同步；**实现勘误实录**：初版 Rc 化后仍溢出——根因非
+  clone 而是每 trampoline 步 retag 全树重建（递归 + O(N²)）+ 唯一
+  脊柱深 drop 级联，登记册旧「Rc 化解除」处方不完整，本轮补全三层
+- **TD-022（P3 resolved——TCO 裁定 GO）**：Op::TailCall 帧复用
+  （拆当前帧承其返回地址——被调方 RET 直达调用者；帧数净零）+
+  编译器尾位穿线（compile_expr(ctx, e, tail)——Lambda 体 true /
+  If 两臂传递 / Begin 末项传递 / App 按位发射；顶层恒 false 主原型
+  Halt 终止）+ 内建尾调用隐式 RET + 指令预算护栏 MAX_INSTRUCTIONS
+  =10^9（TCO 后帧数不增的无限尾循环兜底——结构化报错非挂死）+
+  run_program_with_budget 测试注入入口（38-c find_qbe 纯函数注入
+  同型）；**语义变更**：旧「105_001 尾递归报帧上限」反转为通过项
+  （tco_tests 正例）；帧上限负例改非尾形态（+1 消费结果）；追踪链
+  语义注记（尾调用帧不出栈迹——GCC/clang -O2 同行为）
+- **TD-017（P3 裁定维持 256）**：eval 参考路径 I1 退役在即——大栈
+  线程化为将退役路径加复杂度不成立（07 §3.2 混合期口径）；T1 域
+  注记：VM 尾递归超 256 深度域在双路径互查检查域外（tco_tests 头注）
+- **TD-023（P2→P3 降级 + 重定型）**：TCO 副作用实测 gc_stress
+  61-62ms × 5 轮稳定（r16 回归值 207-235ms → -70%；Stage 0 基线
+  160.4ms → -62%）——spin 尾递归帧复用后深帧根扫描压力消失，原
+  P2 证据基础失效（ARCH-A 依据 §6.2 确认真实等级）；残留非尾形
+  根扫描分配模式待新基准锚定（绑定 I2 基准重定型先行）
+- **实证（GATE 1 口径）**：127,780B 源（5,000 define——>TD-022
+  登记的 10^5 字符边界）自举管线完整通过（check 10.3s——10001 常量
+  / 35000 指令）；自举 expander 10_000 深度链端到端（TD-007/022
+  耦合解除——TCO 前自举侧先撞帧上限）；测试 605 → **617:0:0**
+  （+12 净增 tco_tests：正例 8 + 负例 4）；clippy 0 / fmt 零 diff
+- 测试改写如实注记：frame_limit_deep_recursion / 深递归追踪 / 双层
+  调用链三用例改非尾形态保持原验证意图（TCO 语义变更）；编译器两
+  单测指令序列断言 Call→TailCall 更新；expander 深度消息 500→10000
+  三处同步（种子/自举/负例矩阵）
+
+Stage Summary:
+- **三债清偿 + 一裁定**：TD-007 resolved（10_000 完整口径——四层
+  修复 0.02s 通过 + 边界 10_001 报错）/ TD-022 resolved（TCO 兑现
+  ——帧复用 + 尾位穿线 + 双护栏）/ TD-017 裁定维持（I1 退役路径
+  不加复杂度）/ TD-023 降级重定型（-70% 实测——基准重定型排 I2）
+- 617:0:0 全绿（605 + 12）；§3.2 中间基线全绿；**TCO 为语义变更**
+  （尾递归恒定帧——§6.3 口径经 tco_tests 文档化 + 负例矩阵非尾
+  对照锚定）
+- 遵循：§12（最优 > 最小——Rc + 标记 + 扁平 Drop 三层为完整解非
+  最小补丁）、§2.3-2（显式失败——指令预算护栏非挂死）、§6.2
+  （TD-023 降级附实测依据）、§19.3 不变式 1/2 维持（栈平衡 +
+  回填完备断言过）、GATE 1（全部实测口径——含勘误实录）
+- 下一步：40-d H3 Effect 语言级设计（40-b E2 GO-DESIGN 兑现——
+  E4 规格锚消费）
+
+---
+Task ID: 40-d
+Agent: Super Z (main) — ARCH-A/ALG-C（L3 多角色会话，批次 H3 设计轮）
+Task: MUV 40-d（H3）：Effect 语言级引入设计（Perform/Handle 原语化对照——40-b E2 GO-DESIGN 兑现 + E4 规格锚消费）
+
+Work Log:
+- 前置阅读按序：06 §1-§3（归约体系 + 错误吸收——R10/R11 扩展的
+  体系锚）、13 §3.1.1（P3 冻结契约 + r8 元层做实注记）、stage0
+  §6.4（OCaml 5 方案四：Deep/Shallow 对照 + EFFECT_SYSTEM 契约）、
+  01 §7.3（next2 效应映射论证）、primitive-migration-evaluation
+  （40-b E2/E4 裁定）、effects.rs/vm.rs 代码实锚
+- 代码实况锚 6 项：A1 元层一次性逃逸已验证（handle_escape——
+  one-shot 浅处理与语言面同构）/ A2 冻结契约层（InternalEffectSystem
+  + Probe 双证）/ A3 VM 帧 ext1 槽位预留（结构零变更落点）/ A4
+  kerf test 消费面在线 / A5 TCO 已落地（交互面前置就绪）/ A6 能力
+  门控 I/O 在线（职责分界须裁定）
+- 设计裁定 12 项：D1 perform/handle 二形式（效应行/行多态留
+  Stage 3 类型层）/ D2 浅处理先行（深处理 = 嵌套 handle 用户侧
+  组合）/ D3 continuation 线性唯一（Fresh→Resumed 动态防线——
+  E0008；类型级线性性 Stage 3 与 38-d HM 锚同位）/ D4 resume
+  非独立原语（continuation 值走 Call 通道）/ D5 set!→Perform(State)
+  = 等价证明非实现义务（E1 裁定维持）/ D6 ext1 具体化（HandlerFrame
+  + 帧扫描——原则 27 预留时机兑现）/ D7 eval 逃逸映射（T1 域收窄
+  = 浅处理单次恢复——TD-017 域口径同型）/ D8 TCO 正交裁定（尾
+  调用穿透 handler 帧——帧数语义不变；效应上抛独立通道）/ D9
+  E0007-E0009 诊断族 + FFI 族 E0010-E0012 码位预留（冲突预防）/
+  D10 能力-效应正交（通道权限 vs 控制流抽象——§11 不合并）/
+  D11 多次恢复不实现（r8 D1 维持）/ D12 实现窗口 = 批次 I 后段
+  （I1 编译器迁移先行 + H4 HM 基线 + TD-008 GC 同轮——三理由）
+- R10/R11 归约规则 6 条 + E4 三要素兑现表（捕获帧链/挂起点环境/
+  唯一性状态）+ 迁移路径 M1-M5 + 测试锚点正 6 负 6 + 风险 5 项
+  全附缓解
+
+Stage Summary:
+- effect-language-design.md 交付（8 节；裁定 12 + 规则 6 + 实锚 6 +
+  回写义务 5——W2 roadmap 口径注记本批次 40-f 执行）
+- **E2 裁定闭环**：设计做实 Stage 2（本批次）兑现；实现窗口 D12
+  裁定（批次 I 后段）——roadmap「做实引入（语言级）」承诺面与
+  §21.3 验收面的口径调和落档（GATE 3——无静默偏差）
+- 遵循：§13.2（批次内语义变更批准面——40-b §6.3 投票）、原则 27
+  （ext1 预留兑现）、§11（D6/D10 接口隔离）、§2.3-2（诊断非 UB）
+- 下一步：40-e H4 HM 推断 PoC（38-d 设计 GO 有条件兑现）
+
+---
+Task ID: 40-e
+Agent: Super Z (main) — ALG-A/DEV-A/QA-A（L3 多角色会话，批次 H4 PoC 实现轮）
+Task: MUV 40-e（H4）：HM 推断 PoC 实现（38-d 设计 GO 有条件兑现——约束三段式 D1-D7 落地）
+
+Work Log:
+- 新模块 kerf-compiler/src/hm.rs（~850 行）：三段式架构——①生成期
+  （具体类型错即时诊断 R1-R8 消息面复用 + 变元/结构关系入 worklist）
+  ②求解（worklist 合一：数值格扩展（Int/Float/Num 互匹）+ occurs
+  check + 元数结构 + 失败逐条收集——多错误）③zonk（自由变元 →
+  Dynamic + 全局绑定最终类型输出）
+- 裁定落地：D1 三段式（迭代式求解零深递归——自举友好）/ D2 值限制
+  （语法值才泛化；set! 目标与 App 结果弱单态）/ D3 set! join（具体
+  格合并异型 → Dynamic 零误报；变元目标首赋合一）/ D4 递归预置
+  （顶层 define + letrec 展开形双特判——形状经 sugar.rs 实况核对；
+  lambda-RHS 体检查前泛化）/ D5 occurs（双端渲染 + 约束用点 Span）/
+  D6 双点泛化（顶层序 + let 形状 App-of-Lambda 识别——用户手写
+  同形同待遇）/ D7 诊断（E0005 族 + 形式级桶隔离 + 512 生成期预算
+  + (file,start,end) 序）
+- BUILTIN_SIGS 解释层重解释（签名数据零改动）：cons/car/cdr 结构化
+  （Pair(τ,τ) 构造子——元素类型推断）/ NumOrAllStr/Ordering 变元
+  锚点约束（数值/字符串锚——全变元无锚保守跳过）/ Any → 零约束
+- **实现勘误实录（GATE 1 诚实记录，两轮修复）**：① generalize
+  自污染（被替换绑定的预置变元计入 env_free → quants 恒空 → 泛化
+  永不发生）——exclude 参数 + 泛化点前 solve_now（约束未解时泛化
+  看到自由变元而非实际类型）；② Ordering/NumOrAllStr 变元无锚约束
+  缺失（gap④ 递归域错漏检——数值锚点约束补齐）；③ 测试程序勘误
+  三处（'#' 非法字符 / occurs③ 实为 let 形状可类型化——改 (f x)
+  ((x x) 1) 变元中介 / fib 验收行 Int→Int → **Num→Num**（R4 代码
+  为准——n 全用点数值域约束，Int 无字面锚点；设计文档同步回写
+  实现注记））
+- **测试 +15 集成**（hm_inference_tests）：零误报门（examples 六件套
+  0 诊断 + 动态边界语料 15 case 同源复刻 + 数值塔/set!-join 矩阵）+
+  验收面（fib : (num → num) 非 Dynamic——递归 α_f 合一成功）+ 超集门
+  （29 程序双检查器并行对照：R1-R8 检出 → HM 亦检出）+ 四类缺口
+  检出证明（①lambda 实参类型 ②car 元素类型 ③分支分歧 ④递归
+  元数/域错）+ occurs ≥3（含变元中介自应用）+ 值限制 ≥2（App
+  结果/set! 目标不泛化 + 泛化正例对照）+ let/letrec 形状泛化 +
+  多错误 ≥4 Span 序 + Dynamic 逃生舱 + 512 预算
+
+Stage Summary:
+- **38-d GO 有条件兑现**：PoC 双门全过（超集门 29/29 + 零误报门
+  六件套 + 15 边界 case）；**632:0:0 全绿**（617 + 15 净增）；
+  clippy 0 / fmt 净
+- **HM 增值面实证**（R1-R8 静默放过四类缺口的检出证明——设计
+  §2.2 论证面闭环）；D8 演进轨道阶段 1（PoC 离线）达成——旗标期
+  切换待后续批次裁定
+- 遵循：D1-D7 设计逐条落地（38-d §8 决策表）、§9.4.3（正负比
+  ——正例 15 组 + 负例 ≥20）、GATE 1（勘误实录如实入档）、R4
+  （代码为准——fib 验收口径修正并回写设计文档）、§12（最优 >
+  最小——数值格 + 排除自污染的完整泛化而非最小补丁）
+- 下一步：40-f 收尾交付（§3.2 六命令 + 对账 + r18 tar.gz 包内
+  自举 + web 同步 + E2E + git + 树压实）
+
+---
+Task ID: 40-g
+Agent: Super Z (main) — ARCH-A/DEV-A/QA-A（L3 多角色会话，用户指令插入 MUV——预留层标准化拆分轮）
+Task: MUV 40-g：reserved/mod.rs 拆分重构（四能力族独立文件 + mod.rs 清净化——§13.4 J1-J6 判据全过）
+
+Work Log:
+- 用户指令接收：Effect Handlers / 多阶段编程 / 能力模型 I/O / 编译缓存
+  四预留不应混居 mod.rs——按 codegen.rs/ffi.rs/toolchain.rs 先例拆分
+  独立文件；mod.rs 保持干净整洁（纯声明 + re-export）
+- §13.4 J1-J6 判据检查：J1 ✅（13 §3.1.1-§3.1.4 分节结构 = 拆分
+  蓝本——每能力一节一文件）/ J2 ✅（每文件单能力族：契约 + 行为
+  规格 + Probe 测试内聚）/ J3 ✅（七子模块间零依赖）/ J4 ✅（编译
+  相关概念完整——每能力的类型/规格/冻结证明同文件）/ J5 ✅（
+  reserved 层内部重组——不跨层）/ J6 ✅（4 文件 69-120 行——粒度
+  由职责决定）
+- 拆分实施：effect_handlers.rs（79 行——EffectFamily/Effect/
+  EffectSystem + Probe）/ multistage.rs（69 行——MultiStage +
+  Probe）/ capability_io.rs（79 行——ReadCapability/WriteCapability/
+  CapabilityIO/IOError + mint 令牌 pub(crate) + 不可伪造测试）/
+  compilation_cache.rs（120 行——CacheKey/CachedResult/
+  CompilationCache + 冻结测试 ×2）；mod.rs 344 → **66 行**（模块
+  声明 + 全量 re-export + 七子模块速览表 + 契约-实现分离形态注记）
+- 兼容纪律（原则 27）：全部既有路径恒有效（`crate::reserved::X`
+  re-export）+ mint 令牌 pub(crate) use（driver 组合根构造面控制
+  维持）；**reserved_ext_tests 零改动通过**（迁移兼容实证——38-b
+  契约迁移同型证据链）
+- 测试改写：合并 Probe 冻结测试（reserved_signatures_are_frozen）
+  → 4 子模块独立 Probe（每能力族自带冻结证明）——净 +2
+  （632 → 634）
+
+Stage Summary:
+- 预留层标准化完成：7 子模块 = 7 能力族（P0/P1/P2/P3 分级齐全）
+  每文件单职责；mod.rs 纯声明化（66 行）；**契约与实现的模块分离
+  形态**注记入档（P2 消费面 crate::capability/crate::cache、P3 效应
+  消费面 crate::effects——用户指令「之后实现标准化目录结构」的
+  路线锚）
+- 634:0:0 全绿（632 + Probe 拆分 2）；clippy 0 / fmt 净；§13.4
+  反模式零触发（re-export 保留——反模式 5「不留 re-export」规避）
+- 遵循：§13.4.1（J1-J6 全过 + 判据记录即本条目）、§13.4.2（步骤
+  7-8：§3.2 验收 + 文档同步）、原则 27（签名兼容——reserved_ext
+  _tests 零改动实证）、§11（接口隔离——层内重组不跨层）
+- 下一步：40-f 收尾（审计完成后条目落账 → 树压实 → r18 tar.gz →
+  web → E2E → git）
+
+---
+Task ID: 40-f
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，批次 H 收尾交付轮——含 40-g 插入后合并收口）
+Task: MUV 40-f：收尾交付（§3.2 六命令 + TD-025 补修 + 对账六面 + r18 tar.gz 包内自举验证 + web 同步 + E2E + git + 树压实）
+
+Work Log:
+- **TD-025 补修（收尾轮内环）**：双审计初次运行发现 C02（包装宏链
+  `(m x)→(m (x))`）在自举路径 >540s 不完成（40-c 时登记 TD-025）——
+  本轮根治：krf **六头字段协议** `(tag s e exp scopes uni . fields)`
+  （uni = ('uni . scopes) 均匀证书——make-node 默认 nil / retag-scope
+  重建置位 / inject-scope 注入清除 / 桥 stx_to_node 第六字段同步）+
+  retag-scope 快路径（uni 命中 → 整棵子树 O(1) 共享——种子侧
+  uniform_tag 镜像）；**实测 C02 >540s → 7.37s（73×+）**；TD-025
+  → resolved（登记册 + RELEASE_NOTES 同步）
+- **实现勘误实录（GATE 1 诚实记录，三轮修复）**：① 初版弱快路径
+  （内容等 scopes == target → 共享）被 parity 套件当场捕获（my-or/
+  swap! 两用例——def⊆use 顶层角共享过早触发 → 展开代次不提升分歧）
+  → 否决改真标记；② 六头协议初版桥侧 python 替换未生效（cargo fmt
+  重排代码块导致搜索串静默不匹配——打印「bridge updated」但实际
+  未改）→ 5 头 krf + 6 头桥协议错配全崩（最小形式 1/x/(+ 1 2) 二分
+  定位 + 96:26 node-field 崩点 + 桥文件实读发现）→ Edit 工具精确
+  重做；③ make-node 多一闭括号（krf 语法错 E0001 定位修复）
+- **审计期望同步**：stage1 门审计 C02/C07 两处期望消息「上限 500」
+  → 10000（r18 深度提升的漏网同步——负例矩阵三处已同步但审计
+  期望漏——本轮补齐）
+- **§3.2 六命令实跑全绿（clean 起步终验）**：build --release 12.39s
+  零告警 / check 0/0 / fmt 零 diff / clippy -D 0 / test --release
+  --workspace **634:0:0**（34s）
+- **双审计集 EXIT 0**：stage0 41/41（20s——曾 >580s 不完整）+
+  stage1 51 case（28s）；CLI 冒烟：VM run fib ⇒ 144 / native fib
+  exit 144 / check ok / 恢复模式 E0002 合并报告
+- 对账六面：RELEASE_NOTES **v0.4.0-r18**（批次 H 六交付节）/ matrix
+  v0.1.0-r18（634 总量 + r18 增量行 + 表体：tco_tests 12 +
+  hm_inference_tests 15 行 + 单元 198 口径）/ 登记册 v0.3.0-r18
+  （TD-007/022 resolved + TD-017/023 裁定注记 + TD-025 登记→resolved）/
+  pipeline-test-coverage v0.3.0-r18（Tier 1 198 / Tier 2 438 +
+  Stage 2 两套件行）/ v0.5-roadmap 批次 H 行 + stage-2/plan Status
+  与 H 行执行注记（40-a~40-g 全记）/ lang-design 两注记（W1：01
+  §7.3 批次 H 评估裁定——五项裁定 + 展开层命名制永久保持；W2：12
+  §2.5.1 Effect 行「设计做实 r18 / 实现窗口 D12」口径）
+- r18 tar.gz 打包（§19.4 r17 版命令——tools/ + scripts/ 入包）+
+  包内自举验证 + web 同步（kerf-data r18 三节点 + footer r18）+
+  agent-browser E2E + git 入账 + 树压实（02_r18 rec + l 更新）
+
+Stage Summary:
+- **批次 H（语义演进评估轮）全七 MUV + 插入 40-g 交付闭环**：38-g
+  补记 → H1 五项评估全票 → H2 三债清偿（TCO + TD-007 + TD-017 +
+  TD-023 降级）→ H3 Effect 设计冻结 → H4 HM PoC 双门 → 40-g 预留层
+  标准化 → TD-025 补修根治 → 收尾（634:0:0 + §3.2 全绿 + 双审计
+  EXIT 0 + 对账六面 + r18 包 + web + git）
+- 遵循：GATE 1-5 全程（实测口径——含勘误实录三轮如实入档）、§19
+  （打包 + 包内验证）、§8.4.5（六面对账——文档随代码 R4）、§6.2
+  （TD-025 登记→当轮根治闭环）
+- 下一步：批次 I（I1 编译器 kerf ~80% 迁移 + I2 stdlib/GC 评估 +
+  TD-008/023 同轮 + Effect 实现 D12 = I 后段 + HM 旗标期裁定）

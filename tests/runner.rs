@@ -136,6 +136,18 @@ mod prelude_tests;
 #[path = "v0/stage2/plan/qbe_backend_tests.rs"]
 mod qbe_backend_tests;
 
+// 批次 H（r18：TD-022 TCO 尾调用优化——帧复用 + 尾位传播 + 指令预算
+// 护栏 + TD-007/TD-022 耦合解除自举端到端；40-c 承载）
+
+#[path = "v0/stage2/plan/tco_tests.rs"]
+mod tco_tests;
+
+// 批次 H（r18：H4 HM 推断 PoC——约束三段式 + 值限制 + 递归预置 +
+// 超集/零误报双门 + 四类缺口检出证明；40-e 承载——38-d 设计落地）
+
+#[path = "v0/stage2/plan/hm_inference_tests.rs"]
+mod hm_inference_tests;
+
 // 批次 G（r17：TD-013 多错误收集与恢复展开——种子/桥双路径 +
 // driver check_source_recover 消费面；38-e 承载）
 

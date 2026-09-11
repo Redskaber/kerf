@@ -2,7 +2,7 @@
 
 > **Author**: kerf-dev-agent（ARCH-A 角色）
 > **Date**: 2026-09-11（r17：TD-013 resolved（双路径恢复 + 合并报告 + CLI 切换）+ TD-024 新增（本地码 PoC 边界 B1）；r16：批次 F 深审全量对账——索引表补全（r3 后新增 TD-015+ 此前无索引行）+ TD-012 标记 resolved / TD-013 与 TD-009/010/014/017/018 目标时机改判 Stage 2（附 Stage 1 门放行裁定）/ TD-019/020 断档登记 / TD-023 新增（P2）；r3：TD-001/006 断档记录 + TD-005/008/011 详情补齐 + TD-012/013/014 新增 + TD-009 注记更新）
-> **Version**: v0.3.0-r16
+> **Version**: v0.3.0-r18
 > **Status**: Active
 > **规则**: sop.md §6.2.1——新增已解决项/调整剩余项优先级（每子阶段必检）
 
@@ -16,7 +16,7 @@
 | TD-004 | 作用域集解析（Racket 式）替换名称基解析 | P2 | **已解决（r13——编译器/eval 双路径 (name, scopes ⊆) + max-cardinality；锚点 9 测试）** | Stage 1 |
 | TD-005 | syntax-parse 级宏组合 | P3 | 开放 | Stage 2 |
 | TD-006 | （编号断档——不可考） | — | 断档存档 | — |
-| TD-007 | 迭代式展开工作表（深度上限解除：128→500） | P2 | **部分解决**（残留 10_000 完整口径） | **Stage 2 批次 H2**（r16 改判：残留与 TCO 决策/Rc 化同轮） |
+| TD-007 | 迭代式展开工作表（深度上限解除：128→500→**10_000**） | P2 | **已解决（r18 / 40-c——完整口径）**：Stx Rc 共享化（List/Vector → `Rc<Vec<Stx>>` clone O(1)）+ retag 迭代式重建（显式工作表后序——栈深恒定）+ 均匀标记 O(1) 共享（链 N 步总工作量 O(N)，旧 O(N²)）+ 扁平 Drop（唯一持有脊柱工作表拆除）；上限 500→10_000（种子 + 自举 expander.krf 同步）；10_000 链测试 0.02s 通过 + 10_001 边界报错 | ~~Stage 2 批次 H2~~ 已交付 |
 | TD-008 | 分代 GC / 堆压缩 | P3 | 开放 | Stage 2 批次 I2 |
 | TD-009 | eval 路径 GC 根集枚举 | P3 | 开放 | **Stage 2**（r16 改判：原「Stage 1」未落地；eval 重写（12 §2.5.1）同轮评估） |
 | TD-010 | 闭包/内置函数装箱（pair 元素） | P3 | 开放 | **Stage 2**（r16 改判：原「Stage 1」未落地；HeapObj::Foreign 承载） |
@@ -26,14 +26,15 @@
 | TD-014 | 展开期错误消息归因失真（嵌套 define） | P3 | 开放 | **Stage 2**（r16 改判：消息质量批与 TD-018 同批） |
 | TD-015 | IrGraph 无条件计算旁路丢弃 | P3 | 开放 | Stage 2（切换期重构） |
 | TD-016 | 链式比较短路语义静态收紧 | P3 | **已解决（r7）** | ~~Stage 1~~ |
-| TD-017 | eval 参考路径深度上限不对称 | P3 | 开放 | **Stage 2**（r16 改判：维持 256 边界声明，eval 重写时裁定） |
+| TD-017 | eval 参考路径深度上限不对称 | P3 | **裁定维持 256 边界（r18 / 40-c）**：eval = 参考路径（Stage 2 I1 编译器替换将退役——07 §3.2 混合期）；大栈线程化为将退役路径加复杂度不成立。TCO 后新不对称注记：VM 尾递归超 256 深度域在 T1 检查域外（tco_tests 头注口径） | Stage 2（I1 eval 重写时随迁评估） |
 | TD-018 | 双路径错误消息文本分裂 | P3 | 开放 | **Stage 2**（r16 改判：消息质量批与 TD-014 同批） |
 | TD-019 | （编号断档——不可考，r16 登记） | — | 断档存档 | — |
 | TD-020 | （编号断档——不可考，r16 登记） | — | 断档存档 | — |
 | TD-021 | 高阶函数用户面注入缺载体 | P3 | **已解决（r15——kerf-prelude 模块/import 承载）** | ~~Stage 1 批次 E~~ |
-| TD-022 | 自举 Reader 帧消耗 O(源字符数) | P3 | 开放 | Stage 2（TCO 决策点——批次 H2） |
-| TD-023 | gc_stress 深递归 GC 根扫描回归（超线性） | **P2** | 开放（r16 新增） | **Stage 2 批次 I2**（与 TD-008 同轮） |
+| TD-022 | 自举 Reader/Expander 帧消耗 O(源字符数) | P3 | **已解决（r18 / 40-c——TCO 兑现）**：VM 尾调用优化（Op::TailCall 帧复用 + 编译器尾位穿线（Lambda 体/If 两臂/Begin 末项）+ 内建尾调用隐式 RET + 指令预算护栏 10^9 兜底无限尾循环）；实证：127,780B 源（>10^5 字符边界）自举管线完整通过 + 自举 expander 10_000 深度链端到端（TD-007/TD-022 耦合解除） | ~~Stage 2 批次 H2~~ 已交付 |
+| TD-023 | gc_stress 深递归 GC 根扫描回归（超线性） | P3（r18 降级） | **开放（重定型）**：r18/40-c TCO 副作用实测——gc_stress 61-62ms × 5 轮稳定（r16 回归值 207-235ms → **-70%**；Stage 0 基线 160.4ms → -62%）：spin 尾递归经帧复用后深帧根扫描压力消失，**原基准不再复现回归**（P2 证据基础失效——ARCH-A 降级 P3）；残留：非尾形深递归 + GC 的根扫描 per-cycle HashSet 分配模式未测量（需新建非尾形基准锚定） | **Stage 2 批次 I2**（与 TD-008 同轮；基准重定型先行） |
 | TD-024 | 本地码后端 PoC 边界（整数域十二原语 + 直接调用；闭包/Float/Str/Pair/set!/module/IO/函数值一等边界外） | P3 | **登记（r17 / 38-b·38-c）**：显式错误非静默降级（B1 类）；FFI 面（print/write_stdout）按 ffi-ownership-model 批次 I 做实；闭包/GC 协同批次 H/I | Stage 2 批次 H-I（GC-后端协同轮） |
+| TD-025 | 自举侧 retag 无均匀标记快路径（包装宏链 O(N²) VM 工作） | P3 | **resolved（r18 / 40-f）**：krf 六头字段协议落地——`(tag s e exp scopes uni . fields)`（`uni = ('uni . scopes)` 均匀证书，make-node 默认 nil + retag 重建置位 + inject-scope 注入清除 + 桥 stx_to_node 同步）；retag-scope 快路径（uni 命中 → 整棵子树 O(1) 共享——种子 uniform_tag 镜像）；实测门审计 C02 包装链 **>540s → 7.37s（73×+）**；双审计集 EXIT 0（stage0 41 + stage1 51，20s/28s） | ~~Stage 3~~ 已交付 |
 
 ## 详情
 
@@ -95,6 +96,34 @@
 - **测试锚点**：negative_expander_tests::syntax_rules_misuse / macro_expansion_failures
 
 ### TD-007 迭代式展开（r4 部分解决注记）
+- **描述**：展开深度上限 128（rustc 默认对齐）；文档示例 10_000 需迭代式
+- **修复方案**：展开工作表化（显式队列替代递归下降）
+- **测试锚点**：negative_expander_tests 宏深度超限负例（超限报错而非栈溢出）
+- **r4 执行注记**（Stage 1 批次 A3，2026-09-10）：trampoline 工作表已落地
+  （expand_form 顶层循环——宏产物头部仍是宏调用时迭代继续，展开控制流
+  栈深与链长解耦）；上限 128→500（实测标定：2MiB 测试线程 1_000 通过/
+  2_000 溢出，500 = 2× 裕度——TD-017 同型实测法）。**残留**：完整 10_000
+  口径受 Stx 值语义深树的 clone/drop 递归约束（数据结构层）——批次 B
+  前端重写时 Rc 化解除；探针实测记录：8MiB 主线程 4_000 通过/5_000 溢出
+
+### TD-007 迭代式展开（r4 部分解决注记；r18 resolved）
+
+- **r18 收口注记（批次 H / Task 40-c）**：完整 10_000 口径交付——
+  ① `StxDatum::List/Vector` → `Rc<Vec<Stx>>`（clone O(1) 浅共享）；
+  ② `retag_scopes` 迭代式重建（显式工作表后序 Visit/Assemble——
+  Rust 栈深恒定，旧递归版 10_000 层链溢出）；③ **均匀标记**（`Stx
+  .uniform_tag: Option<ScopeSet>`——retag 输出子树均匀作用域标记 +
+  `add_scope_to_all` 注入时清除保健全性；链 N 步总工作量 O(N)，旧
+  每步全树重建 O(N²)）；④ 扁平 Drop（`impl Drop for Stx`——唯一
+  持有脊柱工作表拆除，共享子树计数递减天然无递归）；⑤ 上限
+  500→10_000（种子 expander.rs + 自举 expander.krf `MAX-EXP-DEPTH`
+  同步——parity 消息一致）；⑥ 均匀标记不参与 PartialEq（手写实现
+  忽略性能字段）。正例 10_000 链 0.02s（2MiB 测试线程——恒定栈深）
+  + 边界 10_001 报错含头含尾。
+- 耦合解除实证：自举 expander 路径 10_000 深度链此前先撞 VM 帧上限
+  （expander.krf trampoline 尾调用链耗帧）——TCO（TD-022 同轮）后
+  端到端到达深度上限结构化报错（tco_tests 锚定）。
+
 - **描述**：展开深度上限 128（rustc 默认对齐）；文档示例 10_000 需迭代式
 - **修复方案**：展开工作表化（显式队列替代递归下降）
 - **测试锚点**：negative_expander_tests 宏深度超限负例（超限报错而非栈溢出）

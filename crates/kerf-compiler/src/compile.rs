@@ -247,7 +247,8 @@ pub fn compile_module(exprs: &[Rc<CoreExpr>]) -> Result<BcProgram, CompileError>
         ctx.emit(Op::PushNil, main_span);
     }
     for (i, e) in exprs.iter().enumerate() {
-        compile_expr(&mut ctx, e)?;
+        // 顶层形式非尾位（主原型 Halt 终止——TCO 不参与顶层）
+        compile_expr(&mut ctx, e, false)?;
         if i + 1 < exprs.len() {
             ctx.emit(Op::Pop, e.span()); // 栈平衡：中间值弹出
         }
@@ -275,7 +276,12 @@ pub fn compile_module(exprs: &[Rc<CoreExpr>]) -> Result<BcProgram, CompileError>
 }
 
 /// 编译单条表达式（栈平衡：产物执行后栈净 +1，§19.3 不变式 1）。
-fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError> {
+///
+/// **尾位穿线（TD-022/H2——VM TCO）**：`tail = true` 表示本表达式位于
+/// 函数体尾位（Lambda 体 / If 两臂 / Begin 末项的传递闭包）——其中的
+/// `App` 编译为 `Op::TailCall`（帧复用：被调方返回直达当前调用者，跳过
+/// 当前帧）。顶层形式恒 `tail = false`（主原型以 Halt 终止——不参与）。
+fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), CompileError> {
     let span = e.span();
     match e {
         CoreExpr::Literal { value, .. } => {
@@ -321,11 +327,17 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
         CoreExpr::App { fn_expr, args, .. } => {
             // 求值顺序契约（06 §1.3/§2 A1，与 eval 路径一致——T1 定理归纳基础）：
             // 被调函数先求值，参数从左到右
-            compile_expr(ctx, fn_expr)?;
+            compile_expr(ctx, fn_expr, false)?;
             for a in args {
-                compile_expr(ctx, a)?;
+                compile_expr(ctx, a, false)?;
             }
-            ctx.emit(Op::Call(args.len() as u32), span);
+            // 尾位 App → TailCall（帧复用）；其余 → Call（帧增长 + MAX_FRAMES 守卫）
+            let op = if tail {
+                Op::TailCall(args.len() as u32)
+            } else {
+                Op::Call(args.len() as u32)
+            };
+            ctx.emit(op, span);
             Ok(())
         }
         CoreExpr::If {
@@ -334,12 +346,12 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
             else_branch,
             ..
         } => {
-            compile_expr(ctx, cond)?;
+            compile_expr(ctx, cond, false)?;
             let j_false = ctx.emit_jump(Op::JumpIfFalse, span);
-            compile_expr(ctx, then_branch)?;
+            compile_expr(ctx, then_branch, tail)?;
             let j_end = ctx.emit_jump(Op::Jump, span);
             ctx.patch_jump(j_false);
-            compile_expr(ctx, else_branch)?;
+            compile_expr(ctx, else_branch, tail)?;
             ctx.patch_jump(j_end);
             Ok(())
         }
@@ -351,7 +363,7 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
         } => {
             // 栈平衡（§19.3 不变式 1）：set! 表达式的值为被赋值——
             // 值入栈后 DUP 再存储，栈净 +1（目标解析与 VarRef 同一口径，TD-004）
-            compile_expr(ctx, value)?;
+            compile_expr(ctx, value, false)?;
             ctx.emit(Op::Dup, span);
             match ctx.resolve_var(*name, scopes).source {
                 VarSource::Local(i) => ctx.emit(Op::StoreLocal(i), span),
@@ -380,7 +392,7 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
                     span,
                 ));
             }
-            compile_expr(ctx, value)?;
+            compile_expr(ctx, value, false)?;
             ctx.emit(Op::Dup, span);
             let gi = ctx.intern_global(*name);
             ctx.emit(Op::DefineGlobal(gi), span);
@@ -392,7 +404,9 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
                 return Ok(());
             }
             for (i, item) in body.iter().enumerate() {
-                compile_expr(ctx, item)?;
+                // 末项继承尾位（begin 尾调用 = 尾调用——scheme 语义）
+                let item_tail = tail && i + 1 == body.len();
+                compile_expr(ctx, item, item_tail)?;
                 if i + 1 < body.len() {
                     ctx.emit(Op::Pop, item.span());
                 }
@@ -405,7 +419,7 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr) -> Result<(), CompileError>
                 ctx.emit(Op::PushNil, span);
             }
             for (i, item) in body.iter().enumerate() {
-                compile_expr(ctx, item)?;
+                compile_expr(ctx, item, false)?;
                 if i + 1 < body.len() {
                     ctx.emit(Op::Pop, item.span());
                 }
@@ -457,6 +471,7 @@ fn compile_literal_value(
                 value: other.clone(),
                 span,
             },
+            false,
         )
         .map(|_| ()),
     }
@@ -541,10 +556,11 @@ fn compile_lambda(
         captures: capture_bindings,
     });
 
-    // 体编译（尾部 RET 保证返回语义）——切入新原型
+    // 体编译（尾部 RET 保证返回语义）——切入新原型。
+    // 函数体 = 尾位（TCO）：体尾 App → TailCall（帧复用直达调用者）
     let enclosing = ctx.current;
     ctx.current = proto_idx as usize;
-    compile_expr(ctx, body)?;
+    compile_expr(ctx, body, true)?;
     ctx.emit(Op::Ret, body.span());
 
     // 弹出作用域帧；切回外围原型发射 CLOSURE
@@ -666,11 +682,17 @@ mod tests {
         let closure_proto = &p.protos[1];
         assert_eq!(closure_proto.arity(), 1);
         assert!(closure_proto.capture_names.is_empty());
-        // 原型体：LOAD_GLOBAL f, LOAD_LOCAL 0, CALL 1, RET
-        // （06 §2 A1：函数先求值，参数从左到右）
+        // 原型体：LOAD_GLOBAL f, LOAD_LOCAL 0, TAIL_CALL 1, RET
+        // （06 §2 A1：函数先求值，参数从左到右；体尾 App = TailCall——
+        // TD-022/H2 TCO 尾位发射，帧复用语义）
         assert_eq!(
             closure_proto.code,
-            vec![Op::LoadGlobal(0), Op::LoadLocal(0), Op::Call(1), Op::Ret]
+            vec![
+                Op::LoadGlobal(0),
+                Op::LoadLocal(0),
+                Op::TailCall(1),
+                Op::Ret
+            ]
         );
         // main：CLOSURE proto=1 captures=0, HALT
         assert_eq!(
@@ -716,11 +738,17 @@ mod tests {
                 Op::Ret
             ]
         );
-        // 原型 2：LOAD_CAPTURED 0(x), LOAD_LOCAL 0(y), CALL 1, RET
-        // （06 §2 A1 求值顺序：被调者先于参数）
+        // 原型 2：LOAD_CAPTURED 0(x), LOAD_LOCAL 0(y), TAIL_CALL 1, RET
+        // （06 §2 A1 求值顺序：被调者先于参数；体尾 App = TailCall——
+        // TD-022/H2 TCO 尾位发射）
         assert_eq!(
             p.protos[2].code,
-            vec![Op::LoadCaptured(0), Op::LoadLocal(0), Op::Call(1), Op::Ret]
+            vec![
+                Op::LoadCaptured(0),
+                Op::LoadLocal(0),
+                Op::TailCall(1),
+                Op::Ret
+            ]
         );
     }
 
