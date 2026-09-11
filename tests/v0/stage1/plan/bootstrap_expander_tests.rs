@@ -458,6 +458,9 @@ fn parity_err_core_forms() {
     parity_err("(define (1 x) 1)");
     parity_err("(define x 1 2)");
     parity_err("(lambda (x) (+ x 1) (define y 2))");
+    // TD-014（r24）：嵌套 define 重名——专门消息 + 第二次出现处 Span 双路径一致
+    parity_err("(lambda () (define x 1) (define x 2))");
+    parity_err("(lambda (a) (define b 1) (define c 2) (define b 3))");
 }
 
 #[test]

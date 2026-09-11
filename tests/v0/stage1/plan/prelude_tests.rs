@@ -93,3 +93,46 @@ fn prelude_import_unknown_module_errors() {
         err.rendered
     );
 }
+
+/// foldr 用户面（r24 / 42-e stdlib 缺口补齐——foldl 的对偶）：
+/// 右折叠从表尾累积；(f 首 递归果) 形态。
+#[test]
+fn prelude_foldr_user_face() {
+    // 右折叠序：cons 构造恒等折叠 → 重建原表
+    let src = r#"(module user (import kerf-prelude)
+                  (foldr cons nil (list 1 2 3)))"#;
+    let o = run_source(src, "prelude.krf").expect("foldr 注入后应可运行");
+    assert_eq!(value_of(&o), "(1 2 3)");
+}
+
+/// foldr/foldl 对偶语义（3 case）：累积序差异可观测——
+/// foldr 从尾起算（(- 10 (…)) 嵌套），foldl 从首起算。
+#[test]
+fn prelude_foldr_foldl_duality() {
+    let src = r#"(module user (import kerf-prelude)
+                  (foldr - 0 (list 1 2 3)))"#;
+    // foldr: (- 1 (- 2 (- 3 0))) = 1 - (2 - 3) = 2
+    let o = run_source(src, "prelude.krf").unwrap();
+    assert_eq!(value_of(&o), "2");
+    let src2 = r#"(module user (import kerf-prelude)
+                  (foldl - 0 (list 1 2 3)))"#;
+    // foldl: (- (- (- 0 1) 2) 3) = -6
+    let o2 = run_source(src2, "prelude.krf").unwrap();
+    assert_eq!(value_of(&o2), "-6");
+    // 空表 → init（两折叠同界）
+    let src3 = r#"(module user (import kerf-prelude)
+                  (foldr + 42 (quote ())))"#;
+    let o3 = run_source(src3, "prelude.krf").unwrap();
+    assert_eq!(value_of(&o3), "42");
+}
+
+/// foldr 双路径一致（T1 口径）：生产链与种子链同解。
+#[test]
+fn prelude_foldr_dual_path() {
+    let src = r#"(module user (import kerf-prelude)
+                  (foldr (lambda (a b) (+ a b)) 0 (list 1 2 3 4)))"#;
+    let a = run_source(src, "foldr.krf").expect("生产链失败");
+    let b = run_source_seed(src, "foldr.krf").expect("种子链失败");
+    assert_eq!(value_of(&a), value_of(&b));
+    assert_eq!(value_of(&a), "10");
+}

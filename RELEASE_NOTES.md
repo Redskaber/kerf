@@ -1,3 +1,25 @@
+## v0.4.0-r24（2026-09-11）——批次 I 执行：I2 stdlib/GC/TD 批（五债清偿 + 谓词/foldr 补齐 + TD-023 根扫描对症，684 全绿）
+
+### 交付一：TD 五项清偿（42-e 主体）
+
+- **TD-010 闭包/内置装箱 resolved**：`HeapObj::Foreign(Rc<ForeignBox>)`——类型擦除 Rc 载体（解箱往返恒等 → eq? 按引用）+ **追踪器协议**（`ForeignTracer = fn(&Rc<dyn Any>, &mut Vec<GcRef>)` 由装箱方注入——标记阶段枚举闭包捕获图，kerf-runtime 不依赖 kerf-vm 类型，§11 接口隔离）；原「标记字符串占位」路径删除；渲染 `#<procedure>`/`#<builtin:名>`；**函数列表模式就位**（`(list f g)` + `map` 应用——stdlib 库化前提）
+- **TD-011 字符串全序 resolved**：全字符串链按 **Unicode 码点序**参与全部比较族（`Rc<str>` 比较 = UTF-8 字节序 = 码点序——编码保序性）；混合链保持 `{op} 需要数值`（TD-016 口径）；静态面 R3：`Ordering ≡ NumOrAllStr`（全字符串链放行——运行时/静态一致）；HM 超集门语料同步
+- **TD-014 嵌套 define 归因 resolved**：专门消息「嵌套 define 重复绑定（同名内部变量只允许出现一次）」+ Span = 第二次出现处 define 形式自身（原「lambda 参数重名」提升兜底——归因失真 + Span 指向体首合成节点）；seed `expand_body` + 自举 `expand-body`/`dup-define-scan` 双侧镜像（判定序一致）；parity_err +2 case（消息 + Span 逐字）
+- **TD-018 消息单源 resolved**：`kerf-vm/src/messages.rs` 单源构造器（if 条件 / not / car·cdr / set! 未绑定五族——VM 操作码 + eval 参考臂 + driver 内置三消费面同源）；**`Value::truthy` 复活为单一实现**（原无调用方死助手 → `Result<bool, RuntimeError>` 化——VM `JumpIfFalse` 与 eval if 臂同文；scope_set_tests 对拍回归断言消息文本相等）；前缀统一「if 条件需要 bool」（与静态面 R1 一致）；未绑定族裁定保留（阶段信息差异）
+- **TD-023 根扫描对症 resolved**：**基准重定型先行**（新增 `gc_stress_nontail.krf` 非尾形锚定——改前 144.06ms/轮 + 2×→3.2~3.7× 超线性实测成立）；**对症双件**：① `GcCell` 堆根性摘要（`Rc<RefCell<Value>>` → `Rc<GcCell>`——`has_heap` 标志由写路径维护（sound 不变式：每写必置），根集枚举对非堆单元 O(1) 跳过）② 根扫描缓冲跨周期复用（root Vec + visited HashSet——take/归还零 API 变更，无分配化路径 B）；**对拍实测（stash 重建 r23 二进制同会话）**：非尾形 **144.06→105.15ms（-27.1%）**；尾形 gc_stress 39.68→38.57ms（-2.8%）+ fib(25) 86.97→84.22ms（-3.1%）——双噪声带（验收 ≤5% ✓）；残留超线性如实归因 = 帧栈内存 churn + 每周期固定成本（精确 MS 栈根扫描的结构性成本）；写路径 soundness 回归锚 `gc_cell_flag_flips_on_pair_write`
+- **TD-008 分代 GC/堆压缩裁定 DEFER（Stage 3+ 条件触发）**：实测依据三面——①收益面不存在（Stage 2 无长驻程序：CLI 单趟/测试/自举管线，分配有界；尾形 38.57ms/非尾形 105.15ms/分配主导 23.76ms 全过验收门）②分代对栈根扫描无通用免除 + 压缩破坏 GcRef=槽位索引契约（转发表 = P1 级全量改写）③复杂度预算（§12——42-f Effect/M2 + 42-g 门审查优先）；重评估触发条件入册
+
+### 交付二：stdlib 缺口补齐（清单清零——09-stdlib v6.3）
+
+- **类型谓词 5 件**：`string?`/`symbol?`/`float?`/`number?`（数值塔域 Int∪Float）/`list?`（真表判定 = nil 或 cdr 链终止于 nil——**Floyd 龟兔环安全**，环 → false）；BUILTIN_SIGS 同步（TcParam::Any → Bool）——Value 变体判别完备面（57 项清单）
+- **prelude `foldr`**：foldl 对偶（从表尾累积 `(f 首元素 递归果)` 形态——与 Racket 同序）；prelude_tests +3（用户面/对偶语义可观测（foldr 2 vs foldl -6）/双路径）
+- **缺口盘点口径（三面）**：①文档合同面 52/52 对齐（数量+逐项）②值模型谓词完备面（5 缺 → 补齐）③prelude 库化对称面（foldr 缺 → 补齐）——**I2 stdlib 缺口清单清零**
+
+### 交付三：对账与收尾（45-z）
+
+- 文档同步：09-stdlib v6.3（52→57 项 + 比较行重写 + prelude foldr）+ TD 登记册（五 resolved + 一裁定 + 索引/详情/Status）+ performance-baseline §4.1（r24 复测四口径对拍表）+ §9.1 复测记录 + §10 热点行 resolved + matrix v0.1.0-r24（670→684；表体 gc 9/stdlib 24/scope_set 10/prelude 10）+ pipeline 性能小节 + plan.md Status（42-e 交付）+ 本 RELEASE_NOTES
+- **§3.2 六命令全绿**（clean 起步终验）+ r24 tar.gz（§19.4）包内自举验证 + web 同步（kerf-data r24）+ git 入账 + rec 树压实
+
 ## v0.4.0-r23（2026-09-11）——批次 I 执行：I1 收口（生产切换 + 门 B fixpoint 两次编译自身字节一致 + eval 退役终态，670 全绿）
 
 ### 交付一：CompilerKind 生产切换（42-d 主体，S3 段——P1/P2）

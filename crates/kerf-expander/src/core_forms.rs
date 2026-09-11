@@ -162,6 +162,20 @@ fn expand_body(forms: &[Stx], ctx: &mut ExpandCtxt) -> Result<Rc<CoreExpr>, Expa
             ));
         }
     }
+    // TD-014（r24）：嵌套 define 重名提前归因——原路径由提升构造的
+    // lambda 形参重名兜底（parse_params 报「lambda 参数重名」——归因
+    // 失真且 Span 指向体首合成节点）；本处以专门消息报出，错误 Span =
+    // 第二次出现处的 define 形式自身（语义上等价 E6 提前防御）。
+    let mut seen: Vec<kerf_syntax::Symbol> = Vec::with_capacity(defines.len());
+    for (name, def) in &defines {
+        if seen.contains(name) {
+            return Err(ExpandError::new(
+                "嵌套 define 重复绑定（同名内部变量只允许出现一次）",
+                def.span,
+            ));
+        }
+        seen.push(*name);
+    }
     if defines.is_empty() {
         // 无 define：表达式序列
         let exprs: Result<Vec<Rc<CoreExpr>>, _> =

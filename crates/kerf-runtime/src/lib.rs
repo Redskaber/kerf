@@ -31,5 +31,5 @@ pub mod io;
 // 约定：本 crate 暴露运行时基座全部公共类型与入口。
 pub use gc::{mark_sweep_cycle, RootSet};
 pub use heap::GcStats;
-pub use heap::{BoxedInput, GcRef, Heap, HeapObj, ValueSlot};
+pub use heap::{BoxedInput, ForeignBox, ForeignTracer, GcRef, Heap, HeapObj, ValueSlot};
 pub use io::{read_line_stdin, write_line_stdout, write_stdout, RuntimeError};

@@ -1,0 +1,15 @@
+; gc_stress_nontail.krf —— GC 压力（非尾形——TD-023 基准重定型）
+;
+; 与 gc_stress.krf（尾形，TCO 后帧深 O(1)）对偶：递归调用处于
+; (+ … 1) 参数位 = 非尾位 → 每层消耗一 VM 帧 → 峰值 ~3×10^4 存活帧。
+; GC 周期（分配计数驱动）在深帧存活期反复触发 → 根集枚举须遍历
+; 全部存活帧局部（TD-023「非尾形深递归 + GC 根扫描」的锚定负载）。
+(define keep (quote (1 2 3 4 5)))
+(define (grow n)
+  (if (= n 0)
+      0
+      (begin
+        (cons 1 2) (cons 3 4) (cons 5 6) (cons 7 8) (cons 9 10)
+        (+ (grow (- n 1)) 1))))
+(grow 30000)
+(car (cdr (cdr (cdr (cdr keep)))))   ; ⇒ 5：存活数据跨 GC 完好

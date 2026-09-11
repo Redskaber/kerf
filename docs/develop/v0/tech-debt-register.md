@@ -2,8 +2,8 @@
 
 > **Author**: kerf-dev-agent（ARCH-A 角色）
 > **Date**: 2026-09-11（r17：TD-013 resolved（双路径恢复 + 合并报告 + CLI 切换）+ TD-024 新增（本地码 PoC 边界 B1）；r16：批次 F 深审全量对账——索引表补全（r3 后新增 TD-015+ 此前无索引行）+ TD-012 标记 resolved / TD-013 与 TD-009/010/014/017/018 目标时机改判 Stage 2（附 Stage 1 门放行裁定）/ TD-019/020 断档登记 / TD-023 新增（P2）；r3：TD-001/006 断档记录 + TD-005/008/011 详情补齐 + TD-012/013/014 新增 + TD-009 注记更新）
-> **Version**: v0.3.0-r20
-> **Status**: Active（**r23 批次 I 执行 42-d：TD-017 + TD-009 联动 resolved（INC7 清单兑现——eval 参考路径退役，两域随路径注销）**；r21/r22 批次 I 执行 42-b/42-c：无新增/无 resolved（段迁移零债务面——module 名覆写值等价注记入 i1-design v1.2）；r20 批次 I 执行启动：无新增/无 resolved——设计轮（42-a I1 切口设计）零债务面；eval 退役裁定已设计锁定排 42-d（INC7）——兑现于 r23；r19 批间插入轮：无新增/无 resolved——设计轮 + 骨架冻结零债务面；口径注记：矩阵 r18 版集成计数 438 勘误为 436（198+438=636≠634 内部矛盾——实测 436 与 r17 增量链 409+27 吻合））
+> **Version**: v0.3.0-r24
+> **Status**: Active（**r24 批次 I 执行 42-e：TD 五项 resolved（TD-010 Foreign 装箱 + TD-011 字符串全序 + TD-014 嵌套 define 归因 + TD-018 消息单源统一 + TD-023 根扫描对症——GcCell 摘要 + 缓冲复用，非尾形基准 -27%）+ TD-008 裁定 DEFER（实测依据三面——见详情）**；r23 批次 I 执行 42-d：TD-017 + TD-009 联动 resolved（INC7 清单兑现——eval 参考路径退役，两域随路径注销）；r21/r22 批次 I 执行 42-b/42-c：无新增/无 resolved（段迁移零债务面——module 名覆写值等价注记入 i1-design v1.2）；r20 批次 I 执行启动：无新增/无 resolved——设计轮（42-a I1 切口设计）零债务面；eval 退役裁定已设计锁定排 42-d（INC7）——兑现于 r23；r19 批间插入轮：无新增/无 resolved——设计轮 + 骨架冻结零债务面；口径注记：矩阵 r18 版集成计数 438 勘误为 436（198+438=636≠634 内部矛盾——实测 436 与 r17 增量链 409+27 吻合））
 > **规则**: sop.md §6.2.1——新增已解决项/调整剩余项优先级（每子阶段必检）
 
 ## 索引
@@ -17,22 +17,22 @@
 | TD-005 | syntax-parse 级宏组合 | P3 | 开放 | Stage 2 |
 | TD-006 | （编号断档——不可考） | — | 断档存档 | — |
 | TD-007 | 迭代式展开工作表（深度上限解除：128→500→**10_000**） | P2 | **已解决（r18 / 40-c——完整口径）**：Stx Rc 共享化（List/Vector → `Rc<Vec<Stx>>` clone O(1)）+ retag 迭代式重建（显式工作表后序——栈深恒定）+ 均匀标记 O(1) 共享（链 N 步总工作量 O(N)，旧 O(N²)）+ 扁平 Drop（唯一持有脊柱工作表拆除）；上限 500→10_000（种子 + 自举 expander.krf 同步）；10_000 链测试 0.02s 通过 + 10_001 边界报错 | ~~Stage 2 批次 H2~~ 已交付 |
-| TD-008 | 分代 GC / 堆压缩 | P3 | 开放 | Stage 2 批次 I2 |
+| TD-008 | 分代 GC / 堆压缩 | P3 | **裁定 DEFER（r24 / 42-e——实测依据三面）** | Stage 3+（条件触发重评估） |
 | TD-009 | eval 路径 GC 根集枚举 | P3 | **resolved（r23 / 42-d）**：eval 路径自 driver 生产面退役（P5/INC7 联动注销）——GC 根集域随路径注销（生产 run 路径根集完整：栈+帧+全局；kerf-vm eval.rs 存档参考面非 GC 消费） | ~~Stage 2（eval 重写同轮评估）~~ 已交付 |
-| TD-010 | 闭包/内置函数装箱（pair 元素） | P3 | 开放 | **Stage 2**（r16 改判：原「Stage 1」未落地；HeapObj::Foreign 承载） |
-| TD-011 | 字符串全序比较 | P3 | 开放 | Stage 2 |
+| TD-010 | 闭包/内置函数装箱（pair 元素） | P3 | **resolved（r24 / 42-e）**：HeapObj::Foreign(Rc<ForeignBox>)——类型擦除 Rc 载体 + 装箱方注入追踪器（标记阶段枚举闭包捕获图）；解箱往返 Rc 恒等（eq? 按引用）；渲染 #<procedure>/#<builtin:名> | ~~Stage 2~~ 已交付 |
+| TD-011 | 字符串全序比较 | P3 | **resolved（r24 / 42-e）**：全字符串链按 Unicode 码点序参与全部比较族（Rc<str> 比较 = UTF-8 字节序 = 码点序——编码保序性）；混合链保持 `{op} 需要数值`（TD-016 口径）；静态面 R3 同步（Ordering ≡ NumOrAllStr） | ~~Stage 2~~ 已交付 |
 | TD-012 | expander.rs 单文件拆分候选 | P3 | **已解决（批次 B 前端重写落地六文件）** | ~~Stage 1（切换期）~~ |
 | TD-013 | 多错误收集 / Expander 恢复展开（单错误短路） | — | **resolved（r17 / 38-e）**：种子+自举桥双路径形式级恢复 + DiagCollector（128 上限/截断/位置序）+ check_source_recover 合并报告（E0002+E0005）+ CLI check 切换恢复模式；16 集成测试全过 | ~~Stage 2 批次 G2~~ 已交付 |
-| TD-014 | 展开期错误消息归因失真（嵌套 define） | P3 | 开放 | **Stage 2**（r16 改判：消息质量批与 TD-018 同批） |
+| TD-014 | 展开期错误消息归因失真（嵌套 define） | P3 | **resolved（r24 / 42-e）**：专门消息「嵌套 define 重复绑定」+ Span 指向第二次出现处（seed expand_body + 自举 expand-body-hoist 镜像 + parity 2 case 逐字一致） | ~~Stage 2~~ 已交付 |
 | TD-015 | IrGraph 无条件计算旁路丢弃 | P3 | 开放 | Stage 2（切换期重构） |
 | TD-016 | 链式比较短路语义静态收紧 | P3 | **已解决（r7）** | ~~Stage 1~~ |
 | TD-017 | eval 参考路径深度上限不对称 | P3 | **resolved（r23 / 42-d）**：eval 参考路径自 driver 生产面退役（P5/INC7——CLI eval 子命令移除 + eval_source 删除）——**256 深度上限域随路径注销**；生产 VM 路径经 TCO 帧复用无深度上限（105_000 层尾递归正确终止——`deep_tail_recursion_production_path_tco` 重写口径实测）；kerf-vm eval.rs 存档为 Rust 参考实现（scope_set_tests 语义 oracle 消费面保留） | ~~Stage 2（I1 eval 重写时随迁评估）~~ 已交付（INC7 联动注销） |
-| TD-018 | 双路径错误消息文本分裂 | P3 | 开放 | **Stage 2**（r16 改判：消息质量批与 TD-014 同批） |
+| TD-018 | 双路径错误消息文本分裂 | P3 | **resolved（r24 / 42-e）**：kerf-vm messages.rs 单源构造器（if 条件/not/car/cdr/set! 五族）；Value::truthy 复活为单一实现（VM JumpIfFalse + eval if 臂同源）；未绑定族裁定为保留的阶段信息差异（VM 携全局兜底完成度） | ~~Stage 2~~ 已交付 |
 | TD-019 | （编号断档——不可考，r16 登记） | — | 断档存档 | — |
 | TD-020 | （编号断档——不可考，r16 登记） | — | 断档存档 | — |
 | TD-021 | 高阶函数用户面注入缺载体 | P3 | **已解决（r15——kerf-prelude 模块/import 承载）** | ~~Stage 1 批次 E~~ |
 | TD-022 | 自举 Reader/Expander 帧消耗 O(源字符数) | P3 | **已解决（r18 / 40-c——TCO 兑现）**：VM 尾调用优化（Op::TailCall 帧复用 + 编译器尾位穿线（Lambda 体/If 两臂/Begin 末项）+ 内建尾调用隐式 RET + 指令预算护栏 10^9 兜底无限尾循环）；实证：127,780B 源（>10^5 字符边界）自举管线完整通过 + 自举 expander 10_000 深度链端到端（TD-007/TD-022 耦合解除） | ~~Stage 2 批次 H2~~ 已交付 |
-| TD-023 | gc_stress 深递归 GC 根扫描回归（超线性） | P3（r18 降级） | **开放（重定型）**：r18/40-c TCO 副作用实测——gc_stress 61-62ms × 5 轮稳定（r16 回归值 207-235ms → **-70%**；Stage 0 基线 160.4ms → -62%）：spin 尾递归经帧复用后深帧根扫描压力消失，**原基准不再复现回归**（P2 证据基础失效——ARCH-A 降级 P3）；残留：非尾形深递归 + GC 的根扫描 per-cycle HashSet 分配模式未测量（需新建非尾形基准锚定） | **Stage 2 批次 I2**（与 TD-008 同轮；基准重定型先行） |
+| TD-023 | gc_stress 深递归 GC 根扫描回归（超线性） | P3（r18 降级） | **resolved（r24 / 42-e）**：基准重定型（gc_stress_nontail 非尾形锚定——改前 144.06ms/轮 + 2×→3.2-3.7× 超线性实测成立）+ 对症双件（GcCell 堆根性摘要——非堆单元 O(1) 跳过；根扫描缓冲跨周期复用——无分配化路径 B）→ **非尾形 -27.1%（144.06→105.15ms）**；尾形 gc_stress -2.8% / fib -3.1%（±5% 噪声带 ✓）；残留超线性（2×→3.4×）如实归因 = 帧栈内存 churn + 每周期固定成本（精确 MS 栈根扫描的结构性成本，非分配模式缺陷） | ~~Stage 2 批次 I2~~ 已交付 |
 | TD-024 | 本地码后端 PoC 边界（整数域十二原语 + 直接调用；闭包/Float/Str/Pair/set!/module/IO/函数值一等边界外） | P3 | **登记（r17 / 38-b·38-c）**：显式错误非静默降级（B1 类）；FFI 面（print/write_stdout）按 ffi-ownership-model 批次 I 做实；闭包/GC 协同批次 H/I | Stage 2 批次 H-I（GC-后端协同轮） |
 | TD-025 | 自举侧 retag 无均匀标记快路径（包装宏链 O(N²) VM 工作） | P3 | **resolved（r18 / 40-f）**：krf 六头字段协议落地——`(tag s e exp scopes uni . fields)`（`uni = ('uni . scopes)` 均匀证书，make-node 默认 nil + retag 重建置位 + inject-scope 注入清除 + 桥 stx_to_node 同步）；retag-scope 快路径（uni 命中 → 整棵子树 O(1) 共享——种子 uniform_tag 镜像）；实测门审计 C02 包装链 **>540s → 7.37s（73×+）**；双审计集 EXIT 0（stage0 41 + stage1 51，20s/28s） | ~~Stage 3~~ 已交付 |
 
@@ -141,6 +141,20 @@
 - **修复方案**：Stage 2 分代 GC / 堆压缩（05 §4 陷阱 3 的既定推迟路径）
 - **代码锚**：kerf-runtime/src/lib.rs:19（推迟注记）
 - **workaround**：Stage 0 测试与示例程序分配量有界（gc_tests 10^6 / gc_stress 3×10^5 均堆有界）
+- **r24 裁定（42-e / 批次 I2，DEFER→Stage 3+ 条件触发）**：
+  ① **收益面不存在**：Stage 2 无长驻程序（负载 = CLI 单趟 + 测试 + 自举管线
+  ——分配有界、生命周期短；登记时的 workaround 依然成立）；r24 会话实测：尾形
+  gc_stress 38.57ms（-2.8% 噪声带）、非尾形 105.15ms（TD-023 对症后 -27%）、
+  分配主导负载 23.76ms——mark-sweep + 空闲表满足全部验收门；
+  ② **分代对症有限 + 压缩破坏不变式**：分代对栈根（帧局部）扫描无通用免除
+  （年轻代回收仍全量枚举栈根——非尾形深递归实测主导成本是帧根扫描 + 帧内存
+  churn，分代只减堆标记量，本负载堆恒 ~阈值规模）；堆压缩破坏 GcRef = 槽位
+  索引的结构性契约（「只分配不压缩」§19.4 陷阱 3 + 全库消费面）→ 需转发表
+  间接层 = 值模型全量改写（P1 级工程）；
+  ③ **复杂度预算**（§12）：批次 I 剩余 MUV（42-f Effect M1-M5 + 能力 M2 /
+  42-g 门审查）优先于本阶段无收益的堆治理改造。
+  **重评估触发条件**：Stage 3 长驻/服务型负载出现；或堆规模实测 >10^6 槽 /
+  碎片率可观测劣化；或栈根采样成为 >30% 热点。
 
 ### TD-009 eval 路径 GC 根集（r3 注记更新）
 - **描述**：元循环求值器关闭 GC 触发（根集枚举需遍历 Rc 环境链）
@@ -155,6 +169,15 @@
 - **描述**：序对元素为闭包/内置时以标记字符串占位（不可达路径）
 - **修复方案**：Stage 1 HeapObj::Foreign(Rc<dyn Any>)
 - **代码锚**：heap.rs（BoxedInput 显式限制）/ vm.rs:626（占位注记）；05 §3.1 v5.2（HeapObj 六变体对齐——早期文档误写 Boxed 变体的更正出处）
+- **r24 收口注记（42-e / 批次 I2）**：`HeapObj::Foreign(Rc<ForeignBox>)`
+  落地——ForeignBox{any: Rc<dyn Any>, tracer: fn}（追踪协议由装箱方注入，
+  kerf-runtime 不依赖 kerf-vm 类型——§11 接口隔离）；box_value 闭包/内置
+  → Foreign 装箱（Rc 共享 → 解箱往返恒等，eq? 按引用）；**标记阶段
+  children 经 tracer 枚举闭包捕获图的 Pair 子引用**（漏追踪 = 仅经 Foreign
+  可达的捕获 Pair 误回收——use-after-free 级缺陷面）；渲染 #<procedure>/
+  #<builtin:名>（与直接函数值同形）。测试：往返恒等/函数列表模式
+  （(list f g) + map 应用）/ GC 存活 2（追踪器实际行使 + 捕获链多级传递）
+  / 渲染含点对形态。原「占位字符串」路径删除（vm.rs box_value）。
 
 ### TD-011 字符串全序比较（r3 补详情）
 - **描述**：比较操作符（`<` `<=` `>` `>=`）仅支持数值塔——字符串操作数报
@@ -163,6 +186,13 @@
 - **修复方案**：Stage 2 实现字符串序比较（数值塔之外的比较路径分流）
 - **代码锚**：kerf-driver/src/builtins.rs:330（报错消息注记）
 - **测试锚点**：negative_vm_tests::comparison_string_ordering_rejected（4 case 断言报错形态）
+- **r24 收口注记（42-e / 批次 I2）**：码点序裁定落地——**全字符串链参与
+  全部比较族**（`Rc<str>` 比较 = UTF-8 字节序，编码保序性 ⇒ 与 Unicode
+  码点序全序一致；09-stdlib v6.3 语义裁定）；混合链（串入数值）保持
+  `{op} 需要数值`（TD-016 首个非数值归因口径）；静态面 R3：Ordering 与
+  NumOrAllStr 同语义放行全字符串链（运行时/静态口径一致）。负例改写：
+  comparison_string_ordering_rejected → comparison_string_chain_mixed_rejected
+  （语义边界迁移——正例锚 stdlib_tests 12 case + HM 超集门语料换混串链）。
 
 ### TD-012 expander.rs 单文件拆分候选（r3 新增；r16 标记已解决）
 
@@ -226,6 +256,12 @@
   包装对齐 VM 诊断形状）
 - **代码锚**：expander.rs（parse_params 重名检查——两路径共同上游）；06 §5.3 v5.2（错误路径
   互查口径补注）
+- **r24 收口注记（42-e / 批次 I2）**：专门消息「嵌套 define 重复绑定（同名内部
+  变量只允许出现一次）」+ Span = 第二次出现处的 define 形式自身（原路径经
+  提升构造的 lambda 形参重名兜底——消息误导 + Span 指向体首合成节点）。
+  双侧镜像：seed `expand_body` seen 向量 + 自举 `expand-body` 的
+  `dup-define-scan`（判定序一致：头部切分 → late-define → 重名 → 提升）；
+  bootstrap_expander_tests parity_err +2 case（消息 + Span 逐字一致）。
 
 ### TD-015：IrGraph 无条件计算旁路丢弃（P3）
 
@@ -275,6 +311,15 @@
   T17-a 深挖发现）。E 码/阶段/Span 三要素一致，文本常量分散于
   vm.rs/eval.rs。
 - **偿还计划**：共享消息常量模块（kerf-span 或 kerf-vm 公共层）。
+- **r24 收口注记（42-e / 批次 I2）**：`kerf-vm/src/messages.rs` 单源构造器
+  （偿还计划既定位置——kerf-vm 公共层）：if 条件/not/car·cdr/set? 五族
+  消息构造器三消费面（VM 操作码 + eval 参考臂 + driver 内置）同源引用；
+  **`Value::truthy` 复活为单一实现**（原无调用方死助手 → Result 化 + 双
+  if 消费——VM JumpIfFalse 与 eval if 臂同文，scope_set_tests 对拍回归
+  锚 td018_if_cond_message_unified_dual_path 断言消息文本相等）。归因
+  口径：前缀统一「if 条件需要 bool」（与静态面 R1 一致——糖均脱为 if）。
+  **未绑定族裁定保留差异**：VM「未绑定的全局变量（…）」携带全局兜底
+  解析完成度（阶段信息），eval「未绑定变量」为参考面口径——非分裂。
 
 ### TD-021：高阶函数用户面注入缺载体（P3）
 
@@ -354,3 +399,21 @@ lang-design 全部对账面）。推断与 TD-001/006 同型：跳号笔误而�
   根遍历 visited 结构无分配化（arena/bitset 复用）/ Value 瘦身（大变体
   Box 化）。在此之前每次合入按 §14.6.4 协议复测 gc_stress 5 轮（超 10%
   阈值保持追踪）。
+- **r24 收口注记（42-e / 批次 I2）**：**基准重定型先行**——新增
+  `examples/usage/gc_stress_nontail.krf`（非尾形深递归：`(+
+  (grow (- n 1)) 1)` 参数位 → 峰值 3×10^4 存活帧 + 10 cons/层）；
+  改前实测 144.06ms/轮（尾形 39.68ms 的 3.6×）+ 缩放 15k/30k/60k =
+  45.07/144.06/528.33ms（**2×→3.2~3.7× 超线性实测成立**——原登记的
+  残留模式锚定）。**对症双件落地**（偿还计划路径 B 直译 + 对症变体）：
+  ① `GcCell` 堆根性摘要（`Rc<RefCell<Value>>` → `Rc<GcCell>`——
+  has_heap 标志由写路径维护（set! 写 Pair/Closure 翻转，sound 不变式），
+  根集枚举对非堆单元 O(1) 跳过——深帧根扫描实测主导成本的对症面；
+  write-路径 soundness 回归锚 gc_cell_flag_flips_on_pair_write）；
+  ② 根扫描缓冲跨周期复用（root Vec + visited HashSet 由 execute 持有
+  ——take/归还零 API 变更，无分配化路径 B）。**改后对拍（stash 重建
+  r23 二进制同会话）**：非尾形 144.06→105.15ms（**-27.1%**）；尾形
+  gc_stress 39.68→38.57ms（-2.8%）+ fib(25) 86.97→84.22ms（-3.1%）
+  ——均在 ±5% 噪声带（验收 ≤5% ✓）。**残留如实归因**：超线性（2×→
+  3.4×）由帧栈内存 churn（每帧 2 Vec 分配）+ 每周期固定成本构成——
+  精确 mark-sweep 栈根扫描的结构性成本（非登记的分配模式缺陷——已治愈）；
+  分代/压缩对该残留对症有限（TD-008 裁定 DEFER 的②依据）。

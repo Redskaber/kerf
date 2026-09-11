@@ -1098,14 +1098,33 @@
         (let ((defines (car split)) (rest (cdr split)))
           (let ((late (first-late-define rest)))
             (if (null? late)
-                (if (null? defines)
-                    (let ((exprs (expand-seq forms)))
-                      (if (err? exprs)
-                          exprs
-                          (wrap-body exprs forms)))
-                    (expand-body-hoist defines rest forms))
+                (let ((dup (dup-define-scan defines nil)))
+                  (if (err? dup)
+                      dup
+                      (if (null? defines)
+                          (let ((exprs (expand-seq forms)))
+                            (if (err? exprs)
+                                exprs
+                                (wrap-body exprs forms)))
+                          (expand-body-hoist defines rest forms))))
                 (xperr "define 必须位于函数体头部（后续 define 不合法）"
                        (node-s late) (node-e late))))))))
+
+; TD-014（r24）：嵌套 define 重名提前归因（镜像 seed expand_body 的
+; seen 向量——判定序 = 头部 define 收集序；错误 Span = 第二次出现处的
+; define 节点自身；原路径由提升 lambda 的 parse-params 兜底报
+; 「lambda 参数重名」——归因失真）。名已在切分校验（define-name 纯
+; 函数重导出——err 分支为防御性不变式）。
+(define (dup-define-scan defines collected)
+  (if (null? defines)
+      nil
+      (let ((nm (define-name (car defines))))
+        (if (err? nm)
+            nm
+            (if (not (null? (filter (lambda (q) (eq? q nm)) collected)))
+                (xperr "嵌套 define 重复绑定（同名内部变量只允许出现一次）"
+                       (node-s (car defines)) (node-e (car defines)))
+                (dup-define-scan (cdr defines) (cons nm collected)))))))
 
 ; 头部 define 切分：(前导 define 节点列表 . 余形式列表)；每个前导
 ; define 的名字随切分校验（镜像 define_name 调用序——先名校验后值校验）

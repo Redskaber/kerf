@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use kerf_compiler::{BcProgram, BuiltinSig, TcParam, TcType};
-use kerf_runtime::{BoxedInput, RuntimeError};
+use kerf_runtime::{BoxedInput, GcRef, Heap, RuntimeError};
 use kerf_syntax::{Symbol, SymbolTable};
 use kerf_vm::{box_value, render_value, unbox_slot, BuiltinFn, Value};
 
@@ -53,9 +53,9 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                     Some((car, _)) => Ok(unbox_slot(car, heap)),
                     None => Err(RuntimeError::new("car 应用于非序对堆槽")),
                 },
-                other => Err(RuntimeError::new(format!(
-                    "car 需要 pair，实际 {}",
-                    other.type_name()
+                other => Err(RuntimeError::new(kerf_vm::err_pair_op(
+                    "car",
+                    other.type_name(),
                 ))),
             }
         }),
@@ -69,9 +69,9 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                     Some((_, cdr)) => Ok(unbox_slot(cdr, heap)),
                     None => Err(RuntimeError::new("cdr 应用于非序对堆槽")),
                 },
-                other => Err(RuntimeError::new(format!(
-                    "cdr 需要 pair，实际 {}",
-                    other.type_name()
+                other => Err(RuntimeError::new(kerf_vm::err_pair_op(
+                    "cdr",
+                    other.type_name(),
                 ))),
             }
         }),
@@ -129,6 +129,71 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
             )))
         }),
     ));
+    // ---- 类型谓词完备面（r24 / 42-e stdlib 缺口补齐：Value 变体判别）----
+    defs.push((
+        "string?",
+        BuiltinFn::new("string?", |_, args| {
+            one_arg("string?", &args)?;
+            Ok(Value::Bool(matches!(args[0], Value::Str(_))))
+        }),
+    ));
+    defs.push((
+        "symbol?",
+        BuiltinFn::new("symbol?", |_, args| {
+            one_arg("symbol?", &args)?;
+            Ok(Value::Bool(matches!(args[0], Value::Symbol(_))))
+        }),
+    ));
+    defs.push((
+        "float?",
+        BuiltinFn::new("float?", |_, args| {
+            one_arg("float?", &args)?;
+            Ok(Value::Bool(matches!(args[0], Value::Float(_))))
+        }),
+    ));
+    defs.push((
+        "number?",
+        BuiltinFn::new("number?", |_, args| {
+            one_arg("number?", &args)?;
+            // 数值塔谓词：Int 或 Float（与算术操作数域一致）
+            Ok(Value::Bool(matches!(
+                args[0],
+                Value::Int(_) | Value::Float(_)
+            )))
+        }),
+    ));
+    defs.push((
+        "list?",
+        BuiltinFn::new("list?", |heap, args| {
+            one_arg("list?", &args)?;
+            // 真表判定：nil 或 cdr 链终止于 nil 的序对链。Floyd 龟兔
+            // 环检测（环 → false：真表的 cdr 链无环；引用 Racket list? 语义）。
+            match &args[0] {
+                Value::Nil => Ok(Value::Bool(true)),
+                Value::Pair(start) => {
+                    let mut slow = *start;
+                    let mut fast = *start;
+                    loop {
+                        // fast 两步 / slow 一步——每步经槽位种类判定
+                        for _ in 0..2 {
+                            match list_step(heap, fast) {
+                                ListStep::End(is_list_end) => return Ok(Value::Bool(is_list_end)),
+                                ListStep::Next(r) => fast = r,
+                            }
+                        }
+                        match list_step(heap, slow) {
+                            ListStep::End(is_list_end) => return Ok(Value::Bool(is_list_end)),
+                            ListStep::Next(r) => slow = r,
+                        }
+                        if slow == fast {
+                            return Ok(Value::Bool(false));
+                        }
+                    }
+                }
+                _ => Ok(Value::Bool(false)),
+            }
+        }),
+    ));
     defs.push((
         "eq?",
         BuiltinFn::new("eq?", |_, args| {
@@ -142,10 +207,7 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
             one_arg("not", &args)?;
             match &args[0] {
                 Value::Bool(b) => Ok(Value::Bool(!b)),
-                other => Err(RuntimeError::new(format!(
-                    "not 需要 bool，实际 {}",
-                    other.type_name()
-                ))),
+                other => Err(RuntimeError::new(kerf_vm::err_not_bool(other.type_name()))),
             }
         }),
     ));
@@ -1006,6 +1068,23 @@ fn one_arg(name: &str, args: &[Value]) -> Result<(), RuntimeError> {
     Ok(())
 }
 
+/// `list?` 的 cdr 链单步判定（r24 / 42-e）：当前槽位为序对 → Next(cdr)；
+/// Nil → End(true)（真表终止）；其余 → End(false)（点对/异物）。
+enum ListStep {
+    Next(GcRef),
+    End(bool),
+}
+
+fn list_step(heap: &Heap, r: GcRef) -> ListStep {
+    match heap.get(r).map(|s| &s.obj) {
+        Some(kerf_runtime::HeapObj::Pair(_, cdr)) => ListStep::Next(*cdr),
+        Some(kerf_runtime::HeapObj::Nil) => ListStep::End(true),
+        // _ 臂理由：Foreign/Str/Int/Float/Bool/Symbol 槽位——cdr 链上的
+        // 非序对非 nil 终结（点对形态或异物）
+        _ => ListStep::End(false),
+    }
+}
+
 fn two_args(name: &str, args: &[Value]) -> Result<(), RuntimeError> {
     if args.len() != 2 {
         return Err(RuntimeError::new(format!(
@@ -1147,7 +1226,7 @@ static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
     ("*", BuiltinSig::variadic(TcParam::Num, TcType::Num, 0)),
     ("/", BuiltinSig::variadic(TcParam::Num, TcType::Num, 2)),
     ("mod", BuiltinSig::variadic(TcParam::Num, TcType::Num, 2)),
-    // 比较：= 全数值或全字符串（TD-011/016）；排序族全数值
+    // 比较：全数值或全字符串（TD-011 r24：字符串全序参与全族——码点序）
     ("=", BuiltinSig::num_or_all_str()),
     ("<", BuiltinSig::ordering()),
     (">", BuiltinSig::ordering()),
@@ -1170,6 +1249,11 @@ static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
     ("pair?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
     ("int?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
     ("bool?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("string?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("symbol?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("float?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("number?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("list?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
     (
         "procedure?",
         BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
@@ -1306,17 +1390,12 @@ fn cmp_builtin(name: &'static str, cmp: Cmp) -> Rc<BuiltinFn> {
         if args.len() < 2 {
             return Err(RuntimeError::new(format!("{} 至少需要 2 个参数", name)));
         }
-        // TD-016（批次 C 收紧）：前置全参数数值校验——比较链短路终止
-        // 不再跳过后续操作数的类型检查（09-stdlib §2 v5.5 全操作数口径；
-        // 修复前的 `(< 3 1 "a")` 首对为假即静默返回 false 为 FS-5 边界）。
-        // 校验顺序与既有两参消息兼容：全字符串 + 排序族 → TD-011 消息；
-        // 其余逐参数值域 → `{op} 需要数值`（与两参混串/非数值消息一致）。
+        // TD-016（批次 C 收紧）前置全参数域校验 + TD-011（r24 解决）：
+        // 比较链短路终止不跳过后续操作数的类型检查；**全字符串链按
+        // Unicode 码点序参与全部比较族**（含排序族）；其余链逐参数值域
+        // 校验——首个非数值 → `{op} 需要数值`（与两参混串/非数值消息
+        // 一致，TD-016 两参口径保持）。
         let all_str = args.iter().all(|a| matches!(a, Value::Str(_)));
-        if all_str && !matches!(cmp, Cmp::Eq) {
-            return Err(RuntimeError::new(
-                "字符串仅支持 = 比较（Stage 0 边界，TD-011）",
-            ));
-        }
         if !all_str {
             for a in &args {
                 if a.as_number().is_none() {
@@ -1334,12 +1413,16 @@ fn cmp_builtin(name: &'static str, cmp: Cmp) -> Rc<BuiltinFn> {
                 (Cmp::Gt, Value::Int(x), Value::Int(y)) => x > y,
                 (Cmp::Le, Value::Int(x), Value::Int(y)) => x <= y,
                 (Cmp::Ge, Value::Int(x), Value::Int(y)) => x >= y,
-                (Cmp::Eq, Value::Str(x), Value::Str(y)) => x == y,
-                (_, Value::Str(_), Value::Str(_)) => {
-                    return Err(RuntimeError::new(
-                        "字符串仅支持 = 比较（Stage 0 边界，TD-011）",
-                    ))
-                }
+                // TD-011（r24）：字符串全序——`Rc<str>` 比较即 UTF-8 字节序
+                // （UTF-8 编码保序性 → 与 Unicode 码点序全序一致；09-stdlib
+                // v6.3 码点序裁定）
+                (c, Value::Str(x), Value::Str(y)) => match c {
+                    Cmp::Eq => x == y,
+                    Cmp::Lt => x < y,
+                    Cmp::Gt => x > y,
+                    Cmp::Le => x <= y,
+                    Cmp::Ge => x >= y,
+                },
                 // _ 臂理由：含 Float 或跨类型的组合——经 as_number 提升为 f64 统一比较，非数值在此报错
                 _ => {
                     let x = a

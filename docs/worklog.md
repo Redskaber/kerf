@@ -3714,3 +3714,42 @@ Stage Summary:
   字节一致（§21.3 条件 2 SHA-256 终验）+ eval 退役终态裁定（TD-017
   终验 + 12 §2.4/§2.5 回写 + T1 收口）+ 缓存键分桶 B11——下一
   session）
+
+---
+Task ID: 44-a
+Agent: Super Z (main) — DEV-A/QA-A/ARCH-A（L3 多角色会话，批次 I 执行 42-d I1 收口）
+Task: MUV 44-a：42-d 主体——CompilerKind 生产切换 + 门 B fixpoint（两次编译自身字节一致）+ eval 退役终态裁定 + 缓存键分桶 B11
+
+Work Log:
+- **实锚起步（R4 纪律）**：上会话摘要称「r22 被工具中断阻断」——实测 git `2e29234` clean + worklog 43-a/z 完整 + r22 包/web 截图在位 ⇒ r22 已闭环（以仓库为准），本轮直进 42-d；合同实锚 = plan §5a 42-d 行 + i1-design §4 S3/§5 门 B/§6 P1-P5/§7 确定性 + §21.3 条件 2
+- **P1 分派位**：`CompilerKind::{Bootstrap,Seed}` pub enum（driver.rs——镜像 ExpanderKind）；`front_from_core` 第 4 步 match 分派（Bootstrap → bootstrap_compiler::compile_module（file_id + &mut table 签名对接）；Seed → kerf_compiler::compile_module 全径调用）；`front_from_forms`/`check_source_recover` 传递（check 恢复路径 = 生产口径 Bootstrap）；compile_front（生产）= Bootstrap / compile_front_seed = Seed（**bootstrap init 恒种子路径——load_compiler/load_bootstrap/load_expander 三处 compile_front_seed 无递归**）
+- **门 B fixpoint 落地**：三自举模块新增 `install_state`/`reset_state` pub 钩子（状态构造提取共享 `build_state` 单一实现——§12 最优>最小）+ bootstrap_compiler `is_loaded()`（#[cfg(test)] 探针——镜像 expander 先例）；测试 `gate_b_fixpoint_two_self_compiles_byte_identical`：B₁ = 生产链编译自举三件 + preamble（include_str! 四源），B₂ = 三件 install B₁ 产物后再编译同源——**隔离纪律 §7.4**（set_cache_enabled(false) 缓存命中假阳性防线 + 三 reset fresh 起步）；判据（硬门）：四程序 bytecode_equal + **SHA-256 摘要一致**（sha256_hex(format!("{:?}")——BcProgram 全字段 Vec/Option/原语无哈希序，Debug 结构序确定序列化；hash.rs 自研零新依赖）
+- **实测两裁定（GATE 1 诚实入档）**：① 首跑事故 = 测试渲染器对魔法符号（Symbol(u32::MAX-1) main 原型名）调 table.name 越界——镜像 driver.rs resolve_symbol 口径（<main>/<lambda>）修正；② **宏自由件（compiler.krf）B₀/B₁ 全结构 bytecode_equal 实测不成立**——两链符号表 intern 序不保证一致（按名反汇编已证结构+名+span 位置全等；差异仅 Symbol 数值）——加强判据口径修正为「按名反汇编」（i1-design §7.3 预判实证），全结构判据限同链 B₁/B₂（硬门）——v1.3 注记②登记
+- **附加可执行面**：`gate_b_b1_programs_execute_as_bootstrap_chain`——B₁ compiler 产物 install 后作为自举 Compiler 运转（生产链编译 + VM 执行 = 种子链结果）——「产物编译自身」行为级同证
+- **P5 eval 退役（INC7 兑现）**：CLI eval 子命令移除（退役提示 + 指向 run，exit 2）+ driver `eval_source`/`resolve_eval_hygiene_fallbacks`/`collect_global_refs` 删除 + lib.rs 导出更新；kerf-vm eval.rs **存档裁定**（scope_set_tests 语义 oracle 消费面保留——不删不归档冻结，12 §2.5 行 299 终态回写「Stage 3+ 移除」）；**T1 新口径** = `run_source_seed`/`compile_source_seed` 新 pub 参考入口（run_front 值语义共享——执行段单一实现）+ T1 测试面全量迁移（stage0 vm/negative_vm/pipeline/negative_semantics + stage1 bootstrap_reader/expansion_worklist/capability/prelude/cache/scope_set + common dual_path_agrees + 双审计集 6 case 体——eval 侧断言迁移为种子链对拍，§9.4.3 断言迁移非删除）；deep_recursion_eval_path_structured_error → deep_tail_recursion_production_path_tco（TD-017 域注销口径重写——105_000 层 TCO 正确终止）
+- **P4 缓存分桶（B11）**：`cache_key(source, filename, kind)` 三参——CompilerKind 维度入 config_fingerprint 构成层（**CacheKey 冻结字段结构不动**——v5.2 接口预留纪律）；种子路径不经缓存（compile_front_seed 无缓存调用）；测试三面：键区分 + 跨桶隔离（cache.rs 单元 store_front/lookup_front 实测）+ `pipeline_seed_path_cache_isolated` 集成（种子路径不查不存——stats 前后对账）
+- **守护（P2）**：`production_compiler_is_bootstrap`——独立线程双信号（生产编译后 is_loaded 翻转 + 种子路径不加载（引导恒种子实测面））；修一处自写断言逻辑反转（assert!(seed.0) → assert!(!seed.0)——消息与逻辑矛盾实测暴露）
+- 验证：cargo test --release --workspace **670:0:0**（665 零回归 + 净 5：单元 +3（守护 + 缓存 ×2——driver 64→67）+ 集成 +2（fixpoint ×2——bootstrap_compiler_tests 27→29））；--list 权威计数 670 逐模块核对
+
+Stage Summary:
+- 42-d 主体交付：**I1 生产切换生效**（生产管线前段三段 = 自举读+展+编——「语言能表达自身前端 + 编译器」完整生产命题）+ **门 B fixpoint 达成**（B₁/B₂ 四程序字节一致 + SHA-256——§21.3 条件 2 终验）+ eval 退役终态（唯一生产路径 = 自举编译器 + VM）+ 缓存分桶实测；实测注记两裁定（魔法符号渲染口径 + 跨链符号值不对齐——i1-design v1.3 ①②）
+- 遵循：§2.3-11（先实测禁臆测——两裁定均实跑暴露后修正判据口径并诚实入档）、§12（镜像先例口径——ExpanderKind/resolve_symbol/build_state 三处复用既定形态）、§21.3（条件 2 机器判据——bytecode_equal + SHA-256 双口径）、INC7/P5（断言迁移非删除）、§9.4.3（正负成对——负例 deep_tail TCO 正例化）
+- 下一步：44-z r23 收尾（§3.2 + 对账六面 + tar.gz + web + git + 树压实）
+---
+Task ID: 44-z
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，批次 I 执行 r23 收尾交付）
+Task: MUV 44-z：r23 收尾交付（§3.2 六命令 + 对账六面 + r23 tar.gz 包内自举验证 + web 同步 + git + 树压实）
+
+Work Log:
+- **§3.2 六命令全绿（clean 起步终验）**：cargo clean（133.5MiB）→ build --release --workspace 12.84s 零告警 → check 0 errors 0 warnings → fmt --check 零 diff（格式化一轮）→ clippy --all-targets -- -D warnings 0 → test --release --workspace **670:0:0**（单元 205 + 集成 465；23.9s；--list 权威计数逐模块核对——bootstrap_compiler 29 + driver 67）
+- CLI 冒烟七路径：VM run fib ⇒ 75025/144 + macros ⇒ (2 1)/42 + io 门控端到端（print 两行 + ⇒ 42）+ check ok（2 原型/9 常量/5 全局引用/38 指令）+ native fib exit 144（print-free PoC 边界先例口径——native 消费自举编译产物 QBE lowering 正确）+ E0006 负例 fail-closed + **eval 退役提示 exit 2**（退役面冒烟）；双审计集 EXIT 0（stage0 41 + stage1 50 APPROVED——七类全覆盖）
+- **对账六面**：RELEASE_NOTES v0.4.0-r23（四交付节——预插入头部）/ matrix v0.1.0-r23（665→670 净 +5 + r23 增量行 + **表体两处实测修正**：driver 单元 58→67（r12 时代陈旧数——--list 权威对账）+ bootstrap_compiler_tests 27→29）/ pipeline v0.4.0-r23（基线行 + Tier 1 头注 + Status）/ TD 登记册（**TD-017 + TD-009 联动 resolved**——INC7 清单兑现：eval 域随路径注销；Status 行同步）/ plan.md Status（**I1 段交付闭环**——42-e I2 为下一 MUV）/ i1-design v1.3（S3 执行注记五项——门 B 首跑全过 + 跨链符号值实测裁定 + eval 退役终态 + 缓存分桶落地 + B₁ 可执行面）/ 12-roadmap §2.5 行 299 终态回写（元循环求值器 Stage 2 = 被编译器替换 ✅ + eval 生产面退役 + T1 新口径）
+- **r23 tar.gz**（304 条目/1.6MB——§19.4 命令：src/crates/tests/docs/examples/tools/scripts + Cargo 三件 + README/RELEASE_NOTES）+ **包内自举验证**：/tmp 解包 → 全新 cargo build --release 13.14s → 全量测试 **670:0:0 复跑** + CLI 五路径一致（VM fib 144 + macros 42 + native 144 + check ok + eval 退役提示）
+- web 同步：kerf-data.ts（Stage 2 status r21-r23「I1 收口交付」+ points 三节点 + HERO_FEATURES 三处口径更新（双路径互查/全前段自举/fixpoint）+ PACKAGE_CONTENTS r23 四条）+ site-footer v6.3（两段 r23 文案）+ download/README.md r23 节；/api/stats 自动选取 r23 包（mtime 口径——testCount 670 + packageName r23 实测）；bun run lint EXIT 0
+- **agent-browser E2E（自验强制面）**：页面渲染 ✓（670 计数 + r23 内容三标记 true）+ Playground 黄金路径 ✓（默认运行 ⇒ 144 + 宏预设 ⇒ (2 1)——真实编译器端到端）+ 控制台零错误 ✓ + 响应式截图存档（r23-web-desktop/mobile.png）+ footer mt-auto 模式 ✓
+- git 入账（kerf 仓库 + web 仓库双轨）+ rec 树压实（02 层 07_r23 rec + 02 层 l 首行新行）
+
+Stage Summary:
+- **批次 I 执行 r23（44-a + 44-z）交付闭环——I1 段完成**：生产切换（CompilerKind）+ 门 B fixpoint（§21.3 条件 2 达成——两次编译自身字节一致 + SHA-256）+ eval 退役终态（唯一生产路径）+ 缓存分桶 + 收尾（670:0:0 零回归 + §3.2 全绿 + 对账七面 + r23 包内自举 + web E2E + git + 树压实）
+- 遵循：GATE 1（实测口径——两实测裁定如实入档 + 六命令 clean 起步）、§19.4（打包 + 包内验证）、§8.4.5（对账 + --list 权威计数发现表体陈旧两处修正）、§8.6（rec 树 l 索引首行新行）、INC7（T1 收口 + 12 行 299 回写兑现）
+- 下一步：42-e I2（stdlib 完整化 + TD-008 分代 GC 评估 + TD-023 根扫描对症 + TD-010/011/014/018 批量清偿——TD-009 已随 r23 resolved，清单更新）→ 42-f Effect M1-M5 + 能力 M2 同轮 → 42-g I3 门审查（§7.3 ≥30 新 case + §21.3 四条锚定 + §14 阶段末环）

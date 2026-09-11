@@ -105,3 +105,61 @@ fn gc_stats_observable() {
     assert_eq!(stats.slots, stats.live + stats.free);
     let _ = GcRef(0); // 句柄可构造（仅库内使用——公共类型形状）
 }
+
+/// TD-010（r24）：装箱闭包（Foreign 槽位）的捕获数据跨 GC 存活——
+/// 标记阶段经追踪器枚举闭包捕获图（HeapObj::Foreign children）。
+/// 闭包装箱进序对后，其捕获的 Pair 仅经 Foreign 槽位可达——追踪器
+/// 缺失将导致误回收（use-after-free 级缺陷）。
+#[test]
+fn boxed_closure_captures_survive_gc() {
+    let src = r#"
+        (define (make-box) (let ((cell (cons 42 nil))) (lambda () (car cell))))
+        (define holder (cons (make-box) nil))
+        (define (spin n)
+          (if (= n 0) 0 (begin (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (spin (- n 1)))))
+        (spin 50000)
+        ((car holder))
+    "#;
+    let outcome = common::run_with_heap(src).unwrap_or_else(|e| panic!("执行失败：{}", e));
+    let stats = outcome.heap.stats();
+    assert!(stats.collections > 0, "压力期发生 GC（追踪器被实际行使）");
+}
+
+/// TD-010（r24）：装箱闭包捕获链的多级传递可达性——holder 全局序对
+/// 根 → Foreign 槽 → 追踪器 → 捕获 Pair 链（cons 40 (cons 2 nil)，
+/// 标记阶段经 Pair children 续展）。
+#[test]
+fn boxed_closure_trace_transitive_pairs() {
+    let src = r#"
+        (define (make-get) (let ((p (cons 40 (cons 2 nil)))) (lambda (x) (+ x (car p)))))
+        (define holder (list (make-get)))
+        (define (spin n)
+          (if (= n 0) 0 (begin (cons 2 2) (cons 2 2) (cons 2 2) (cons 2 2) (cons 2 2) (spin (- n 1)))))
+        (spin 50000)
+        ((car holder) 0)
+    "#;
+    common::assert_int(src, 40);
+}
+
+/// TD-023（r24）：GcCell 堆根性摘要的**写路径 sound 不变式**——set!
+/// 将 Pair 写入捕获单元后标志必须翻转（否则该 Pair 仅经闭包捕获链
+/// 可达，根扫描按标志跳过 → 误回收 → 悬垂读）。box 初值 nil（flag
+/// false）→ init 写 Pair（flag true）→ GC 压力 → 读回 42。
+#[test]
+fn gc_cell_flag_flips_on_pair_write() {
+    let src = r#"
+        (define (make)
+          (let ((box nil))
+            (lambda (cmd)
+              (if (eq? cmd (quote init))
+                  (set! box (list 42))
+                  (car box)))))
+        (define f (make))
+        (f (quote init))
+        (define (spin n)
+          (if (= n 0) 0 (begin (cons 1 2) (cons 3 4) (spin (- n 1)))))
+        (spin 50000)
+        (f (quote read))
+    "#;
+    common::assert_int(src, 42);
+}

@@ -248,14 +248,12 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
             span,
         } => {
             let c = eval_expr(cond, env, heap)?;
+            // TD-018：与 VM `JumpIfFalse` 同源消息（messages 单源构造）
             match c {
                 Value::Bool(true) => eval_expr(then_branch, env, heap),
                 Value::Bool(false) => eval_expr(else_branch, env, heap),
                 other => Err(EvalError::new(
-                    format!(
-                        "if 条件需要 bool，实际 {}（truthy 语义显式定义）",
-                        other.type_name()
-                    ),
+                    crate::messages::err_if_cond_bool(other.type_name()),
                     *span,
                 )),
             }
@@ -270,7 +268,10 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
             if env.set(*name, scopes, v.clone()) {
                 Ok(v)
             } else {
-                Err(EvalError::new("set! 未绑定变量", *span))
+                Err(EvalError::new(
+                    crate::messages::err_setbang_unbound(),
+                    *span,
+                ))
             }
         }
         CoreExpr::Define { name, value, span } => {

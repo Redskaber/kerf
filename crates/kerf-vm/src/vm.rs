@@ -16,16 +16,16 @@
 //! **迭代式主循环**：kerf 递归以帧栈（堆分配）承载——Rust 栈深度恒定，
 //! 深递归不再受宿主栈限制（帧数上限 100_000 显式防护）。
 
-use std::cell::RefCell;
+use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
 use kerf_compiler::{BcConst, BcProgram, Op};
-use kerf_runtime::{BoxedInput, GcRef, Heap, RootSet};
+use kerf_runtime::{BoxedInput, ForeignBox, GcRef, Heap, RootSet};
 use kerf_span::Span;
 use kerf_syntax::Symbol;
 
-use crate::value::{ClosureValue, Value};
+use crate::value::{BuiltinFn, ClosureValue, GcCell, Value};
 
 /// 运行时上下文（heap 持有方）。
 pub struct Rt {
@@ -79,10 +79,10 @@ pub struct Frame {
     /// 本帧执行的原型索引。
     pub proto: usize,
     /// 局部槽（参数 + let 绑定）——**共享单元格**（捕获语义：set! 经
-    /// `Rc<RefCell>` 传播到闭包，letrec 递归成立）。
-    pub locals: Vec<Rc<RefCell<Value>>>,
+    /// `Rc<GcCell>` 传播到闭包，letrec 递归成立；TD-023 堆根性摘要）。
+    pub locals: Vec<Rc<GcCell>>,
     /// 闭包捕获槽（共享可变单元）。
-    pub captures: Vec<Rc<RefCell<Value>>>,
+    pub captures: Vec<Rc<GcCell>>,
     /// 三扩展槽（格式冻结）。
     pub ext: FrameExt,
     /// 调用点 Span（堆栈追踪）。
@@ -265,11 +265,9 @@ pub fn call_closure(
             Span::dummy(),
         ));
     }
-    // 参数入单元格（捕获共享语义的帧基础——与 CALL 同构）
-    let local_cells: Vec<std::rc::Rc<std::cell::RefCell<Value>>> = args
-        .into_iter()
-        .map(|v| std::rc::Rc::new(std::cell::RefCell::new(v)))
-        .collect();
+    // 参数入单元格（捕获共享语义的帧基础——与 CALL 同构；GcCell
+    // 承载堆根性摘要标志，TD-023）
+    let local_cells: Vec<Rc<GcCell>> = args.into_iter().map(|v| Rc::new(GcCell::new(v))).collect();
     let mut frames: Vec<Frame> = vec![Frame {
         ret_proto: 0,
         ret_pc: 0,
@@ -309,6 +307,10 @@ fn execute(
     let mut pc: u32 = 0;
     let mut instructions: u64 = 0;
     let mut gc_cooldown: u64 = 0;
+    // TD-023 对症（r24/42-e）：GC 根扫描缓冲跨周期复用（clear 保容量
+    // ——根遍历无分配化路径；visited 在闭包密集负载下免每周期重建）
+    let mut gc_root_scratch: Vec<GcRef> = Vec::new();
+    let mut gc_visited_scratch: HashSet<usize> = HashSet::new();
 
     // 主循环（迭代式——kerf 递归经帧栈承载，Rust 栈恒定）
     loop {
@@ -408,7 +410,7 @@ fn execute(
                         .get(*i as usize)
                         .ok_or_else(|| VmError::new(format!("局部槽 {} 越界", i), span))?,
                 );
-                push!(cell.borrow().clone());
+                push!(cell.get().clone());
             }
             Op::StoreLocal(i) => {
                 let v = pop!();
@@ -418,7 +420,8 @@ fn execute(
                         .get(*i as usize)
                         .ok_or_else(|| VmError::new(format!("局部槽 {} 越界", i), span))?,
                 );
-                *cell.borrow_mut() = v;
+                // GcCell::set：写路径同步维护堆根性摘要（TD-023）
+                cell.set(v);
             }
             Op::LoadGlobal(k) => {
                 let sym = match &program.consts[*k as usize] {
@@ -444,7 +447,7 @@ fn execute(
                 // S1/E3 语义（与 eval 路径 `Env::set` 对齐，T1 定理）：
                 // set! 只写已存在的绑定——未绑定报错而非静默创建全局。
                 if !globals.contains_key(&sym) {
-                    return Err(VmError::new("set! 未绑定变量", span));
+                    return Err(VmError::new(crate::messages::err_setbang_unbound(), span));
                 }
                 globals.insert(sym, v);
             }
@@ -467,7 +470,7 @@ fn execute(
                     .captures
                     .get(*i as usize)
                     .ok_or_else(|| VmError::new(format!("捕获槽 {} 越界", i), span))?;
-                push!(cell.borrow().clone());
+                push!(cell.get().clone());
             }
             Op::StoreCaptured(i) => {
                 let v = pop!();
@@ -477,13 +480,15 @@ fn execute(
                         .get(*i as usize)
                         .ok_or_else(|| VmError::new(format!("捕获槽 {} 越界", i), span))?,
                 );
-                *cell.borrow_mut() = v;
+                // GcCell::set：写路径同步维护堆根性摘要（TD-023）
+                cell.set(v);
             }
             Op::Jump(t) => {
                 pc = *t;
             }
             Op::JumpIfFalse(t) => {
                 let c = pop!();
+                // TD-018：消息经 messages 单源构造（与 eval if 臂同文）
                 match c {
                     Value::Bool(b) => {
                         if !b {
@@ -492,10 +497,7 @@ fn execute(
                     }
                     other => {
                         return Err(VmError::new(
-                            format!(
-                                "条件位置需要 bool，实际 {}（truthy 语义显式定义）",
-                                other.type_name()
-                            ),
+                            crate::messages::err_if_cond_bool(other.type_name()),
                             span,
                         ))
                     }
@@ -514,8 +516,7 @@ fn execute(
                     ));
                 }
                 let f = &frames[frame_idx];
-                let mut captures: Vec<Rc<RefCell<Value>>> =
-                    Vec::with_capacity(*n_captures as usize);
+                let mut captures: Vec<Rc<GcCell>> = Vec::with_capacity(*n_captures as usize);
                 for src in &target.capture_sources {
                     let cell = match src {
                         kerf_compiler::CaptureSource::Local(i) => Rc::clone(
@@ -578,9 +579,10 @@ fn execute(
                                 span,
                             ));
                         }
-                        // 参数入单元格（捕获共享语义的帧基础）
-                        let local_cells: Vec<Rc<RefCell<Value>>> =
-                            args.into_iter().map(|v| Rc::new(RefCell::new(v))).collect();
+                        // 参数入单元格（捕获共享语义的帧基础；GcCell 承载
+                        // 堆根性摘要标志，TD-023）
+                        let local_cells: Vec<Rc<GcCell>> =
+                            args.into_iter().map(|v| Rc::new(GcCell::new(v))).collect();
                         let frame = Frame {
                             ret_proto: proto_idx,
                             ret_pc: pc,
@@ -657,8 +659,8 @@ fn execute(
                         // 帧替换（净零）：拆除当前帧，继承其返回地址——被调方
                         // RET 直达当前帧的调用者。MAX_FRAMES 不检查（帧数
                         // 恒定）；失控尾循环由指令预算护栏兜底。
-                        let local_cells: Vec<Rc<RefCell<Value>>> =
-                            args.into_iter().map(|v| Rc::new(RefCell::new(v))).collect();
+                        let local_cells: Vec<Rc<GcCell>> =
+                            args.into_iter().map(|v| Rc::new(GcCell::new(v))).collect();
                         let old = frames.pop().expect("尾调用帧存在");
                         let frame = Frame {
                             ret_proto: old.ret_proto,
@@ -719,7 +721,7 @@ fn execute(
                     Value::Bool(b) => push!(Value::Bool(!b)),
                     other => {
                         return Err(VmError::new(
-                            format!("not 需要 bool，实际 {}", other.type_name()),
+                            crate::messages::err_not_bool(other.type_name()),
                             span,
                         ))
                     }
@@ -741,7 +743,7 @@ fn execute(
                     },
                     other => {
                         return Err(VmError::new(
-                            format!("car 需要 pair，实际 {}", other.type_name()),
+                            crate::messages::err_pair_op("car", other.type_name()),
                             span,
                         ))
                     }
@@ -756,7 +758,7 @@ fn execute(
                     },
                     other => {
                         return Err(VmError::new(
-                            format!("cdr 需要 pair，实际 {}", other.type_name()),
+                            crate::messages::err_pair_op("cdr", other.type_name()),
                             span,
                         ))
                     }
@@ -799,8 +801,14 @@ fn execute(
             && gc_cooldown == 0
             && heap.should_collect()
         {
-            let roots = collect_roots(&stack, globals, frames);
+            // TD-023：根扫描缓冲复用（take/归还——零 API 变更面）
+            let mut roots_buf = std::mem::take(&mut gc_root_scratch);
+            let mut visited_buf = std::mem::take(&mut gc_visited_scratch);
+            collect_roots_into(&stack, globals, frames, &mut roots_buf, &mut visited_buf);
+            let roots = RootSet { refs: roots_buf };
             let stats = kerf_runtime::mark_sweep_cycle(heap, &roots);
+            gc_root_scratch = roots.refs;
+            gc_visited_scratch = visited_buf;
             // 回收收益 < 25% → 冷却（存活根主导，降低扫描频率）
             if stats.total_freed as usize * 4 < stats.slots {
                 gc_cooldown = GC_COOLDOWN_MULTIPLIER;
@@ -824,7 +832,8 @@ fn const_to_value(c: &BcConst) -> Value {
     }
 }
 
-/// 值 → 堆引用（即时值装箱；闭包装箱不支持——显式限制，TD-010）。
+/// 值 → 堆引用（即时值装箱；闭包/内置经 Foreign 形态装箱——TD-010
+/// r24 解决：原标记字符串占位 → 真装箱，解箱往返保持 Rc 恒等）。
 /// 公共助手：driver 的 cons/list 等内置函数复用。
 pub fn box_value(v: &Value, heap: &mut Heap) -> GcRef {
     match v {
@@ -836,16 +845,23 @@ pub fn box_value(v: &Value, heap: &mut Heap) -> GcRef {
         Value::Bool(b) => heap.alloc_boxed(BoxedInput::Bool(*b)),
         Value::Nil => heap.alloc_boxed(BoxedInput::Nil),
         Value::Unit => heap.alloc_boxed(BoxedInput::Str(Rc::from("unit"))),
-        Value::Closure(_) | Value::Builtin(_) => {
-            // TD-010：闭包装箱显式占位（以可识别标记字符串——调用方 car/cdr
-            // 将得到 str；此路径在 Stage 0 程序中不可达（编译器不生成），
-            // 出现即为上游 bug，堆栈追踪可见）
-            heap.alloc_boxed(BoxedInput::Str(Rc::from("#<procedure:unboxed>")))
-        }
+        // TD-010（r24）：闭包/内置装箱——ForeignBox 承载类型擦除的
+        // Rc（共享 → eq? 按引用相等的往返恒等性）+ 追踪器（标记阶段
+        // 枚举闭包捕获图的 Pair 子引用）
+        Value::Closure(rc) => heap.alloc_foreign(ForeignBox {
+            any: rc.clone(),
+            tracer: trace_foreign_value,
+        }),
+        Value::Builtin(rc) => heap.alloc_foreign(ForeignBox {
+            any: rc.clone(),
+            tracer: trace_foreign_value,
+        }),
     }
 }
 
 /// 堆槽 → 值（公共助手：driver 的 car/cdr 等内置函数复用）。
+/// TD-010（r24）：Foreign 槽位 downcast 还原闭包/内置——Rc 共享
+/// 装箱 → 解箱后 eq? 按引用相等（恒等性保持）。
 pub fn unbox_slot(r: GcRef, heap: &Heap) -> Value {
     use kerf_runtime::ValueSlot;
     match heap.unbox(r) {
@@ -856,30 +872,54 @@ pub fn unbox_slot(r: GcRef, heap: &Heap) -> Value {
         Some(ValueSlot::Bool(b)) => Value::Bool(b),
         Some(ValueSlot::Symbol(s)) => Value::Symbol(s),
         Some(ValueSlot::Nil) => Value::Nil,
+        Some(ValueSlot::Foreign(b)) => {
+            // downcast 消耗 Rc：先闭包后内置（装箱方只产生这两种形态）
+            if let Ok(c) = b.any.clone().downcast::<ClosureValue>() {
+                return Value::Closure(c);
+            }
+            if let Ok(f) = b.any.clone().downcast::<BuiltinFn>() {
+                return Value::Builtin(f);
+            }
+            // 防御：未知 Foreign 载体（不发生于当前装箱方——上游不变式）
+            Value::Nil
+        }
         None => Value::Nil,
     }
 }
 
 /// 根集枚举（§19.4 根集完备性：VM 栈 + 帧局部 + 全局环境 + 闭包捕获；
 /// foreign 根由 Heap 自持）。闭包捕获图经访问集去重（Rc 环防御）。
-fn collect_roots(stack: &[Value], globals: &HashMap<Symbol, Value>, frames: &[Frame]) -> RootSet {
-    let mut roots = RootSet::new();
-    let mut visited: HashSet<usize> = HashSet::new();
+/// **TD-023 对症（r24/42-e）**：①缓冲由调用方持有跨周期复用
+/// （visited/root——无分配化路径 B）；②非堆单元 O(1) 跳过
+/// （GcCell::has_heap 摘要——深帧根扫描实测主导成本的对症）。
+#[allow(clippy::too_many_arguments)]
+fn collect_roots_into(
+    stack: &[Value],
+    globals: &HashMap<Symbol, Value>,
+    frames: &[Frame],
+    roots: &mut Vec<GcRef>,
+    visited: &mut HashSet<usize>,
+) {
+    roots.clear();
+    visited.clear();
     for v in stack.iter().chain(globals.values()) {
-        collect_value_roots(v, &mut roots, &mut visited);
+        collect_value_roots(v, roots, visited);
     }
     for f in frames {
         for cell in &f.locals {
-            collect_value_roots(&cell.borrow(), &mut roots, &mut visited);
+            if cell.has_heap() {
+                collect_value_roots(&cell.get(), roots, visited);
+            }
         }
         for cell in &f.captures {
-            collect_value_roots(&cell.borrow(), &mut roots, &mut visited);
+            if cell.has_heap() {
+                collect_value_roots(&cell.get(), roots, visited);
+            }
         }
     }
-    roots
 }
 
-fn collect_value_roots(v: &Value, roots: &mut RootSet, visited: &mut HashSet<usize>) {
+fn collect_value_roots(v: &Value, roots: &mut Vec<GcRef>, visited: &mut HashSet<usize>) {
     match v {
         Value::Pair(r) => roots.push(*r),
         Value::Closure(rc) => {
@@ -887,12 +927,52 @@ fn collect_value_roots(v: &Value, roots: &mut RootSet, visited: &mut HashSet<usi
             if visited.insert(key) {
                 if let ClosureValue::Bytecode { captures, .. } = rc.as_ref() {
                     for cell in captures {
-                        collect_value_roots(&cell.borrow(), roots, visited);
+                        if cell.has_heap() {
+                            collect_value_roots(&cell.get(), roots, visited);
+                        }
                     }
                 }
             }
         }
         // _ 臂理由：即时值（Unit/Nil/Bool/Int/Float/Str/Builtin）无堆子引用，无需入根集
+        _ => {}
+    }
+}
+
+/// Foreign 装箱值的 GC 追踪器（TD-010）：标记阶段由 Heap::children
+/// 调用——闭包捕获图内的 Pair 引用全量入 out（镜像
+/// collect_value_roots 的遍历面；Rc 去重防环）；内置函数无 GC 可见
+/// 捕获（no-op）。
+fn trace_foreign_value(any: &Rc<dyn Any>, out: &mut Vec<GcRef>) {
+    if let Some(ClosureValue::Bytecode { captures, .. }) =
+        any.as_ref().downcast_ref::<ClosureValue>()
+    {
+        let mut visited: HashSet<usize> = HashSet::new();
+        for cell in captures {
+            if cell.has_heap() {
+                trace_value_refs(&cell.get(), out, &mut visited);
+            }
+        }
+    }
+}
+
+/// 追踪递归体（与 collect_value_roots 同语义：Pair 入列、闭包去重展开）。
+fn trace_value_refs(v: &Value, out: &mut Vec<GcRef>, visited: &mut HashSet<usize>) {
+    match v {
+        Value::Pair(r) => out.push(*r),
+        Value::Closure(rc) => {
+            let key = Rc::as_ptr(rc) as usize;
+            if visited.insert(key) {
+                if let ClosureValue::Bytecode { captures, .. } = rc.as_ref() {
+                    for cell in captures {
+                        if cell.has_heap() {
+                            trace_value_refs(&cell.get(), out, visited);
+                        }
+                    }
+                }
+            }
+        }
+        // _ 臂理由：即时值/内置无堆子引用
         _ => {}
     }
 }

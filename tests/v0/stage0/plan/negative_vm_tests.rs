@@ -9,7 +9,9 @@
 //!
 //! 语义边界（实测确认，非负例）：
 //! - 数值塔混合 `( < 1 2.0)` 合法（Int/Float 经 as_number 比较）；
-//! - `(= 1 1.0)` 合法（数值塔相等）；`(= "a" "b")` 合法（字符串仅支持 =）；
+//! - `(= 1 1.0)` 合法（数值塔相等）；`(= "a" "b")` 合法（字符串相等）；
+//!   `(< "a" "b")` 合法（TD-011 r24：字符串全序码点序——正例锚
+//!   stdlib_tests，本文件负例面 = 混合链拒绝）；
 //! - `(/ 1 0.0)` 合法（IEEE754 → inf；仅整数除零报 E5）；
 //! - `(list)` 可变参（零参 → 空表，无元数错误）；
 //! - 链式比较全操作数前置校验（TD-016 批次 C 收紧后语义，09-stdlib
@@ -19,10 +21,12 @@
 //!   静态检查面（kerf check）同步收敛——typecheck_tests R3。
 //! - `read-line` 不校验元数（任意实参被忽略——见 FS-4）。
 //!
-//! 双路径消息分裂面（VM ≠ eval，仅断言 VM 侧，分裂记录于文档）：
-//! - 未绑定变量：VM「未绑定的全局变量（…）」vs eval「未绑定变量」；
-//! - if 非布尔：VM「条件位置需要 bool」vs eval「if 条件需要 bool」；
-//! - 提升表达式错误：eval 多包一层「求值失败：」前缀。
+//! 双路径消息面（TD-018 r24 统一后）：
+//! - if 非布尔：VM 与 eval 同文「if 条件需要 bool，实际 …」
+//!   （messages.rs 单源）；
+//! - 未绑定变量：VM「未绑定的全局变量（…）」vs eval「未绑定变量」
+//!   ——保留（阶段信息差异：VM 侧携带全局兜底解析完成度）；
+//! - 提升表达式错误：eval 多包一层「求值失败：」前缀（存档参考面）。
 //!
 //! 已修复缺陷（原存档 #[ignore]，D3/D4 修复后激活）：
 //! - `(mod -9223372036854775808 -1)`：checked_rem 结构化报错
@@ -150,14 +154,15 @@ fn integer_overflow_detected() {
 // 比较（= < > <= >=）：类型规则 × 元数
 // ---------------------------------------------------------------------------
 
-/// 字符串序比较（4 case）：仅支持 =（Stage 0 边界，TD-011）。
+/// 字符串链混合非字符串串入（4 case，TD-011 r24 后的负例面）：
+/// 全字符串链已合法（码点序——正例见 stdlib_tests）；混合链
+//  （字符串链串入数值）仍报 `{op} 需要数值`（首个非数值归因）。
 #[test]
-fn comparison_string_ordering_rejected() {
-    let msg = "字符串仅支持 = 比较（Stage 0 边界，TD-011）";
-    expect_run_err("(< \"a\" \"b\")", msg);
-    expect_run_err("(> \"a\" \"b\")", msg);
-    expect_run_err("(<= \"a\" \"b\")", msg);
-    expect_run_err("(>= \"a\" \"b\")", msg);
+fn comparison_string_chain_mixed_rejected() {
+    expect_run_err("(< \"a\" \"b\" 1)", "< 需要数值");
+    expect_run_err("(> \"a\" 1 \"b\")", "> 需要数值");
+    expect_run_err("(<= \"a\" \"b\" \"c\" 2)", "<= 需要数值");
+    expect_run_err("(>= 3 \"a\" \"b\")", ">= 需要数值");
 }
 
 /// 比较类型不匹配 ×5 算子 ×6 变体（30 case）：消息 `{op} 需要数值`。
@@ -358,8 +363,9 @@ fn not_callable_values() {
     }
 }
 
-/// if 条件非布尔 ×6 类型（6 case，VM 消息形态）。注：eval 路径消息
-/// 前缀不同（「if 条件需要 bool」）——双路径分裂面，仅断言 VM 侧。
+/// if 条件非布尔 ×6 类型（6 case，VM 消息形态）。TD-018（r24）：消息
+/// 经 messages.rs 单源构造，与 eval 参考路径同文——前缀统一为
+/// 「if 条件需要 bool」（与静态面 R1 诊断前缀一致）。
 #[test]
 fn if_condition_requires_bool() {
     let bad = [
@@ -372,7 +378,7 @@ fn if_condition_requires_bool() {
     ];
     for (operand, type_name) in bad {
         let src = format!("(if {} 1 2)", operand);
-        expect_run_err(&src, &format!("条件位置需要 bool，实际 {}", type_name));
+        expect_run_err(&src, &format!("if 条件需要 bool，实际 {}", type_name));
     }
 }
 
@@ -532,7 +538,7 @@ fn symbol_value_misuse() {
         ("(+ 1 'a)", "+ 需要 int"),
         ("(- 'a 'b)", "- 需要 int"),
         ("(* 'a 2)", "* 需要 int"),
-        ("(if 'a 1 2)", "条件位置需要 bool，实际 symbol"),
+        ("(if 'a 1 2)", "if 条件需要 bool，实际 symbol"),
         ("(car 'a)", "car 需要 pair，实际 symbol"),
         ("(= 'a 1)", "= 需要数值"),
     ];

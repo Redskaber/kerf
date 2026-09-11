@@ -137,10 +137,11 @@ pub enum TcParams {
     Variadic(TcParam),
     /// 定长：逐位规则（长度即固定元数）。
     Fixed(&'static [TcParam]),
-    /// `=` 族特例：全数值或全字符串（09-stdlib TD-011/016 边界语义）。
+    /// `=` 族特例：全数值或全字符串（09-stdlib TD-016 边界语义；
+    /// TD-011 r24 解决后字符串全序参与全族——与 Ordering 同语义）。
     NumOrAllStr,
-    /// 排序比较族（< > <= >=）：全数值；全字符串 → 字符串不支持
-    /// 排序（TD-011 边界——与运行时消息对齐）。
+    /// 排序比较族（< > <= >=）：全数值或全字符串（码点序）；
+    /// 混合即静态确定错误（TD-011 r24：与运行时/`=` 族同口径）。
     Ordering,
 }
 
@@ -449,46 +450,18 @@ impl<'a> TypeCtxt<'a> {
                     self.check_param_rule(op, *rule, *ty, a, diags);
                 }
             }
-            TcParams::NumOrAllStr => {
-                // R3（`=` 族）：全数值或全字符串；混合即静态确定错误
-                // （TD-016 全操作数口径；TD-011 字符串仅 = 可比）
+            TcParams::NumOrAllStr | TcParams::Ordering => {
+                // R3（比较族——TD-016 全操作数口径；TD-011 r24 解决后
+                // 字符串全序参与全族）：全数值或全字符串链静态放行
+                // （码点序运行时合法）；混合链逐参数值域诊断
+                // （首个非数值 → `{op} 需要数值`，与运行时消息对齐）。
                 let concrete: Vec<TcType> = arg_tys
                     .iter()
                     .copied()
                     .filter(|t| !matches!(t, TcType::Unknown))
                     .collect();
                 if !concrete.is_empty() && concrete.iter().all(|t| matches!(t, TcType::Str)) {
-                    return; // 全字符串（= 的字符串相等——运行时合法）
-                }
-                for (a, ty) in args.iter().zip(arg_tys) {
-                    if matches!(ty, TcType::Unknown) || ty.is_num() {
-                        continue;
-                    }
-                    self.diag(
-                        diags,
-                        format!("{} 需要数值，实际 {}（静态检查）", op, ty.render()),
-                        expr_span(a, span),
-                    );
-                }
-            }
-            TcParams::Ordering => {
-                // R3（排序族）：全字符串 → 字符串不支持排序（TD-011 边界
-                // 消息对齐）；否则逐参要求数值
-                let concrete: Vec<TcType> = arg_tys
-                    .iter()
-                    .copied()
-                    .filter(|t| !matches!(t, TcType::Unknown))
-                    .collect();
-                if !concrete.is_empty() && concrete.iter().all(|t| matches!(t, TcType::Str)) {
-                    self.diag(
-                        diags,
-                        format!(
-                            "字符串仅支持 = 比较（Stage 0 边界，TD-011）（静态检查）——{}",
-                            op
-                        ),
-                        span,
-                    );
-                    return;
+                    return; // 全字符串（码点序比较——运行时合法）
                 }
                 for (a, ty) in args.iter().zip(arg_tys) {
                     if matches!(ty, TcType::Unknown) || ty.is_num() {

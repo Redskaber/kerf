@@ -212,14 +212,11 @@ fn r3_ordering_non_numeric() {
     // TD-016 静态面：短路后操作数同样检出（< 3 1 "a" 运行期已收紧）
     expect_diag("(< 3 1 \"a\")", "< 需要数值，实际 str");
     expect_diag("(= 1 2 \"s\")", "= 需要数值，实际 str");
-    // 全字符串排序 → TD-011 边界消息（静态对齐）
-    expect_diag(
-        "(< \"a\" \"b\")",
-        "字符串仅支持 = 比较（Stage 0 边界，TD-011）",
-    );
+    // TD-011（r24）：全字符串排序链静态放行（码点序——与运行时同口径）
+    expect_clean("(< \"a\" \"b\")");
+    expect_clean("(<= \"a\" \"a\")");
     // 静态确定性反向锚
     static_error_is_runtime_error("(< 3 1 \"a\")");
-    static_error_is_runtime_error("(< \"a\" \"b\")");
 }
 
 /// R3 等值族全字符串合法（零误报锚）+ 混串检出。

@@ -261,3 +261,53 @@ fn scope_subset_match_resolves_to_param() {
     let r2 = eval_program(&[app], &root, &mut heap2).unwrap();
     assert!(matches!(r2, Value::Int(42)), "eval 子集匹配命中：{:?}", r2);
 }
+
+/// 负例 5（TD-018 r24 回归）：if 条件非 bool 的**消息文本双路径同文**
+/// ——VM（`JumpIfFalse`）与 eval（if 臂）均经 `messages::err_if_cond_bool`
+/// 单源构造（此前 VM 侧「条件位置需要 bool」/ eval 侧「if 条件需要 bool」
+/// 文本分裂）。同骨架手构 `(if 1 2 3)` 双跑对拍断言。
+#[test]
+fn td018_if_cond_message_unified_dual_path() {
+    let one = Rc::new(CoreExpr::Literal {
+        value: kerf_core::LiteralValue::Int(1),
+        span: Span::dummy(),
+    });
+    let two = Rc::new(CoreExpr::Literal {
+        value: kerf_core::LiteralValue::Int(2),
+        span: Span::dummy(),
+    });
+    let three = Rc::new(CoreExpr::Literal {
+        value: kerf_core::LiteralValue::Int(3),
+        span: Span::dummy(),
+    });
+    let if_expr = Rc::new(CoreExpr::If {
+        cond: one,
+        then_branch: two,
+        else_branch: three,
+        span: Span::dummy(),
+    });
+    // VM 路径
+    let program = compile_module(std::slice::from_ref(&if_expr)).unwrap();
+    let mut globals = std::collections::HashMap::new();
+    let mut heap = Heap::new();
+    let err_vm = run_program(&program, &mut globals, &mut heap).unwrap_err();
+    // eval 路径
+    let root = Env::new();
+    let mut heap2 = Heap::new();
+    let err_ev = eval_program(&[if_expr], &root, &mut heap2).unwrap_err();
+    assert!(
+        err_vm.message.contains("if 条件需要 bool，实际 int"),
+        "VM 消息应含统一前缀：{}",
+        err_vm.message
+    );
+    assert!(
+        err_ev.message.contains("if 条件需要 bool，实际 int"),
+        "eval 消息应与 VM 同文：{}",
+        err_ev.message
+    );
+    // TD-018 核心判据：两路径消息文本一致（分裂面消除的回归锚）
+    assert_eq!(
+        err_vm.message, err_ev.message,
+        "TD-018：if 条件消息必须双路径同文"
+    );
+}

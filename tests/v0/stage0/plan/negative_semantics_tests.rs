@@ -16,16 +16,17 @@
 //!   （编译器保证不变式）——文档说明，不计 case；
 //! - E0003（Compile 阶段）同样非用户程序可触发（编译错误全部为
 //!   内部不变式防御）——文档说明，不计 case；
-//! - 嵌套 define 重复在**展开期**被体内部提升机制拒绝（消息为
-//!   「lambda 参数重名」——归因失真，P3 消息质量问题已登记），
-//!   语义上等价 E6 的提前防御（§2.3-4 报错>静默）；
+//! - 嵌套 define 重复在**展开期**被体内部提升机制拒绝（TD-014 r24
+//!   修正归因：专门消息「嵌套 define 重复绑定」+ Span 指向第二次出现
+//!   处——原「lambda 参数重名」归因失真已消除），语义上等价 E6 的
+//!   提前防御（§2.3-4 报错>静默）；
 //! - `(define car 5)` 影子化内置全局 → E6（内置名占据全局层，
 //!   同层重复定义约束对用户/内置统一生效）。
 //!
-//! 双路径消息分裂面（VM ≠ eval 文本，仅 VM 侧断言消息，Err 事实
-//! 双侧断言）：
-//! - 未绑定变量：VM「未绑定的全局变量（…）」vs eval「未绑定变量」；
-//! - if 非布尔：VM「条件位置需要 bool」vs eval「if 条件需要 bool」。
+//! 双路径消息面（TD-018 r24 统一后）：
+//! - 未绑定变量：VM「未绑定的全局变量（…）」vs eval「未绑定变量」
+//!   ——保留（阶段信息差异：VM 侧携带全局兜底解析完成度）；
+//! - if 非布尔：VM 与 eval 同文「if 条件需要 bool」（messages.rs 单源）。
 
 use crate::common;
 
@@ -224,7 +225,8 @@ fn e6_duplicate_define_matrix() {
     expect_run_err("(define cdr 5)", "重复定义变量");
     expect_run_err("(define n 1) (set! n 5) (define n 2)", "重复定义变量");
     expect_run_err("(begin (define b 1) (define b 2))", "重复定义变量");
-    // 嵌套重复：直接体 define 提升后展开期拒绝（消息归因 P3 已登记）；
+    // 嵌套重复：直接体 define 提升后展开期拒绝（TD-014 r24：专门消息
+    // 归因到「嵌套 define 重复绑定」——原「lambda 参数重名」失真已消除）；
     // begin 包裹的 define：D1 修复后编译期结构化拒绝（修复前 VM 全局
     // 泄漏 vs eval 词法定义——T1 反例；两路径共享 compile_source 同报 E0003）
     let lifted =
@@ -234,7 +236,7 @@ fn e6_duplicate_define_matrix() {
         Stage::Expand,
         "直接体 define 重复在展开期拒绝"
     );
-    assert!(lifted.rendered.contains("参数重名"));
+    assert!(lifted.rendered.contains("嵌套 define 重复绑定"));
     let begin_wrapped = run_source(
         "(define (f) (begin (define y 1) (define y 2))) (f)",
         "neg.krf",

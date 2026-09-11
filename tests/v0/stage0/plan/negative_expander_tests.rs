@@ -85,7 +85,8 @@ fn empty_application_family() {
 }
 
 /// lambda 误用（8 case）：元数/参数表结构/参数类型/重名/嵌套重名/
-/// 体部重复 define（提升路径映射为参数重名）。
+/// 体部重复 define（TD-014 r24：嵌套重名以专门消息归因——原
+/// 「lambda 参数重名」提升路径兜底已消除）。
 #[test]
 fn lambda_misuse() {
     let cases: &[(&str, &str)] = &[
@@ -99,7 +100,10 @@ fn lambda_misuse() {
         ),
         ("(lambda (x x) x)", "lambda 参数重名"),
         ("((lambda (x) (lambda (x x) x)) 1)", "lambda 参数重名"),
-        ("(lambda () (define x 1) (define x 2))", "lambda 参数重名"),
+        (
+            "(lambda () (define x 1) (define x 2))",
+            "嵌套 define 重复绑定",
+        ),
     ];
     for (src, msg) in cases {
         expect_expand_err(src, msg);

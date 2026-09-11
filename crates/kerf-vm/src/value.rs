@@ -3,9 +3,10 @@
 //! 双路径闭包形态：
 //! - `ClosureValue::Eval`：树走查路径（`Rc` 环境链——§8.4 伪代码的忠实落地）；
 //! - `ClosureValue::Bytecode`：VM 路径（原型索引 + 共享可变捕获单元——
-//!   词法闭包的 set! 语义经 `Rc<RefCell<Value>>` 传播）。
+//!   词法闭包的 set! 语义经 `Rc<GcCell>` 传播；TD-023 r24：单元携带
+//!   堆根性摘要标志，GC 根扫描 O(1) 跳过非堆单元）。
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -54,14 +55,14 @@ impl Value {
     }
 
     /// truthy 判定（§19.5 陷阱 3：仅 Bool——其余类型报错显式化）。
-    pub fn truthy(&self) -> Option<bool> {
+    /// **单一实现**（TD-018）：VM 条件跳转与 eval if 臂共用本入口，
+    /// 消息经 `messages::err_if_cond_bool` 单源构造（此前两路径文本分裂）。
+    pub fn truthy(&self) -> Result<bool, RuntimeError> {
         match self {
-            Value::Bool(b) => Some(*b),
-            other => Err(RuntimeError::new(format!(
-                "条件位置需要 bool，实际 {}（truthy 语义显式定义：仅 Bool 参与分支）",
-                other.type_name()
-            )))
-            .ok(),
+            Value::Bool(b) => Ok(*b),
+            other => Err(RuntimeError::new(crate::messages::err_if_cond_bool(
+                other.type_name(),
+            ))),
         }
     }
 
@@ -115,11 +116,51 @@ pub enum ClosureValue {
         body: Rc<CoreExpr>,
         env: Rc<Env>,
     },
-    /// 字节码 VM 路径：原型索引 + 捕获单元（共享可变）。
+    /// 字节码 VM 路径：原型索引 + 捕获单元（共享可变——GcCell
+    /// 承载，堆根性摘要标志随写维护）。
     Bytecode {
         proto: u32,
-        captures: Vec<Rc<RefCell<Value>>>,
+        captures: Vec<Rc<GcCell>>,
     },
+}
+
+/// VM 路径共享可变单元（TD-023 对症，r24/42-e）：值 + **堆根性摘要
+/// 标志**。标志由写路径（`set`）维护：Pair/Closure → true、其余 →
+/// false——是当前值的精确保守摘要（每写必置，sound 不变式）。
+/// GC 根集枚举对非堆单元 O(1) 跳过（深帧根扫描实测主导成本——
+/// 非尾形基准 2×→3.2-3.7× 超线性的对症面；见 performance-baseline §4）。
+#[derive(Debug)]
+pub struct GcCell {
+    has_heap: Cell<bool>,
+    value: RefCell<Value>,
+}
+
+impl GcCell {
+    pub fn new(v: Value) -> Self {
+        let has_heap = matches!(v, Value::Pair(_) | Value::Closure(_));
+        GcCell {
+            has_heap: Cell::new(has_heap),
+            value: RefCell::new(v),
+        }
+    }
+
+    /// 写入（维护堆根性摘要——TD-023 sound 不变式：每写必置）。
+    pub fn set(&self, v: Value) {
+        self.has_heap
+            .set(matches!(v, Value::Pair(_) | Value::Closure(_)));
+        *self.value.borrow_mut() = v;
+    }
+
+    /// 读取。
+    pub fn get(&self) -> std::cell::Ref<'_, Value> {
+        self.value.borrow()
+    }
+
+    /// 堆根性（GC 根扫描跳过判据：false ⇒ 当前值必为即时值/内置——
+    /// 无堆子引用，无需入根集）。
+    pub fn has_heap(&self) -> bool {
+        self.has_heap.get()
+    }
 }
 
 /// 内置函数实现类型（§10.1 规则 2：`-er` 后缀语义）。
@@ -225,6 +266,7 @@ fn render_pair(r: GcRef, heap: &Heap, seen: &mut HashMap<GcRef, ()>) -> String {
 }
 
 /// 槽位终止值渲染（nil / 即时值；序对槽返回 None——由调用方续行）。
+/// TD-010（r24）：Foreign 槽位（闭包/内置）按函数值渲染。
 fn slot_terminal(r: GcRef, heap: &Heap) -> Option<String> {
     match heap.get(r).map(|s| s.obj.clone()) {
         Some(kerf_runtime::HeapObj::Nil) => Some("nil".to_string()),
@@ -233,6 +275,7 @@ fn slot_terminal(r: GcRef, heap: &Heap) -> Option<String> {
         Some(kerf_runtime::HeapObj::Bool(b)) => Some(b.to_string()),
         Some(kerf_runtime::HeapObj::Str(s)) => Some(s.to_string()),
         Some(kerf_runtime::HeapObj::Symbol(s)) => Some(s.to_string()),
+        Some(kerf_runtime::HeapObj::Foreign(b)) => Some(render_foreign(&b)),
         _ => None,
     }
 }
@@ -247,7 +290,20 @@ fn render_slot(r: GcRef, heap: &Heap) -> String {
         Some(kerf_runtime::HeapObj::Bool(b)) => b.to_string(),
         Some(kerf_runtime::HeapObj::Symbol(s)) => s.to_string(),
         Some(kerf_runtime::HeapObj::Nil) => "nil".to_string(),
+        Some(kerf_runtime::HeapObj::Foreign(b)) => render_foreign(&b),
         None => "#<invalid-slot>".to_string(),
+    }
+}
+
+/// Foreign 装箱值渲染（TD-010）：与直接函数值渲染同形——闭包
+/// `#<procedure>` / 内置 `#<builtin:名>`。
+fn render_foreign(b: &Rc<kerf_runtime::ForeignBox>) -> String {
+    if b.any.as_ref().downcast_ref::<ClosureValue>().is_some() {
+        "#<procedure>".to_string()
+    } else if let Some(f) = b.any.as_ref().downcast_ref::<BuiltinFn>() {
+        format!("#<builtin:{}>", f.name)
+    } else {
+        "#<foreign>".to_string()
     }
 }
 

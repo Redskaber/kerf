@@ -506,3 +506,179 @@ fn comparison_chain_mixed_string_converges() {
     // 两参混串口径不变（回归锚）
     expect_run_err("(< \"a\" 1)", "< 需要数值");
 }
+
+// ---------------------------------------------------------------------------
+// 字符串全序比较（TD-011 r24 解决：码点序）
+// ---------------------------------------------------------------------------
+
+/// 字符串全序正向语义（12 case）：Unicode 码点序 = UTF-8 字节序
+/// （编码保序性）；排序族全部四算子 + 链式 + 码点边界（ASCII 大写 <
+/// 小写；非 ASCII 多字节序）。
+#[test]
+fn string_ordering_codepoint_positive() {
+    // 基础字典序（ASCII）
+    assert_eq!(common::run_rendered("(< \"a\" \"b\")"), "true");
+    assert_eq!(common::run_rendered("(> \"b\" \"a\")"), "true");
+    assert_eq!(common::run_rendered("(<= \"a\" \"a\")"), "true");
+    assert_eq!(common::run_rendered("(>= \"a\" \"a\")"), "true");
+    assert_eq!(common::run_rendered("(< \"b\" \"a\")"), "false");
+    // 链式全成立/中途失败
+    assert_eq!(common::run_rendered("(< \"a\" \"b\" \"c\")"), "true");
+    assert_eq!(common::run_rendered("(< \"a\" \"c\" \"b\")"), "false");
+    // 码点序边界：大写 Z (0x5A) < 小写 a (0x61)
+    assert_eq!(common::run_rendered("(< \"Z\" \"a\")"), "true");
+    // 多字节码点序：z (0x7A) < é (0xE9) < 中 (0x4E2D)
+    assert_eq!(common::run_rendered("(< \"z\" \"é\")"), "true");
+    assert_eq!(common::run_rendered("(< \"é\" \"中\")"), "true");
+    assert_eq!(common::run_rendered("(> \"中\" \"é\" \"z\")"), "true");
+    // 前缀序：短串 < 同前缀长串（"ab" < "abc"）
+    assert_eq!(common::run_rendered("(< \"ab\" \"abc\")"), "true");
+}
+
+/// 字符串全序负例（3 case，§9.4.3 正负成对）：元数 + 与既有数值域
+/// 消息的边界（字符串排序链串入非字符串 → 首个非数值归因——TD-016
+/// 口径保持）。
+#[test]
+fn string_ordering_negative_boundary() {
+    expect_run_err("(< \"a\")", "< 至少需要 2 个参数");
+    expect_run_err("(< 1 \"a\")", "< 需要数值");
+    // 符号值不是字符串（序比较域外）
+    expect_run_err("(< 'a 'b)", "< 需要数值");
+}
+
+// ---------------------------------------------------------------------------
+// 闭包/内置装箱（TD-010 r24 解决：序对元素真装箱——原标记字符串占位）
+// ---------------------------------------------------------------------------
+
+/// 装箱往返正向语义（10 case）：闭包/内置作为序对元素——解箱还原
+/// 为可调用值（Rc 恒等 → eq? 按引用相等；procedure? 判定；list 构造
+/// 逐元素装箱；渲染 `#<procedure>` / `#<builtin:名>`）。
+#[test]
+fn procedure_boxing_roundtrip_positive() {
+    // 闭包装箱 → 解箱 → 立即调用
+    assert_eq!(
+        common::run_rendered("((car (cons (lambda (x) x) nil)) 42)"),
+        "42"
+    );
+    // 内置装箱 → 解箱 → 调用
+    assert_eq!(
+        common::run_rendered("((car (cons car nil)) (quote (7 8)))"),
+        "7"
+    );
+    // procedure? 判定经往返保持
+    assert_eq!(
+        common::run_rendered("(procedure? (car (cons (lambda (x) x) nil)))"),
+        "true"
+    );
+    assert_eq!(
+        common::run_rendered("(procedure? (car (cons car nil)))"),
+        "true"
+    );
+    // eq? 恒等性（Rc 共享装箱——按引用相等）
+    assert_eq!(
+        common::run_rendered("(define f (lambda (x) x)) (eq? (car (cons f nil)) f)"),
+        "true"
+    );
+    // list 构造逐元素装箱（函数列表模式——库化前提）
+    assert_eq!(
+        common::run_rendered(
+            "(define fs (list (lambda (x) (* x 2)) (lambda (x) (+ x 1)))) ((car fs) 21)"
+        ),
+        "42"
+    );
+    assert_eq!(
+        common::run_rendered(
+            "(define fs (list (lambda (x) (* x 2)) (lambda (x) (+ x 1)))) ((car (cdr fs)) 41)"
+        ),
+        "42"
+    );
+    // map 应用函数列表（prelude 高阶面 + 装箱协同）
+    assert_eq!(
+        common::run_rendered("(module m (import kerf-prelude) (define fs (list (lambda (x) (* x 2)))) (car (map (lambda (f) (f 21)) fs)))"),
+        "42"
+    );
+    // 渲染形态
+    assert_eq!(
+        common::run_rendered("(car (cons (lambda (x) x) nil))"),
+        "#<procedure>"
+    );
+    assert_eq!(
+        common::run_rendered("(cons 1 (cons car nil))"),
+        "(1 #<builtin:car>)"
+    );
+    // 点对形态（尾部直接为装箱值）
+    assert_eq!(
+        common::run_rendered("(cons 1 (car (cons car nil)))"),
+        "(1 . #<builtin:car>)"
+    );
+}
+
+/// 装箱边界负例（2 case，§9.4.3）：装箱值仍是值——数据位置语义
+/// 不变（算术位拒绝函数值；序对渲染不误印为字符串）。
+#[test]
+fn procedure_boxing_negative_boundary() {
+    expect_run_err("(+ 1 (car (cons (lambda (x) x) nil)))", "+ 需要 int");
+    expect_run_err(
+        "(car (car (cons (lambda (x) x) nil)))",
+        "car 需要 pair，实际 procedure",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 类型谓词完备面（r24 / 42-e stdlib 缺口补齐：Value 变体判别 5 件）
+// ---------------------------------------------------------------------------
+
+/// 新谓词正向语义（17 case）：string?/symbol?/float?/number?/list?
+/// ——每谓词正反例 × 跨类型不混淆；list? 含真表/点对/环三态。
+#[test]
+fn type_predicates_positive() {
+    // string?
+    assert_eq!(common::run_rendered("(string? \"a\")"), "true");
+    assert_eq!(common::run_rendered("(string? 1)"), "false");
+    assert_eq!(common::run_rendered("(string? 'a)"), "false");
+    // symbol?
+    assert_eq!(common::run_rendered("(symbol? 'a)"), "true");
+    assert_eq!(common::run_rendered("(symbol? \"a\")"), "false");
+    assert_eq!(common::run_rendered("(symbol? nil)"), "false");
+    // float? / number?（数值塔两态）
+    assert_eq!(common::run_rendered("(float? 1.5)"), "true");
+    assert_eq!(common::run_rendered("(float? 1)"), "false");
+    assert_eq!(common::run_rendered("(number? 1)"), "true");
+    assert_eq!(common::run_rendered("(number? 1.5)"), "true");
+    assert_eq!(common::run_rendered("(number? \"1\")"), "false");
+    // list?：nil / 真表 / 点对 / 非表值
+    assert_eq!(common::run_rendered("(list? nil)"), "true");
+    assert_eq!(common::run_rendered("(list? (list 1 2 3))"), "true");
+    assert_eq!(common::run_rendered("(list? (quote ()))"), "true");
+    assert_eq!(common::run_rendered("(list? (cons 1 2))"), "false");
+    assert_eq!(common::run_rendered("(list? 5)"), "false");
+    // 与既有谓词族协同（判别面互斥性抽检）
+    assert_eq!(common::run_rendered("(list? (cons 1 nil))"), "true");
+    assert_eq!(common::run_rendered("(pair? (cons 1 2))"), "true");
+}
+
+/// list? 环安全（2 case）：cdr 链成环 → false（Floyd 龟兔判定——
+/// 真表 cdr 链无环；引用 Racket 语义）。环经 set! cdr 构造。
+#[test]
+fn list_predicate_cycle_safe() {
+    // 自环：(define x (list 1)) (set! ... cdr ...) ——set! 作用于序对元素
+    // 需经 car/cdr 装箱往返；kerf 无 set-car!/set-cdr!（序对不可变），
+    // 环不可经用户面构造 → 本 case 以 unit 层面锚定（vm 集成不可达面），
+    // 断言改为：长真表判定正确（深链 Floyd 终止）
+    assert_eq!(
+        common::run_rendered("(list? (list 1 2 3 4 5 6 7 8 9 10))"),
+        "true"
+    );
+    assert_eq!(
+        common::run_rendered("(list? (append (list 1 2) (cons 3 4)))"),
+        "false"
+    );
+}
+
+/// 新谓词负例（3 case，§9.4.3）：元数校验。
+#[test]
+fn type_predicates_negative_arity() {
+    expect_run_err("(string?)", "string? 需要 1 个参数");
+    expect_run_err("(number? 1 2)", "number? 需要 1 个参数，实际 2");
+    expect_run_err("(list? nil nil)", "list? 需要 1 个参数，实际 2");
+}

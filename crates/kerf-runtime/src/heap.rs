@@ -3,6 +3,7 @@
 //! 结构：`slots` 为对象槽位向量（`GcRef` = 槽位索引）；sweep 将未标记槽
 //! 归还 `free` 空闲表（Stage 0「只分配不压缩」策略，§19.4 陷阱 3）。
 
+use std::any::Any;
 use std::rc::Rc;
 
 use crate::gc::RootSet;
@@ -11,7 +12,9 @@ use crate::gc::RootSet;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct GcRef(pub u32);
 
-/// 堆对象种类（Layer 0 自包含对象模型——闭包装箱见 TD-010）。
+/// 堆对象种类（Layer 0 自包含对象模型）。
+/// 闭包/内置函数的序对元素形态 = `Foreign`（TD-010 r24 解决：
+/// 原标记字符串占位 → 真装箱，往返恒等性保持）。
 #[derive(Clone)]
 pub enum HeapObj {
     /// 序对 (car . cdr)。
@@ -28,6 +31,39 @@ pub enum HeapObj {
     Symbol(Rc<str>),
     /// 装箱 nil。
     Nil,
+    /// 装箱 Foreign 值（闭包/内置函数——TD-010）：`any` 承载装箱方
+    /// 类型（kerf-vm 的函数值）；`tracer` 由装箱方提供，标记阶段
+    /// 枚举其 GC 可见子引用（闭包捕获图）——kerf-runtime 不依赖
+    /// kerf-vm 类型（§11 接口隔离：追踪协议而非类型耦合）。
+    Foreign(Rc<ForeignBox>),
+}
+
+/// Foreign 追踪器：枚举装箱值内 GC 可见子引用（闭包捕获图内的
+/// Pair 引用全量入 out——Rc 去重防环由实现方承担）。
+pub type ForeignTracer = fn(&Rc<dyn Any>, &mut Vec<GcRef>);
+
+/// Foreign 装箱值载体（TD-010）：值本体 + 追踪器。
+#[derive(Clone)]
+pub struct ForeignBox {
+    /// 装箱的函数值（kerf-vm Value::Closure/Builtin 的类型擦除形态；
+    /// Rc 共享 → 解箱往返保持恒等性（eq? 按引用相等））。
+    pub any: Rc<dyn Any>,
+    /// 标记阶段子引用追踪器（装箱方注入）。
+    pub tracer: ForeignTracer,
+}
+
+// `Rc<dyn Any>` 不可派生 Debug/PartialEq——手工实现（载体语义：
+// 值恒等 = Rc 同一分配；追踪器是装箱位点的伴生属性，不参与恒等判定）。
+impl std::fmt::Debug for ForeignBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ForeignBox(..)")
+    }
+}
+
+impl PartialEq for ForeignBox {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.any, &other.any)
+    }
 }
 
 impl std::fmt::Debug for HeapObj {
@@ -40,6 +76,7 @@ impl std::fmt::Debug for HeapObj {
             HeapObj::Bool(b) => write!(f, "Bool({})", b),
             HeapObj::Symbol(s) => write!(f, "Symbol({:?})", s),
             HeapObj::Nil => write!(f, "Nil"),
+            HeapObj::Foreign(_) => write!(f, "Foreign(..)"),
         }
     }
 }
@@ -54,6 +91,7 @@ impl PartialEq for HeapObj {
             (HeapObj::Bool(a), HeapObj::Bool(b)) => a == b,
             (HeapObj::Symbol(a), HeapObj::Symbol(b)) => a == b,
             (HeapObj::Nil, HeapObj::Nil) => true,
+            (HeapObj::Foreign(a), HeapObj::Foreign(b)) => Rc::ptr_eq(&a.any, &b.any),
             // _ 臂理由：不同构造子的组合（跨类型装箱值）不相等——类型严格相等
             _ => false,
         }
@@ -152,7 +190,12 @@ impl Heap {
         self.alloc_obj(HeapObj::Symbol(s))
     }
 
-    /// 装箱即时值（闭包/内置不可装箱——显式限制，TD-010）。
+    /// 分配装箱 Foreign 值（TD-010：闭包/内置函数的序对元素形态）。
+    pub fn alloc_foreign(&mut self, b: ForeignBox) -> GcRef {
+        self.alloc_obj(HeapObj::Foreign(Rc::new(b)))
+    }
+
+    /// 装箱即时值（TD-010 r24：闭包/内置经 Foreign 形态可装箱）。
     pub fn alloc_boxed(&mut self, v: BoxedInput) -> GcRef {
         match v {
             BoxedInput::Str(s) => self.alloc_obj(HeapObj::Str(s)),
@@ -160,6 +203,7 @@ impl Heap {
             BoxedInput::Float(f) => self.alloc_obj(HeapObj::Float(f)),
             BoxedInput::Bool(b) => self.alloc_obj(HeapObj::Bool(b)),
             BoxedInput::Nil => self.alloc_obj(HeapObj::Nil),
+            BoxedInput::Foreign(b) => self.alloc_obj(HeapObj::Foreign(Rc::new(b))),
         }
     }
 
@@ -174,6 +218,7 @@ impl Heap {
             HeapObj::Bool(v) => ValueSlot::Bool(*v),
             HeapObj::Symbol(v) => ValueSlot::Symbol(v.clone()),
             HeapObj::Nil => ValueSlot::Nil,
+            HeapObj::Foreign(b) => ValueSlot::Foreign(b.clone()),
         })
     }
 
@@ -240,6 +285,13 @@ impl Heap {
     fn children(&self, r: GcRef) -> Vec<GcRef> {
         match &self.get(r).map(|s| &s.obj) {
             Some(HeapObj::Pair(a, b)) => vec![*a, *b],
+            // TD-010：Foreign 槽位经装箱方注入的追踪器枚举闭包捕获图
+            // （Pair 引用全量——内建值无子引用，追踪器为 no-op）。
+            Some(HeapObj::Foreign(b)) => {
+                let mut out = Vec::new();
+                (b.tracer)(&b.any, &mut out);
+                out
+            }
             // _ 臂理由：非序对堆对象（Str/Int/Float/Bool/Nil）与越界引用均无子引用——标记图遍历无出边
             _ => Vec::new(),
         }
@@ -306,7 +358,8 @@ impl Heap {
     }
 }
 
-/// 装箱输入（Layer 0 即时值描述；闭包/内置不可装箱——TD-010）。
+/// 装箱输入（Layer 0 即时值描述；TD-010 r24：闭包/内置经 Foreign
+/// 形态可装箱）。
 #[derive(Debug, Clone, PartialEq)]
 pub enum BoxedInput {
     Str(Rc<str>),
@@ -314,9 +367,11 @@ pub enum BoxedInput {
     Float(f64),
     Bool(bool),
     Nil,
+    Foreign(ForeignBox),
 }
 
-/// 解箱输出（`Pair` 标记序对槽——调用方以槽位引用包装）。
+/// 解箱输出（`Pair` 标记序对槽——调用方以槽位引用包装；`Foreign`
+/// 携带装箱载体——调用方（kerf-vm）自行 downcast 还原函数值）。
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValueSlot {
     Pair,
@@ -326,6 +381,7 @@ pub enum ValueSlot {
     Bool(bool),
     Symbol(Rc<str>),
     Nil,
+    Foreign(Rc<ForeignBox>),
 }
 
 /// GC 统计快照。

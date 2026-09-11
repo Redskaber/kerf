@@ -1,10 +1,10 @@
 # Stage 0 最小内置库边界
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-11（v6.2：批次 F 深审回写——TD-021 hofs 用户面已 r15 解决（kerf-prelude 模块/opt-in import）注记；v5.6：r8 批次 D——I/O 六内置能力门控（require 声明 + R9/E0006 + 令牌授权面）+ FS-4 read-line 元数校验补齐；v5.5：r7 批次 C——TD-016 收紧：链式比较全操作数前置校验（运行时 + 静态面同步）；v5.4：r6 B3 交付——高阶函数四件套以 kerf 源码实现于 reader.krf 序章（经自举桥直测）；+4 自举 Reader 原语；用户面 hof 注入推迟批次 E（TD-021））
-> **Version**: v6.2
+> **Date**: 2026-09-11（**v6.3：r24 / 42-e stdlib 缺口补齐**——类型谓词 5 件（string?/symbol?/float?/number?/list?——Value 变体判别完备面 + Floyd 龟兔环安全）+ prelude foldr（foldl 对偶）+ **TD-011 解决**：字符串全序码点序参与全部比较族（静态面 R3 同步）；v6.2：批次 F 深审回写——TD-021 hofs 用户面已 r15 解决；v5.6：r8——I/O 六内置能力门控；v5.5：r7——TD-016 链式比较全操作数前置校验；v5.4：r6 B3——高阶函数四件套 kerf 源码化 + 4 自举 Reader 原语）
+> **Version**: v6.3
 > **Status**: Active
-> **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：~~高阶函数用户面注入~~（**已解决 r15**——kerf-prelude 模块承载，见 §2 v6.2 注记）、中缀运算符宏（Stage 2）、能力模型 I/O（Stage 2）、字符串全序比较（TD-011，Stage 2）
+> **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；**r24 / 42-e：谓词完备面 + foldr + 字符串全序交付——I2 stdlib 缺口清单清零**；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：~~高阶函数用户面注入~~（**已解决 r15**——kerf-prelude 模块承载）、~~字符串全序比较~~（**已解决 r24**——TD-011 码点序，见 §2 表）、中缀运算符宏（Stage 2）、能力模型 I/O（Stage 2）
 
 > 本文件界定 Stage 0 的内置库边界：**语言核心零内置**——算术、比较、序对、谓词、I/O 与 print 等内置函数全部由 driver（宿主侧启动器）在启动时注册为全局函数，而不进入语言核心。设计依据提取自 stage0.md §8.8（最小 I/O）与 §14.5（语言规范与文档流程），并遵循 [01-核心原语 §2](./01-core-forms.md) 的核心冻结原则。相关实现：I/O 与分配器接口见 [05-运行时](./05-runtime.md)，操作码级能力见 [04-字节码 VM §1](./04-bytecode-vm.md)，12 个能力模型矩阵见 [13-能力矩阵](./13-capability-matrix.md)（其 §2.8 为本文件 §2 的规范副本）。
 
@@ -29,12 +29,12 @@
 Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print` 两个用户可见内置函数（经 driver 注册的全局函数，非能力模型）；**通道层**是 [05-运行时 §1](./05-runtime.md) 的 `read_line_stdin()` / `write_line_stdout()`（kerf-runtime/src/io.rs，错误显式返回）。两层经 driver 内置函数接线（语言层 `read-line`/`print` 调用通道层函数）。Stage 0 不引入能力模型 I/O，但 VM 栈帧和分配器接口必须预留 `register_foreign_ref` 等接口（Stage 0 可为 no-op），以便 Stage 1+ 升级到能力模型时无需破坏接口——能力模型 I/O 的类型预留定义见 [13-能力矩阵 §3.1.3](./13-capability-matrix.md)。
 
 > **r8 能力门控注记（2026-09-10，批次 D，v5.6）**：上段「Stage 0 不引入能力模型」描述的是 Stage 0 基线；r8 起 I/O 内置进入**能力门控形态**（[13-能力矩阵 §3.1.3](./13-capability-matrix.md) r8 注记——「基础传递」做实）：程序须声明 `(require io read|write)` 才能引用门控内置（`print`/`newline`/`write-string` 需 write；`read-line`/`read-int`/`read-num` 需 read）；未声明引用 → **E0006 编译期错误**（R9 保守验证，front 全路径）；`register_globals` 按授权面注册（未声明即不注册——fail-closed）。语言层/通道层双层表面不变，只是语言层入口加了权限门。门控不覆盖非 I/O 内置（算术/比较/序对/谓词/字符串——它们无副作用，无需授权）。
-**Stage 0/1 内置函数完整清单（52 项，v5.4：48 项用户面（v5.3）+ 4 项自举 Reader 原语（r6，B3）——逐项对齐 `kerf-driver/src/builtins.rs` 的 `register_globals`）**：
+**Stage 0/1/2 内置函数完整清单（57 项，v6.3：+5 类型谓词（r24/42-e 缺口补齐——Value 变体判别完备面）；v5.4：48 项用户面（v5.3）+ 4 项自举 Reader 原语（r6，B3）——逐项对齐 `kerf-driver/src/builtins.rs` 的 `register_globals`）**：
 
 | 类别 | 函数（个数） | 实现层 |
 |------|------------|--------|
 | 算术（5） | `+` / `-` / `*` / `/` / `mod` | VM 操作码（ADD/SUB/MUL/DIV/MOD；数值塔 Int×Int→Int 溢出检查、任一 Float→Float；`mod` 拒绝浮点操作数） |
-| 比较（5） | `=` / `<` / `>` / `<=` / `>=` | VM 操作码（NUM_EQ/NUM_LT/NUM_GT/NUM_LE/NUM_GE；链式比较；字符串仅支持 `=`——TD-011） |
+| 比较（5） | `=` / `<` / `>` / `<=` / `>=` | driver 注册（cmp_builtin；链式比较；**全字符串链按 Unicode 码点序参与全族**——TD-011 r24 解决：`Rc<str>` 比较 = UTF-8 字节序 = 码点序（编码保序性）；混合链报 `{op} 需要数值`（TD-016 首个非数值归因）；NUM_* 操作码为 ISA 级数值域原语——编译器不特判，比较走全局 builtin 分派） |
 
 > **链式比较全操作数前置校验（Stage 1 批次 C收紧，TD-016 已解决，v5.5）**：比较操作数链的
 > **全部操作数先做类型检查再逐对比较**（`cmp_builtin` 前置校验：全数值或（仅 `=`）全字符
@@ -47,7 +47,7 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 > （首个非数值操作数归因——两参口径不变）。
 | 序对（4） | `cons` / `car` / `cdr` / `list` | VM 操作码（MAKE_PAIR/CAR/CDR）+ driver 注册（`list` 变长参数右折叠 cons；空参 → nil 值形态，r5） |
 | 列表操作（8，r5） | `length` / `append` / `reverse` / `list-ref` / `list-tail` / `member` / `assoc` / `last-pair` | driver 注册（堆序对链遍历；nil 终结契约——improper 拒绝，除 `append` 末参原样与 `member` 首匹配；`member`/`assoc` 按 `eq?` 查找，命中返回子表/点对、未命中 false） |
-| 谓词（6） | `null?` / `pair?` / `int?` / `bool?` / `procedure?` / `eq?` | VM 操作码（IS_NULL/IS_PAIR/IS_INT/IS_BOOL/IS_PROCEDURE）+ EQ（`eq?` 恰 2 参不可链；即时值按值、堆值按引用） |
+| 谓词（11） | `null?` / `pair?` / `int?` / `bool?` / `procedure?` / `eq?` / `string?` / `symbol?` / `float?` / `number?` / `list?` | driver 注册（即时值判定；`eq?` 恰 2 参不可链——即时值按值、堆值按引用；**r24/42-e +5**：`number?` = Int∪Float（数值塔域）；`list?` 真表判定 = nil 或 cdr 链终止于 nil 的序对链——Floyd 龟兔环安全（环 → false，引用 Racket 语义）） |
 | 逻辑（1） | `not` | VM 操作码（NOT，仅 Bool） |
 | I/O（2） | `print` / `read-line` | driver 注册的外部函数（语言层 → 通道层 read_line_stdin/write_line_stdout；**能力门控**（v5.6/r8：print 需 `(require io write)`、read-line 需 read——未声明报 E0006）；`read-line` 元数校验已补齐（FS-4 修复，恰 0 参）） |
 | 字符串（1） | `str-append` | driver 注册的外部函数（恰 2 参字符串拼接） |
@@ -55,7 +55,7 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 | 基本 I/O（6，r5） | `newline` / `write-string` / `read-int` / `read-num` / `error` / `assert-eq?` | driver 注册（`newline` 0 参；`write-string` 无换行——通道层 write_stdout（r5 新增）；`read-int`/`read-num` 行解析（失败结构化报错，EOF → nil）；`error` ≥1 参消息部件（str 原文、其余类型名）；`assert-eq?` 按 `eq?` 断言；**前四项能力门控**（v5.6/r8：newline/write-string 需 write、read-int/read-num 需 read）） |
 | 自举 Reader 原语（4，r6/B3） | `str->pos-chars` / `char-whitespace?` / `char-alphabetic?` / `str-int-valid?` | driver 注册（**运行时服务层，非语言语义面**：服务 reader.krf——字符级索引（(字节偏移 . 单字符 str) 列表）、Unicode White_Space/Alphabetic 属性判定、i64 域校验（Rust parse 同源——维持错误次序 parity）。与 Racket 的 string-ref/char-whitespace? 同层） |
 
-> **高阶函数（r6，B3 交付注记）**：`map` / `filter` / `foldl` / `for-each` 已以 **kerf 源码**
+> **高阶函数（r6 B3 交付 + r24/42-e foldr 补齐）**：`map` / `filter` / `foldl` / `foldr` / `for-each` 已以 **kerf 源码**
 > 实现于 `kerf-driver/src/bootstrap/reader.krf` 序章（语言自描述的标准库片段），在
 > Stage 0 VM 上运行并经自举桥（`bootstrap::selfcheck_call`）直测——这是「高阶函数
 > 用 kerf 源码 preamble 实现」的自举验证命题本体（r5 裁定）的交付面。**用户面注入
@@ -65,8 +65,9 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 > Reader 内部全局（用户程序引用 `map` 报未绑定变量）——TD-021。
 >
 > **v6.2 / r15 解决注记（TD-021 已闭环）**：用户面注入已随 E1-β 交付——
-> `kerf-prelude` 模块（`bootstrap/preamble.krf`）导出 map/filter/foldl/for-each
-> （reader.krf 序章同源）；用户程序 `(module 名 (import kerf-prelude) ...)`
+> `kerf-prelude` 模块（`bootstrap/preamble.krf`）导出 map/filter/foldl/**foldr**/
+> for-each（reader.krf 序章同源；foldr 为 r24/42-e 补齐——foldl 的对偶，
+> 从表尾累积 `(f 首元素 递归果)` 形态）；用户程序 `(module 名 (import kerf-prelude) ...)`
 > 声明后以普通全局函数可调用（forms 级合并注入单一编译单元——独立 file_id，
 > Span 指向 preamble.krf 自身，无源码拼接诊断污染；P1/P3/P5 三否决方案全规避）。
 > **opt-in 语义**：无 import 声明仍报未绑定（显式失败优于静默遮蔽）；同名
