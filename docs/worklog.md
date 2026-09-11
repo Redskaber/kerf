@@ -3344,3 +3344,90 @@ Stage Summary:
   （TD-025 登记→当轮根治闭环）
 - 下一步：批次 I（I1 编译器 kerf ~80% 迁移 + I2 stdlib/GC 评估 +
   TD-008/023 同轮 + Effect 实现 D12 = I 后段 + HM 旗标期裁定）
+---
+Task ID: 41-a
+Agent: Super Z (main) — ARCH-A/PL-A（L3 多角色会话，批间插入轮——用户指令能力模型审思）
+Task: MUV 41-a：能力模型定位审思与泛化设计（用户指令：能力模型定位/边界是否过窄——IO 只是子集 + 化学反应分析）
+
+Work Log:
+- 用户指令接收与分析：当前定位「能力模型 IO」是否遮蔽模型本体——
+  七面对照（设计/契约接口/职责/能力覆盖/边界/命名/扩展面）逐一
+  代码实锚（B1-B8：capability_io.rs 契约 / capability.rs 管线通用
+  架构但 IO 命名 / Capability 枚举注释 / 门控表数据驱动 / FFI
+  CPointer 线性令牌即第二实例 / D10 效应-能力正交 / 12 §2.4.5
+  Stage 2 完整模型口径 / 13 §3.1 标题术语双义）
+- **裁定 D1：是，当前过窄**——能力安全模型被 IO 第一实例在命名
+  （IoGrant/IoRequirements/IOError）、类型（Capability 枚举 2 变体）、
+  职责（capability.rs 五职责全 IO 具体化）三面遮蔽；模型层无冻结位
+  （违反 13 §3.3 预留原则——net/process 引入将触五点手术）
+- 设计文档交付：docs/develop/v0/stage-2/capability-model-design.md
+  （v1.0——10 节：七面对照 / 术语裁定 / 族分类学 10 族候选 /
+  令牌演算 6 操作（mint ✅ + delegate 隐式 + attenuate/revoke/compose/
+  amplify 预留）/ 分层架构 / 化学反应矩阵 6 条 / 裁定 D1-D12 /
+  迁移路径 M1-M6 零破坏 / 测试锚点正 6 负 6 / 风险 4 项 / 回写义务 6）
+- **化学反应矩阵（C1-C6，全部「正交可组合不合并」）**：×效应
+  （perform 需令牌 + handler=权限作用域 + 12 §2.4.5「不可撤销效应」
+  统一窗口）/ ×多阶段（代码值携带能力集合——quote 零改动 + run
+  验证 D6）/ ×缓存（CacheKey 加能力面 D7——磁盘化前置）/ ×FFI
+  （CPointer 归位第二实例 D8）/ ×HM（令牌类型禁泛化 D9——与值限制
+  D2 同型）/ ×工具链（编译即服务=能力合同 D10b）
+- **M1 落地（本批次交付）**：reserved/capability_model.rs 新增
+  （P3 骨架——CapabilityModelFamily 族形状 + TokenCalculus 演算位
+  （attenuate/revoke 无默认体）；Probe 四测试：骨架冻结 + io 族两令牌
+  归属证明（IO ⊂ 能力模型的机器验证）+ ffi 令牌归属证明 + 演算位
+  签名证明）；mod.rs 八子模块速览表 + re-export；命名纪律——模型层
+  公开面零 Io 前缀（防层次再耦合），生产面子模块零依赖（J3 维持——
+  归属证明在测试面）
+- M6 文档回写：13 §3.1 标题术语消歧（「4 个能力模型」→「4 个语言
+  能力」+ v7.0 注）/ 13 §3.1.3 v7.0 模型层-族层-管线层三层注 /
+  12 §2.4.5 r19 注（手术面 D11 五点→三点）/ capability_io.rs +
+  capability.rs 头部层次定位注记
+- 验收：kerf-driver crate 64:0:0（60 + 4 新增）；既有 capability.rs
+  12 测试零改动通过（原则 27 兼容实证——设计测试锚点正 5/正 6）
+
+Stage Summary:
+- capability-model-design.md 交付（10 节；裁定 12 + 反应 6 + 迁移 6——
+  全部零破坏路径）；模型层骨架 capability_model.rs P3 冻结（Probe 4
+  测试——族形状 + 演算位）；用户判断「IO ⊂ 能力模型」经代码机器
+  证明（io_family_tokens_satisfy_model_shape）
+- 遵循：§13.1（设计对齐——13 §3.1.3 + 12 §2.4.5 + ffi-ownership-model
+  交叉）、原则 27（族契约签名零变化——既有测试零改动实证）、原则 32
+  （预留留白——演算位无默认体）、§13.4 J3/J5（子模块零依赖 + 层内
+  重组）、13 §3.3 预留原则（位置先于实现——D11 手术面收敛）
+- 下一步：41-b 批次 I 细化（plan.md 42-x MUV 分解——M2 管线泛化
+  节点排 I 后段与 Effect D12 同轮）
+---
+Task ID: 41-b
+Agent: Super Z (main) — PM-A/ARCH-A（L3 多角色会话，批间插入轮——sop.md 推进）
+Task: MUV 41-b：批次 I 细化（plan.md §5a——42-x 八 MUV 六字段分解；「批次 I 待细化」状态清偿）
+
+Work Log:
+- 现状核对：plan.md Status 行「批次 I 待细化」+ 12 §2.5.1 演进矩阵
+  批次 I 行 + effect-language-design D12（实现窗口 = 批次 I 后段）
+  + capability-model-design D12/M2（管线泛化同轮协调）——四源对齐
+- plan.md 批次 I 表行更新：I 后段双主题显式入序（Effect D12 窗口 +
+  能力管线泛化 M2 同轮）+ 42-x 指针
+- **§5a 新节交付**（仿批次 F 六字段表 ×2）：42-a I1 切口评估与迁移
+  设计（compiler 本体盘点 + 分段方案 + parity oracle 扩展）/ 42-b
+  I1 前段基础核心形式 kerf 化（quote/if/lambda/app/set!/define/
+  begin + parity ≥8）/ 42-c I1 中段糖 + module/require 面（parity
+  ≥12）/ 42-d I1 收口两次编译自身字节一致（§21.3 条件 2 SHA-256
+  终验 + eval 退役终态裁定 TD-017 终验）/ 42-e I2 stdlib + TD-008
+  GC 评估 + TD-023 对症 + TD-009/010/011 + TD-014/018 批 / 42-f
+  I 后段 Effect M1-M5 + 能力 M2 同轮（driver 组合根双接触面显式
+  协调）/ 42-g I3 门审查（≥30 新 case + §21.3 四条 + §14 阶段末环
+  + §6.3 投票）/ 42-h 收尾交付（r20 tar.gz + web + git + 树压实）
+- 排程注四条：42-b/c/d 跨 session 按段分批（parity 增量每批 ≥8）/
+  42-f 双主题同轮 worklog 交叉引用 / TD-025 已 r18 根治不在清单 /
+  HM 旗标期切换随 42-d 后评估排入
+- Status 行更新：r19 批间插入轮（41-a~c）+ 批次 I 细化完成 + 执行
+  启动
+
+Stage Summary:
+- plan.md v0.4.0-plan Status 更新 + §5a 批次 I 细化（八 MUV 六字段
+  齐全 + 拓扑序 I1→I2→I 后段（双主题）→I3 维持 + 排程注四条）——
+  「批次 I 待细化」状态清偿，批次 I 执行可启动（下一 session 42-a）
+- 遵循：§4.1（MUV 六字段）、§17.2（强制扫描——批次 I 行四源对齐）、
+  §13.1（设计对齐——effect D12 + capability M2 双同轮协调显式化）、
+  §8.4.5（决策附条款号——每 MUV 输入/输出/验收可量化）
+- 下一步：41-c r19 收尾交付（§3.2 六命令 + tar.gz + web + git）

@@ -2,18 +2,18 @@
 
 > **Author**: Super Z（QA-A 角色）
 > **Date**: 2026-09-11（r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
-> **Version**: v0.3.0-r18
-> **Status**: Active
+> **Version**: v0.3.0-r19
+> **Status**: Active（r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
 
 ## 1. 测试目标
 
 记录编译流水线（read → expand → lower → compile → vm → runtime → driver）的**路径覆盖状态**，
-作为外循环投票（§6.3）的数据源。计数基线：**634 测试函数 / 634 通过 / 0 失败 / 0 忽略**
-（[matrix.md](./matrix.md) r18 口径——单元 198 + 集成 438）；负向 case 口径见 §2 统计行。
+作为外循环投票（§6.3）的数据源。计数基线：**638 测试函数 / 638 通过 / 0 失败 / 0 忽略**
+（[matrix.md](./matrix.md) r19 口径——单元 202 + 集成 436）；负向 case 口径见 §2 统计行。
 
 ## 2. 三层覆盖记录（§9.5.1 格式：Tier / 名称 / 覆盖阶段 / 预期输出 / 状态）
 
-### Tier 1 —— 阶段内（单元测试，198 函数，crates 内联——r9 起 runner 化仅集成侧；r17 +13：backend 9 + expander recover 4；r18 +2：reserved Probe 拆分（driver 58→60））
+### Tier 1 —— 阶段内（单元测试，202 函数，crates 内联——r9 起 runner 化仅集成侧；r17 +13：backend 9 + expander recover 4；r18 +2：reserved Probe 拆分；**r19 +4：capability_model Probe（driver 60→64）**）
 
 | ID | 名称 | 覆盖阶段 | 预期输出 | 状态 |
 |----|------|---------|---------|------|
@@ -25,9 +25,9 @@
 | T1-compiler | kerf-compiler 单测 | 编译/类型检查 | 栈平衡/回填/常量池/**40 操作码守护**/App 函数先 | ✅ 15/15 |
 | T1-runtime | kerf-runtime 单测 | 堆/GC | 分配/回收/foreign 根/**alloc_symbol** | ✅ 9/9 |
 | T1-vm | kerf-vm 单测 | 执行 | 帧协议/错误形状/**Value 十变体** | ✅ 18/18 |
-| T1-driver | kerf-driver 单测 | 管线编排/能力/效应/缓存/自举桥 | 全管线/**52 内置注册**/预留冻结（Probe）/effects 12/capability 13/**生产切换守护（活性探针 + 代次双信号）** | ✅ **58/58**（r8 +25 / r12 +8 Probe / r15 +1 切换守护） |
+| T1-driver | kerf-driver 单测 | 管线编排/能力/效应/缓存/自举桥 | 全管线/**52 内置注册**/预留冻结（Probe——**r19 增 capability_model 骨架 + 族归属证明**）/effects 12/capability 13/**生产切换守护（活性探针 + 代次双信号）** | ✅ **64/64**（r8 +25 / r12 +8 Probe / r15 +1 切换守护 / r18 +2 拆分 / r19 +4 模型骨架） |
 
-### Tier 2 —— 阶段间（集成测试，438 函数，tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16；r18 +27：tco_tests 12 + hm_inference_tests 15）
+### Tier 2 —— 阶段间（集成测试，436 函数，tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16；r18 +27：tco_tests 12 + hm_inference_tests 15；**r19 零变更（骨架冻结零集成接触）**）
 
 | ID | 名称 | 覆盖阶段 | 预期输出 | 状态 |
 |----|------|---------|---------|------|
@@ -69,7 +69,7 @@
 
 ### 正负比例统计（§9.5.1 要求的统计行）
 
-- **函数口径**：553 测试函数 = 正向/混合 436 + 负向文件 117（negative_* 四文件 + 各套件负例函数）。
+- **函数口径**：638 测试函数（r15 权威拆分口径 553 = 正向/混合 436 + 负向 117；r17-r19 净增 +85——主体为正向 parity/后端/推断/Probe 冻结，负向分项未重拆）。
 - **case 口径（权威）**：负向 case 490（四文件 59+96+237+98）+ 审计集负向 32+18 + 各集成套件内负例 ≈ 26；
   正向 case ≈ 156 → **全局正负比 ≈ 1:3.15**（r15 门审权威口径；§9.4.3 的 ≥1:3 门限达标 ✓）。
 - 逐分类负测非零：read/expand/compile（间接）/vm/driver/gate/capability（E0006）/

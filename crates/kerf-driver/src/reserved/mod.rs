@@ -1,14 +1,16 @@
 //! 接口预留层（stage0.md §9 / lang-design 13 §3.1 + §3.3-§3.5；v6.1 完整性
 //! 审查后 14 项）。
 //!
-//! **冻结契约，不写实现**——七个子模块按能力族分文件组织（r18 / 40-g
-//! 拆分：J1 对齐 13 §3.1 分节结构；本文件仅承载模块声明与 re-export）：
+//! **冻结契约，不写实现**——八个子模块按能力族分文件组织（r18 / 40-g
+//! 拆分：J1 对齐 13 §3.1 分节结构；本文件仅承载模块声明与 re-export；
+//! r19 / 41-a 增模型层骨架）：
 //!
 //! | 子模块 | 等级 | 内容 |
 //! |---|---|---|
+//! | [`capability_model`] | P3 | 能力模型骨架（**模型层**——`CapabilityModelFamily`/`TokenCalculus`；r19/41-a——IO 族第一实例 / FFI 令牌第二实例的归属锚） |
 //! | [`effect_handlers`] | P3 | Effect Handlers（`EffectFamily`/`Effect`/`EffectSystem`——仅类型形状） |
 //! | [`multistage`] | P3 | 多阶段编程（`MultiStage`——quote/splice/run） |
-//! | [`capability_io`] | P2 | 能力模型 I/O（`ReadCapability`/`WriteCapability`/`CapabilityIO` + 完整行为规格） |
+//! | [`capability_io`] | P2 | 能力模型 I/O（**io 族实例**——`ReadCapability`/`WriteCapability`/`CapabilityIO` + 完整行为规格；模型层见 [`capability_model`]） |
 //! | [`compilation_cache`] | P2 | 编译缓存（`CacheKey`/`CachedResult`/`CompilationCache` + 完整行为规格） |
 //! | [`toolchain`] | P0/P1/P2 | 工具链生态（LSP/调试/增量查询 + 服务化 + 包管理/AI） |
 //! | [`ffi`] | P1 | FFI 边界（`ExternalType`/`FfiCall`/`FfiBoundary`——GC pin/unpin 协议） |
@@ -35,6 +37,7 @@
 //! `*_signature_is_frozen` 系）。
 
 mod capability_io;
+mod capability_model;
 mod codegen;
 mod compilation_cache;
 mod effect_handlers;
@@ -43,6 +46,7 @@ mod multistage;
 mod toolchain;
 
 pub use capability_io::{CapabilityIO, IOError, ReadCapability, WriteCapability};
+pub use capability_model::{CapabilityModelFamily, TokenCalculus};
 // 令牌铸造仅 crate 内可达（driver 组合根流出——构造面控制，
 // r8 批次 D 裁定维持）
 pub(crate) use capability_io::{mint_read_token, mint_write_token};

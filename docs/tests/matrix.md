@@ -3,19 +3,21 @@
 > **Author**: kerf-dev-agent（QA-A 角色）
 > **Date**: 2026-09-10（**r10 架构合规审计**：+4 architecture_audit_tests（sop §2.2 原则 29-31 形态审计——lang-design 01 §8.5/02 §8.1 锚点落地：十变体穷尽 match 冻结证明/Span 独立/Reader-Stx 类型隔离/Expander 唯一桥/同源同核确定性）——476 → 480；r9 测试入口架构重构：Cargo.toml [[test]] 18 块 → tests/runner.rs 单一总入口 mod 树，sop.md §8.4.6 v11.2）
 > **r12 增量**（2026-09-11）：+20 接口预留扩展测试（单元 8：reserved/ Probe 冻结——toolchain 3 + ffi 3 + codegen 2；集成 12：reserved_ext_tests——P0 位置跨 crate 断言 + 14 项 API 可达性 + 形状行为含负向）——480 → **500**。
-> **r18 增量**（2026-09-11，批次 H / 语义演进评估轮 + 三债清偿 + HM PoC）：**605 → 634（净 +29）**——集成 +27（tco_tests 12：TD-022 尾调用帧复用/尾位传播/指令预算护栏/TD-007·022 耦合自举端到端 + hm_inference_tests 15：H4 HM PoC 超集门/零误报门/四类缺口/occurs/值限制/多错误）+ 单元 +2（40-g reserved Probe 拆分：合并冻结测试 → 4 子模块独立 Probe）。负例改写注记：帧上限/深递归追踪/双层调用链三用例改非尾形态（TCO 语义变更——尾递归不再耗帧）；编译器两单测指令序列断言 Call→TailCall；expander 深度消息 500→10000 三处同步。口径注记：单元 196 → 198（driver 58 → 60——Probe 拆分净增）；集成 409 → 438。
+> **r19 增量**（2026-09-11，批间插入轮 / 41-a 能力模型泛化设计）：**634 → 638（净 +4）**——单元 +4（kerf-driver reserved/capability_model.rs Probe：骨架冻结 + io 族两令牌归属证明 + ffi 令牌归属证明 + 演算位签名证明）。口径注记：单元 198 → 202（driver 60 → 64）；集成 436 不变。零回归实证：capability.rs 12 测试 + reserved_ext_tests 12 集成零改动通过（原则 27）。
+>
+> **r18 增量**（2026-09-11，批次 H / 语义演进评估轮 + 三债清偿 + HM PoC）：**605 → 634（净 +29）**——集成 +27（tco_tests 12：TD-022 尾调用帧复用/尾位传播/指令预算护栏/TD-007·022 耦合自举端到端 + hm_inference_tests 15：H4 HM PoC 超集门/零误报门/四类缺口/occurs/值限制/多错误）+ 单元 +2（40-g reserved Probe 拆分：合并冻结测试 → 4 子模块独立 Probe）。负例改写注记：帧上限/深递归追踪/双层调用链三用例改非尾形态（TCO 语义变更——尾递归不再耗帧）；编译器两单测指令序列断言 Call→TailCall；expander 深度消息 500→10000 三处同步。口径注记：单元 196 → 198（driver 58 → 60——Probe 拆分净增）；集成 409 → 436。
 > **r13 增量**（2026-09-11，批次 E 首个 MUV——TD-004 作用域集解析收口）：+9 集成（scope_set_tests——Racket 式 `(name, scopes ⊆)` 双路径语义锚点：嵌套 shadowing/闭包捕获/set! 词法命中 4 正 + 作用域不匹配未绑定 VM/eval/set! 3 负 + 宏引入不捕获 + 子集对照）——500 → **509**。
 > **r14 增量**（2026-09-11，批次 E / E1-α 自举 Expander）：+19 集成（bootstrap_expander_tests——expander.krf（核心形式 + 九糖，VM 上运行）与 Rust 种子 parity：结构+Span+作用域集+param_scopes 递归一致 / 错误消息+Span 逐字一致 / define-syntax E1-α 边界 / 行为面端到端可执行）——509 → **528**。
 > **r17 增量**（2026-09-11，批次 G / 后端·FFI·类型三主线）：**553 → 605（净 +52）**——集成 +40（qbe_backend_tests 24：G1 QBE 后端 PoC 端到端/结构/一致性/负例/契约 + multi_error_recovery_tests 16：TD-013 恢复双路径/合并诊断/上限/次序/短路边界）+ 单元 +12（kerf-backend 新 crate 9：codegen 契约迁移 3 + qbe 2 + aot 4；kerf-expander +4 recover 单元；kerf-driver reserved/codegen 契约测试 2 迁移 -2 + 兼容锚 1）。口径注记：单元分项以逐二进制实测为准（196 = span 11 + syntax 11 + core 10 + reader 23 + expander 32 + compiler 15 + runtime 9 + vm 18 + driver 58 + backend 9）。
 >
 > **r16 增量**（2026-09-11，批次 F / Stage 1 深审收尾环）：零测试变更（纯审查 + 文档 + 注释轮——**553 零断言修改逐一等价复跑**：探针临时部署/移除各一次全绿验证）；本行 + 表体两行对账（bootstrap_expander_tests 19→36 的 r15 尾差 + prelude_tests 行补录——31-e 起 header 增量与表体同步义务的漏网，36-d 发现）。
 > **r15 增量**（2026-09-11，批次 E / E1-β 宏收口 + 生产切换 + TD-021）：+24 集成（bootstrap_expander_tests 19→36：宏 parity 17——define-syntax/syntax-rules/卫生 α 重命名/省略号（零/多段/复合）/字面量/多子句/糖覆盖/深度上限/向量模式 + prelude_tests 7——TD-021 hofs 用户面/组合管道/双路径/opt-in/显式失败/未知导入）+ +1 单元（driver 生产切换守护 production_expander_is_bootstrap——独立线程活性探针 + 展开代次标记）——528 → **553**。
-> **Version**: v0.1.0-r18
+> **Version**: v0.1.0-r19
 > **Status**: Active
 
 ## 总量
 
-**634 通过 / 0 失败 / 0 忽略**（634 个测试函数 = 单元 198 + 集成 438，逐二进制实测汇总；r10 +4 架构审计 + r12 +20 预留扩展 + r13 +9 作用域集锚点 + r14 +19 自举 Expander parity + r15 +25 宏收口/prelude/生产切换守护 + r17 +52 批次 G：QBE 后端 PoC 40 + TD-013 恢复 12 + **r18 +29 批次 H：TCO 12 + HM PoC 15 + Probe 拆分 2**）。
+**638 通过 / 0 失败 / 0 忽略**（638 个测试函数 = 单元 202 + 集成 436，逐二进制实测汇总；r10 +4 架构审计 + r12 +20 预留扩展 + r13 +9 作用域集锚点 + r14 +19 自举 Expander parity + r15 +25 宏收口/prelude/生产切换守护 + r17 +52 批次 G：QBE 后端 PoC 40 + TD-013 恢复 12 + r18 +29 批次 H：TCO 12 + HM PoC 15 + Probe 拆分 2 + **r19 +4 批间插入轮：能力模型骨架 Probe 4（模型族/演算位冻结 + io/ffi 族归属证明）**）。
 §3.2 release 验收基线 204（r2）→ r3 负向测试扩张 + 审计集就位 + FS-1 守卫修复 + 糖正向锚点 + T17-a 六缺陷修复回归后 297 → r4（Stage 1 批次 A）304 → r5（批次 B TD-002 符号值 + 标准库最小集）324 → r6（批次 B 收官 B3 自举 Reader）356 → r7（批次 C 类型检查器 + 编译缓存 + TD-016）408 → **r8（批次 D 能力 I/O + 内部效应 + 用例运行器）476** → **r10（架构合规审计 +4）480**：+24 capability_tests（require 声明面 + E0006 三路径门控 + 豁免/形状/令牌 + EOF 子进程探针）+ +18 test_runner_tests（前置切分 + PASS 判定 + 短路/恢复/隔离 + front 错误面）+ +25 kerf-driver 单元（effects.rs 12：逃逸层/最近匹配/载荷保真/穿透契约 + capability.rs 13：R9 验证/豁免/编组）+ +1 negative_vm_tests（read_line_arity 自 ignore 激活——**FS-4 修复**，能力参数化重写时补齐元数校验）→ **r12（接口预留完整性扩展 +20）500**：+8 单元（reserved/ 模块 Probe 冻结——「测试实现体编译通过 = 契约冻结」先例沿用）+ +12 集成 reserved_ext_tests（P0 数据结构位置六项断言 + 预留 API 跨 crate 可达 + 负向形状：空目标拒绝/空片段类型检查失败/rename 错误面）→ **r13（批次 E·TD-004 作用域集解析收口 +9）509**：+9 集成 scope_set_tests（双路径语义锚点 + 作用域不匹配负例——见 docs/tests/v0/stage1/plan/scope-set.md）→ **r14（批次 E·E1-α 自举 Expander +19）528**：+19 集成 bootstrap_expander_tests（expander.krf 与 Rust 种子 parity——结构/Span/作用域集/param_scopes/错误消息逐字一致 + 行为面端到端；见 docs/tests/v0/stage1/plan/bootstrap-expander.md）→ **r15（批次 E·E1-β 宏收口 + 生产切换 + TD-021 prelude +25）553**：+17 宏 parity（镜像 macro_sys.rs：变换器注册表单表语义/卫生基名回退/省略号/字面量/Span 并集代次守卫（expansion_id 镜像——节点第 4 字段 + retag +1）/深度上限 500 消息逐字）+ +7 prelude_tests（TD-021 模块/import 承载——forms 级合并注入单一编译单元）+ +1 单元生产切换守护（compile_front 展开段经 bootstrap_expander——独立线程活性探针实测）。**全套件经自举 Reader + 自举 Expander（均 kerf 源码，VM 上运行）执行——生产管线读+展开两段全自举（E1-β）。**
 
 > **r7 计数修正**（r8 对账发现，§8.4.5 规则 2——以实测为准）：r7 版本矩阵的分套件表存在陈旧数（头部「集成 173 函数」为 r3 时代口径；单元表 130 实为 150——driver 14→25 / expander 26→28 / compiler 12→15 的 r4-r7 增长未回写；cache_tests 13 实为 14；negative_vm 29 为排除 ignore 的口径）。r7 实际 = 150 单元 + 260 集成函数（259 通过 + 1 ignore）= 408:0:1 ✓（总量正确、分项陈旧）。r8 起全部逐二进制实测。
@@ -27,7 +29,7 @@
 
 ## 分套件统计（2026-09-10 r8 实测）
 
-### 单元测试（196，crates 内联——r12 +8：reserved/ Probe 冻结；r17 +13：backend 9 + expander 4）
+### 单元测试（202，crates 内联——r12 +8：reserved/ Probe 冻结；r17 +13：backend 9 + expander 4；r19 +4：capability_model Probe）
 
 | 套件 | 层级 | 文件/位置 | 测试数 |
 |------|------|----------|--------|

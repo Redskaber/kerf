@@ -1,6 +1,12 @@
 //! 能力模型 I/O 基础传递（r8 批次 D——D2：13 §3.1.3 P2 规格做实，
 //! 12-roadmap §2.4.5 Stage 1「基础能力（读写需授权）」）。
 //!
+//! **层次定位注记（r19 / 41-a）**：本模块是能力模型的**管线层**
+//! （声明提取→铸造→验证→消费——四段论架构通用，数据面 io 族具体化）；
+//! 模型层骨架见 `reserved/capability_model.rs`（族形状 + 演算位），
+//! 族层契约见 `reserved/capability_io.rs`（capability-model-design.md
+//! §4.3 分层架构；M2 泛化命名迁移窗口 = 批次 I 后段——D12）。
+//!
 //! **三层分工**（interface-contract-review F2 修复裁定）：
 //! - `reserved.rs`：冻结契约（令牌类型 + `CapabilityIO` trait——签名
 //!   权威）；

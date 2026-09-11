@@ -1,3 +1,26 @@
+## v0.4.0-r19（2026-09-11）——批间插入轮：能力模型泛化设计 + 模型层骨架冻结 + 批次 I 细化（638 全绿）
+
+### 交付一：能力模型定位审思与泛化设计（41-a——用户指令轮）
+
+- `stage-2/capability-model-design.md`（10 节）：**七面对照**（设计/契约接口/职责/能力覆盖/边界/命名/扩展面——真实 vs 当前逐面代码实锚 B1-B8）+ 术语裁定（「能力模型」双义消歧：语言能力 vs 权限安全模型）+ **族分类学 10 族候选**（io ✅ / ffi ✅设计冻结 / net / process / file / time / random / eval-stage / compilation-service）+ **令牌演算 6 操作**（mint ✅ + delegate 隐式 + attenuate/revoke/compose/amplify 预留位）+ 分层架构（模型层/族层/管线层/消费层四层归位）
+- **裁定 D1：当前定位过窄成立**——能力安全模型被 IO 第一实例在命名（IoGrant/IoRequirements/IOError）、类型（Capability 枚举 2 变体）、职责（capability.rs 五职责全 IO 具体化）三面遮蔽；模型层无冻结位（13 §3.3 预留原则违例面——net/process 引入将触「五点手术」）
+- **化学反应矩阵 C1-C6**（全部「正交可组合不合并」——§11 + D10 边界条件）：能力×效应（perform 需令牌 + handler=权限作用域 + 「不可撤销效应」统一窗口）/ 能力×多阶段（代码值携带能力集合——quote 零改动 + run 验证 D6）/ 能力×缓存（CacheKey 加能力面 D7）/ 能力×FFI（CPointer 归位第二实例 D8）/ 能力×HM（令牌类型禁泛化 D9——与值限制同型）/ 能力×工具链（编译即服务=能力合同 D10b）
+- 裁定表 D1-D12 + 迁移路径 M1-M6（零破坏——冻结契约全程不动）+ 测试锚点正 6 负 6 + 风险 4 项 + 回写义务 6（M6 本轮全兑现）
+
+### 交付二：模型层骨架 P3 冻结（M1 落地——reserved/ 第八子模块）
+
+- `reserved/capability_model.rs`：`CapabilityModelFamily`（族形状——`type Token` + `family_name()`）+ `TokenCalculus`（演算位——`attenuate(&Token) -> Token` / `revoke(&mut Token)`，**无默认体**——P3 位不可被实现体污染）；模型层公开面零 Io 前缀（防层次再耦合）；生产面子模块零依赖（J3 维持——归属证明在测试面）
+- **Probe 四测试**：骨架冻结（Probe net 族）/ **io 族两令牌归属证明**（`io_family_tokens_satisfy_model_shape`——IO ⊂ 能力模型的机器验证，用户判断的代码面证明）/ ffi 令牌归属证明（ExternalType::CPointer 载体）/ 演算位签名证明（函数指针形态）
+- 兼容实证：capability.rs 12 测试 + reserved_ext_tests 12 集成零改动通过（原则 27）；mod.rs 速览表八子模块 + re-export；capability_io.rs / capability.rs 头部层次定位注记
+- 文档回写：13 §3.1 标题术语消歧（v7.0——「4 个能力模型」→「4 个语言能力」）+ 13 §3.1.3 v7.0 三层形态注 + 12 §2.4.5 r19 注（手术面 D11 五点→三点）
+
+### 交付三：批次 I 细化 + 收尾（41-b/41-c）
+
+- `stage-2/plan.md` §5a：**42-x 八 MUV 六字段分解**——42-a I1 切口评估与迁移设计 / 42-b 基础核心形式 kerf 化 / 42-c 糖+module/require 面 / 42-d 两次编译自身字节一致（§21.3 条件 2 SHA-256 终验 + eval 退役终态）/ 42-e I2 stdlib+TD 批（TD-008/023/009/010/011/014/018）/ 42-f **I 后段 Effect M1-M5 + 能力管线泛化 M2 同轮**（driver 组合根双接触面协调）/ 42-g I3 门审查 + §14 阶段末环 / 42-h r20 收尾
+- §3.2 六命令全绿（clean 起步终验）：build --release 12.49s 零告警 / check 0/0 / fmt 零 diff / clippy -D 0 / **test --release --workspace 638:0:0**（634 + 4——单元 202 + 集成 436）；CLI 冒烟：VM fib ⇒ 144 / native fib exit 144 / check ok / 能力门控 require 路径
+- **对账六面**：RELEASE_NOTES（本条）/ matrix v0.1.0-r19（638 总量 + r19 增量行 + r18 集成计数勘误 438→436——内部矛盾 198+438=636≠634 修正）/ 登记册 v0.3.0-r19（零债务面）/ pipeline v0.3.0-r19（Tier 1 202 + driver 64/64 + Tier 2 436）/ v0.5-roadmap r19 行 / plan.md §5a
+- r19 tar.gz 打包（§19.4 r17 版命令——tools/ + scripts/ 入包）+ 包内自举验证 + web 同步（kerf-data r19 三节点 + footer）+ git 入账
+
 ## v0.4.0-r18（2026-09-11）——批次 H：语义演进评估轮 + 三债清偿 + HM PoC（TCO 尾调用优化 + TD-007 完整口径 + Effect 语言级设计 + HM 推断 PoC，634 全绿）
 
 ### 交付一：H1 8 原语迁移五项语义层评估 + §6.3 全票投票（40-b）

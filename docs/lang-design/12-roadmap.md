@@ -276,6 +276,14 @@ flowchart TD
 | Stage 2 | 网络能力、进程能力（完整能力模型） | 效应系统（能力可视为不可撤销的效应） |
 | Stage 3+ | 完整沙箱（最小权限） | 库生态支持能力传递 |
 
+> **r19 / 41-a 注（模型层骨架已冻结）**：[capability-model-design.md](../../develop/v0/stage-2/capability-model-design.md)
+> 裁定模型层与族层分离——`reserved/capability_model.rs` P3 骨架
+> （`CapabilityModelFamily` 族形状 + `TokenCalculus` 演算位）r19 冻结；
+> IO 族为第一实例（既有）、FFI 线性令牌（CPointer）为第二实例
+> （G3 设计）。本行 Stage 2「完整能力模型」的引入手术面经设计 D11
+> 从五点收敛为三点（枚举变体 + 门控表行 + 族文件）；管线层泛化
+> 命名迁移（M2）排批次 I 后段（与 Effect D12 实现窗口同轮协调）。
+
 **时机依据与口径说明**：与 Effects 类似，能力模型存在"基础能力（Stage 1）→ 完整模型（Stage 2）"的两级做实节奏，[13-能力矩阵 §3.1.3](./13-capability-matrix.md) 的"Stage 1+ 实现"指基础能力这一级。Rust 所有权系统已在线性类型的生产可行性上给出证明，但语言级 I/O 能力模型的生态仍在早期；更关键的是**能力模型需要与效应系统协调**（"能力可以视为不可撤销的效应"）——在效应语义定型之前实现完整能力模型，两个系统大概率要返工其一。
 
 ### 2.5 Stage 0 → Stage 3+ 完整演进矩阵（原 §21.5）
