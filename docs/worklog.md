@@ -2326,3 +2326,192 @@ Stage Summary:
 - 下一步（批次 E 续）：E1-β 宏收口（syntax-rules + HygieneCtx
   α 重命名 + 深度计数 + Span 代次 + 生产路径切换 + 基础宏定义）
   + TD-021 hof 用户面注入（随模块系统）→ Stage 1 门审查
+
+---
+Task ID: 34-a
+Agent: Super Z (main) — ARCH-A/PM-A 定调 + DEV-A 实施（L3 多角色会话，批次 E 续）
+Task: MUV 34-a：E1-β 宏收口——expander.krf 完整宏系统（define-syntax/syntax-rules 全模式面 + 卫生 α + 深度 500 + Span 并集代次守卫）+ parity 测试 17 + 行为 4
+
+Work Log:
+- 设计（33-b 登记 E1-β 范围的镜像式落地）：变换器注册表 = 名字 str
+  单表（('rules 字面量 子句 def作用域) | ('builtin)——HashMap 替换
+  语义：用户宏覆盖糖名 + 惰性糖注册 + 卫生基名回退对两类同权）；深度
+  = 链长语义（expand-form 入口快照/出口回滚——兄弟不累计，镜像
+  expand_form）；卫生上下文每宏应用重置（镜像 HygieneCtx::new 于
+  apply_named）、renames 每子句实例化复位、计数器跨子句保持
+- 实施（expander.krf +~470 行）：syntax-rules 解析（五类错误消息
+  逐字）+ match-datum/match-sequence（通配/字面量同名/省略号尾部
+  （零/多段固定前缀 + 复合单层）/字面量 datum 值相等/嵌套列表/向量
+  trial 语义）+ instantiate-template（模式变量原样/省略号拼接跳格/
+  悬垂省略号走实例化/α 重命名 num->str 递归构造 + 保留集 + 关键字
+  豁免）+ transformer-step（深度计数 → 应用 → retag def∪use →
+  expand-form 再入）
+- **实测驱动的两轮重大发现**（§2.3-11——全部经 parity 双实现实跑暴露）：
+  ①Span 并集代次守卫：oracle 对糖产物内宏调用的产物 Span 落模板
+  范围（用户跨距按 Span::merge 的 expansion_id 不等守卫丢弃）——
+  节点形状升 v2 = (tag s e exp scopes ...)（桥发射/读回）；retag
+  代次 +1（bumped_expansion）；全部糖构造器代次来源逐位镜像（构造
+  节点 = span 来源节点代次；dummy 关键字 = 0）②foldl/for-each 序章
+  缺定义（chars->str→foldl 为 r14 死代码——卫生基名回退首次激活，
+  R1 反射补定义）③宏产物品类 3 处代次漏挂（set/require/define-
+  syntax——fields[3] 落 str/nil 的实跑暴露）
+- 测试：bootstrap_expander_tests 19→36（宏 parity 17：注册/nil、
+  卫生重命名计数器单调、省略号零一多、字面量+多子句、嵌套/向量模式、
+  糖覆盖、复合省略号、module 体内注册、非列表模式子句解析合法、
+  负例 6 组消息+Span 逐字）+ 行为 4（swap 运行期/递归 or 短路/卫生
+  无捕获/深度结构化错误）；移除 E1-α 边界测试
+- 文档：bootstrap-expander.md E1-β 增补节 + expander.krf 文件头
+  E1-α→E1-β 边界改述
+
+Stage Summary:
+- E1-α 影子路径 → E1-β 宏收口：宏系统全模式面在 VM 上运行且与
+  Rust 种子逐字 parity（528 → 545:0:0——r14 基线零回归 + 17 宏
+  parity）；「语言能表达自身前端（含宏）」的自举命题在 kerf 侧
+  完整成立（生产切换属 34-b）
+- 遵循：§9.4（设计-测试锚定——每个语义判别点一组 parity）、
+  §2.3-11（先实测禁臆测——代次守卫/foldl/三处漏挂全部实跑发现）、
+  §12（最优>最小——节点形状 v2 全量重构而非局部补丁）
+- 下一步：34-b 生产切换（compile_front 展开段 → bootstrap_expander
+  + 切换守护 + 零回归验证）
+
+---
+Task ID: 34-b
+Agent: Super Z (main) — ARCH-A 裁定 + DEV-A 实施（L3 多角色会话）
+Task: MUV 34-b：E1-β 生产切换——compile_front 展开段经 bootstrap_expander（读+展开两段全自举）+ 切换守护测试 + exp 相位标记保持
+
+Work Log:
+- 切换实施：ExpanderKind 枚举（Bootstrap | Seed）——compile_front
+  （生产）→ Bootstrap；compile_front_seed（bootstrap 加载 + parity
+  oracle）→ Seed；front_from_forms 参数化（无递归：种子编译自举
+  实现）；核心节点携带代次（(tag s e exp ...) → 桥重建
+  Span{expansion_id}——「展开相位标记」E3 诊断特性经切换保持）
+- 发现项（切换后实测）：e3_macro_error_carries_expansion_mark/
+  message_shape_call_site_trace 两测试红——相位标记丢失（桥 core
+  读取丢弃代次）→ 修复：core 节点发射/读回代次（krf 全部 core
+  构造器 +x；桥 fields[3]）→ 双测试复绿
+- 切换守护（driver 单元 production_expander_is_bootstrap）：独立
+  线程（thread_local 零残留——thread::spawn + 缓存 thread_local
+  确定性）编译前 is_loaded()=false → 编译后 = true（活性探针
+  pub(crate) + #[cfg(test)]）+ 宏产物 Begin 代次 ≥1 双信号——
+  §2.3-11 实测判别非推断
+- bootstrap_expander.rs 头注释 E1-α 影子 → E1-β 生产切换改述
+  （三件套角色：展开逻辑/桥/种子双角色）+ is_loaded 探针
+
+Stage Summary:
+- 生产管线读+展开两段全自举（VM 上 reader.krf + expander.krf 含
+  宏）——「语言能表达自身前端」完整生产命题兑现；553 全绿 = 528
+  基线经生产切换零回归（+切换守护 1 单元）
+- 遵循：§2.3-11（守护 = 实测活性判别）、§7.2 Q3（端到端覆盖——
+  全套件即生产管线回归）、§8.4.5（E3 相位标记特性不可静默丢弃——
+  发现即修复）
+- 下一步：34-c TD-021 prelude 模块注入（import 解析 + 多模块
+  declare + 前置合并）
+
+---
+Task ID: 34-c
+Agent: Super Z (main) — ARCH-A 设计 + DEV-A 实施（L3 多角色会话）
+Task: MUV 34-c：TD-021 hofs 用户面注入——kerf-prelude 模块（preamble.krf）+ import 解析 forms 级合并 + 多模块按序 declare + prelude_tests 7
+
+Work Log:
+- 设计（登记册三否决的规避路径落地）：(module 名 (import
+  kerf-prelude) ...) 声明 → 前段 read 后、expand 前 forms 前置合并
+  （种子 Reader 读入固定库工件——与 expander.krf 同口径；独立
+  file_id → Span 指向 preamble.krf，无 P1 源码拼接诊断污染；单一
+  编译单元 → 无 P3 跨程序合并；零 VM 再入 → 无 P5 越界）
+- 实施：bootstrap/preamble.krf（map/filter/foldl/for-each +
+  (import)/(export) 头部）+ driver imports_prelude（Stx 层 module
+  头游走——镜像 expand_module 头部序）+ resolve_prelude_imports
+  （include_str 嵌入）+ 多模块 declare（全部 module 形式按出现序）
+  + 主模块 = 最后 module 形式 visit（import 边传递依赖）+ 无 module
+  程序 main 兜底声明（保持单模块时代行为）
+- 实测修复：①preamble 头部 () 不可用（module 头部区仅 (import)/
+  (export) 关键字形式——空列表按体处理报错）②多模块 declare 初版
+  破坏无模块程序（main 未声明 → 「未声明的模块」——reader.krf 加载
+  链即触发）→ main 兜底 declare 修复
+- 测试：prelude_tests 7（用户面 map/组合管道 50/for-each 副作用/
+  双路径一致/opt-in 未绑定负例/名字捕获显式失败/未知导入）+ runner
+  r15 分组注册
+
+Stage Summary:
+- TD-021 P3 清偿闭环：hofs 用户面注入经模块/import 承载——显式
+  opt-in + 显式失败（同名 define → 「重复定义」）+ 双路径一致；
+  553:0:0（+7）
+- 遵循：§12（正确>妥协——不做半吊子注入）、§11（接口隔离——注入
+  留在前段管线层，expand/compile 零感知）、§2.3-4（显式失败）
+- 下一步：34-d Stage 1 门审查（§7.3 审计 + §21.3 四条 + 发现项修复）
+
+---
+Task ID: 34-d
+Agent: Super Z (main) — QA-A/ARCH-A（L3 多角色会话，门审查轮）
+Task: MUV 34-d：Stage 1 门审查——stage1_gate_audit_r1（50 case）+ §7.3.1/§7.3.2 配比机械校验 + §21.3 四条件锚定 + 发现项修复 2
+
+Work Log:
+- 审计集（examples/audit/stage1_gate_audit_r1.rs，50 case 可重运行，
+  cargo run --example）：A 单语句 12 / B 多语句 12 / C 复杂 10 /
+  D 恢复 6 / E 边界 6（§7.3.2 本批次修复面：Span 代次守卫糖内宏/
+  require·set 代次/prelude/模块内宏注册/卫生交换行为） / P 正向 4
+  （§21.3 锚定：fib 生产管线/prelude 管道/递归宏短路/缓存确定性 +
+  第二次 check 命中观测）；七类全覆盖（⑥ 循环依赖经双模块源码 →
+  DFS 灰标记结构化 Err；⑦ 宏深度自指宏经生产路径）；极性 34 负向
+  ≥22 / 恢复 6 / 正向 10；配比 main() 机械校验（违规 → exit 1）
+- 审计发现项 2（修复）：模块注册簿错误（declare 重复声明 / visit
+  未声明模块 / 循环依赖）此前 Span::dummy + 无诊断渲染 → 挂 module
+  形式 Span + render_diagnostic（B07/C01 case 驱动——P2 诊断质量
+  等级，非 soundness）
+- 消息校准 8 处（审计预期 ↔ 真实消息对齐：需要 int/需要 bool/
+  参数数量不匹配 + C03 eval 深度上限先于未绑达用例调整 deep 100→10
+  + D06 计数器期望 (4 2) 算术修正 + P03 my-or 全 bool 语料）
+- 复跑：50/50 PASS + stage0_gate_audit_r1 41/41 保持 EXIT 0
+- §21.3 四条件锚定输出（审计集 main 尾部四行）：条件 1 生产管线
+  自举含宏（全体 case 经生产路径）/ 条件 2 VM 承载全部生产展开 /
+  条件 3 prelude 管道 + stdlib 套件 / 条件 4 缓存确定性 + 命中
+  观测 + 静态检查 0 错
+
+Stage Summary:
+- Stage 1 门审查 APPROVED：50/50 + 配比满足 + 七类全覆盖 + 边界 ≥5
+  + 零新 P0/P1（发现项 2 为 P2 诊断质量——当场修复复验）；§6.3
+  投票记录：五角色（PM/ARCH/DEV/QA/REC）全票 GO（依据：553:0:0
+  §3.2 全绿 + 双审计 APPROVED + §21.3 四条件锚定 + TD-002~022
+  状态对账——开放项均 P3 且不阻塞 Stage 2 启动条件）
+- 遵循：§7.3.1/§7.3.2（强制配比 + 边界 case）、§7.1.1（七类矩阵）、
+  §2.3-11（审计 = 实测非清单自查）、§8.4.5（发现项修复附条款）
+- 下一步：34-e 交付环（§3.2 + r15 tar.gz + web + E2E + 树压实）
+
+---
+Task ID: 34-e
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，交付轮；含 r15 树压实）
+Task: MUV 34-e：§3.2 全绿 + r15 tar.gz 打包（包内自举验证）+ web 同步 + E2E + r15 树压实
+
+Work Log:
+- §3.2 六命令实跑全绿（clean 起步）：clean（498 files/123.6MiB）→
+  build --release 9.39s 零告警（clippy allow 一处：resolve_prelude_
+  imports result_large_err——同 front 入口约定）→ check 0/0 → fmt
+  --check 零 diff（prelude imports 一处格式化）→ clippy
+  --all-targets -D warnings 0 → test --release --workspace
+  **553:0:0**（单元 184 + 集成 369）
+- 双审计集 EXIT 0（stage0 41 + stage1 50——§7.3.1 规则 4 不降规模）；
+  CLI 冒烟：fib 75025 + ⇒ 144 + kerf test 2/2 + 宏+prelude 自检
+  ⇒ 10（(m (foldl + 0 (map ... (filter ...)))) 经生产管线）
+- r15 tar.gz 打包（§19.4 命令整目录；根 worklog.md 排除 ✓；
+  docs/worklog/ rec 树 + docs/worklog.md 镜像入包 ✓）+ 包内自举
+  验证（解压 → 553:0:0 + CLI 一致）
+- 文档同步（§8）：tech-debt-register TD-021 → 已解决（r15）+
+  matrix 553 对账（r15 增量行 + 历史链 + 集成 345→369）+ stage-1/
+  plan.md 批次 E 行收口（E1-β + 生产切换 + TD-021 + 门审查
+  APPROVED）+ RELEASE_NOTES r15 节（五交付）+ 03-macro-system
+  E1-β 能力边界行 + 07-bootstrap Expander 交付标记 + docs/tests/
+  v0/stage1/plan/{prelude,gate-audit-r15}.md 测试计划 + bootstrap-
+  expander.md E1-β 增补
+- web 同步 + agent-browser E2E + r15 树压实（见本条目后续追加）
+
+Stage Summary:
+- r15 交付闭环：E1-β 宏收口（全模式面 + 代次守卫镜像）→ 生产切换
+  （读+展开两段全自举 + 实测活性守护）→ TD-021（模块/import 承载
+  prelude）→ Stage 1 门审查 APPROVED（50 case + 四条件锚定）→
+  打包（包内自举验证）→ web → E2E → 树压实
+- 遵循：§3.2（六命令逐条实测——clean 全量重编）、§19（打包 + 包内
+  验证 + README 归档）、§7.3.3（收敛裁定依据——本轮 0 新 P0/P1）、
+  §8.4.5（matrix 分项对账）
+- 下一步（Stage 2 准备）：§21 阶段规划先行（切换信号核对 + 后端
+  策略裁定——LLVM 永不入自举链边界重申）+ TD-007 残留/TD-022 TCO
+  决策点

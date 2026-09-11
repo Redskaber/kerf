@@ -214,8 +214,12 @@
 ## TD-021：高阶函数用户面注入缺载体（P3）
 
 - **等级**：P3（hofs 已以 kerf 源码交付并直测——仅用户程序不可见）
-- **状态**：开放
-- **目标阶段**：Stage 1 批次 E（Expander kerf 重写时随模块系统一并设计）
+- **状态**：**已解决（r15——模块/import 承载：kerf-prelude 模块
+  （bootstrap/preamble.krf）经 forms 级合并注入单一编译单元；用户程序
+  `(module 名 (import kerf-prelude) ...)` 声明后 map/filter/foldl/
+  for-each 以普通全局函数可调用；同名 define 显式报「重复定义」；
+  无 import 声明保持未绑定（opt-in）；测试 prelude_tests 7 case）**
+- **目标阶段**：Stage 1 批次 E（已随 E1-β 交付）
 - **描述**：map/filter/foldl/for-each 已实现于 reader.krf 序章（r6/B3，
   经 bootstrap 桥直测——「用 kerf 源码 preamble 实现」的自举验证命题
   本体已交付），但用户程序引用报未绑定变量。三方案已否决（r5 裁定）：
@@ -224,6 +228,10 @@
   显式拒绝）、P5 builtin 调闭包（VM 递归 re-entry 越界 §11）。
 - **偿还计划**：模块/import 机制承载 preamble（批次 E Expander 重写
   时设计）——正确 > 妥协：不做看起来像但不是的半吊子注入。
+- **实现**（r15）：P1/P3/P5 全规避——preamble.krf 以独立 file_id 读入
+  （Span 指向自身文件，无源码拼接污染）；forms 前置合并进同一编译
+  单元（无跨程序合并）；零 VM 再入。注册表多模块按序 declare + 主
+  模块 visit（import 边传递依赖——§8.9 单模块生命周期扩展）。
 
 ## TD-022：自举 Reader 帧消耗 O(源字符数)（P3）
 

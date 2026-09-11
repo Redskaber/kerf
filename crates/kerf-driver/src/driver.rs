@@ -16,7 +16,7 @@ use kerf_core::{lower_program, CoreExpr, IrGraph};
 use kerf_expander::{expand_program, phase::ModuleRegistry, ExpandCtxt, ExpandError};
 use kerf_reader::{read_source, ReadError, TokenKind};
 use kerf_runtime::Heap;
-use kerf_span::{render_diagnostic, Diagnostic, DiagnosticCode, Severity, SourceMap, Span};
+use kerf_span::{render_diagnostic, Diagnostic, DiagnosticCode, FileId, Severity, SourceMap, Span};
 use kerf_syntax::{Stx, Symbol, SymbolTable};
 use kerf_vm::{run_program, Env, Value, VmError};
 
@@ -172,6 +172,80 @@ pub(crate) struct FrontOutput {
     pub(crate) registry: ModuleRegistry,
 }
 
+/// prelude 模块源码（编译期嵌入——产物自包含，与 reader/expander 同
+/// 口径；TD-021：hofs 用户面注入载体）。
+const PREAMBLE_SRC: &str = include_str!("bootstrap/preamble.krf");
+/// prelude 源文件名（Span 诊断归属——独立 file，无源码拼接污染）。
+const PREAMBLE_FILENAME: &str = "preamble.krf";
+/// prelude 模块名（用户程序 (import kerf-prelude) 声明名——标识符字符
+/// 集不含 '.'，取连字符形态）。
+const PRELUDE_MODULE: &str = "kerf-prelude";
+
+/// Stx 层 module 头 import 扫描（TD-021 注入触发判定：任一顶层 module
+/// 形式声明 (import kerf-prelude)）。
+fn imports_prelude(f: &Stx, table: &SymbolTable) -> bool {
+    let items = match f.datum.as_list() {
+        Some(l) if !l.is_empty() => l,
+        // _ 臂理由：非列表/空列表不参与 import 扫描
+        _ => return false,
+    };
+    let head = match items[0].datum.as_symbol() {
+        Some(s) => s,
+        None => return false,
+    };
+    if table.name(head) != "module" {
+        return false;
+    }
+    // 可选头部区（import/export 依序、体前终止——镜像 expand_module 头部游走）
+    for item in items.iter().skip(2) {
+        let sub = match item.datum.as_list() {
+            Some(l) if !l.is_empty() => l,
+            // _ 臂理由：非列表头部项 = 体形式——头部区终止
+            _ => break,
+        };
+        let h = match sub[0].datum.as_symbol() {
+            Some(s) => s,
+            None => break,
+        };
+        match table.name(h) {
+            "import" => {
+                for name in &sub[1..] {
+                    if let Some(sym) = name.datum.as_symbol() {
+                        if table.name(sym) == PRELUDE_MODULE {
+                            return true;
+                        }
+                    }
+                }
+                continue;
+            }
+            "export" => continue,
+            // _ 臂理由：头部区终止（体形式）
+            _ => break,
+        }
+    }
+    false
+}
+
+/// prelude 注入（TD-021）：声明 import 的程序 → 读入 preamble 形式并
+/// 前置合并（种子 Reader——固定库工件与 expander.krf 同口径；本文件
+/// 自身错误不可能（构造性正确），Span 归属 preamble.krf 独立 file）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同 front 入口约定，错误体积可接受
+fn resolve_prelude_imports(
+    forms: Vec<Stx>,
+    table: &mut SymbolTable,
+    sm: &mut SourceMap,
+) -> Result<Vec<Stx>, DriverError> {
+    let needed = forms.iter().any(|f| imports_prelude(f, table));
+    if !needed {
+        return Ok(forms);
+    }
+    let file_id = sm.add_file(PREAMBLE_FILENAME, PREAMBLE_SRC);
+    let mut prelude =
+        read_source(PREAMBLE_SRC, file_id, table).map_err(|e| DriverError::from_read(&e, sm))?;
+    prelude.extend(forms);
+    Ok(prelude)
+}
+
 /// 编译前段（read → expand → 相位簿记 → 字节码，不含 lower）。
 ///
 /// **读阶段经自举 Reader**（B3：kerf 源码 Reader 在 VM 上运行，
@@ -181,6 +255,12 @@ pub(crate) struct FrontOutput {
 /// [`compile_source`]（完整管线，含图 IR）与 [`run_source`]/[`eval_source`]
 /// （生产执行路径，无需 IR）共用本前段——单一编译逻辑，两分流出口
 /// （字节码产物一致性由 `fast_path_bytecode_matches_full_compile` 守护）。
+///
+/// **E1-β 生产切换**：读 **与展开** 均经自举实现（VM 上 reader.krf +
+/// expander.krf）——「语言能表达自身前端」的完整生产命题；Rust 种子
+/// 保留双角色：自举引导（reader.krf/expander.krf 的编译）+ parity
+/// oracle（测试对照）。切换守护：`production_expander_is_bootstrap`
+/// （宏产物 CoreExpr Span 展开代次 = 0——种子路径恒 ≥1）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 fn compile_front(source: &str, filename: &str) -> Result<FrontOutput, DriverError> {
     let mut sm = SourceMap::new();
@@ -193,13 +273,15 @@ fn compile_front(source: &str, filename: &str) -> Result<FrontOutput, DriverErro
     let forms = crate::bootstrap::read_source(source, file_id, &mut table)
         .map_err(|e| DriverError::from_read(&e, &sm))?;
 
-    front_from_forms(forms, table, sm, main_sym)
+    front_from_forms(forms, table, sm, main_sym, file_id, ExpanderKind::Bootstrap)
 }
 
-/// 种子编译前段（Rust Reader——自举 Reader 的引导实现与 parity oracle）。
+/// 种子编译前段（Rust Reader + Rust Expander——自举实现的引导编译与
+/// parity oracle）。
 ///
-/// 消费方：bootstrap 加载（编译 reader.krf）+ parity 测试对照基准。
-/// 逻辑与 [`compile_front`] 完全同构——仅 read 入口为种子实现。
+/// 消费方：bootstrap 加载（编译 reader.krf/expander.krf/preamble.krf）+
+/// parity 测试对照基准。逻辑与 [`compile_front`] 完全同构——read 与
+/// expand 两入口均为种子实现（无递归：种子编译自举实现）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
 pub(crate) fn compile_front_seed(source: &str, filename: &str) -> Result<FrontOutput, DriverError> {
     let mut sm = SourceMap::new();
@@ -211,64 +293,123 @@ pub(crate) fn compile_front_seed(source: &str, filename: &str) -> Result<FrontOu
     let forms =
         read_source(source, file_id, &mut table).map_err(|e| DriverError::from_read(&e, &sm))?;
 
-    front_from_forms(forms, table, sm, main_sym)
+    front_from_forms(forms, table, sm, main_sym, file_id, ExpanderKind::Seed)
+}
+
+/// 前段展开器选择（E1-β 生产切换：生产 = 自举 Expander；种子路径 =
+/// Rust Expander——bootstrap 加载与 parity oracle）。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExpanderKind {
+    /// 自举 Expander（expander.krf 在 VM 上运行——生产路径）。
+    Bootstrap,
+    /// Rust 种子 Expander（引导编译 + parity oracle）。
+    Seed,
 }
 
 /// 前段公共部分（read 之后：expand → 相位簿记 → 字节码）。
 ///
-/// 两入口（自举/种子）共享——保证除 read 外的管线行为单一实现。
+/// 两入口（自举/种子）共享——保证除 read 与 expand 外的管线行为单一
+/// 实现。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
 fn front_from_forms(
     forms: Vec<Stx>,
-    table: SymbolTable,
-    sm: SourceMap,
+    mut table: SymbolTable,
+    mut sm: SourceMap,
     main_sym: Symbol,
+    file_id: FileId,
+    expander: ExpanderKind,
 ) -> Result<FrontOutput, DriverError> {
+    // 1.5 TD-021 prelude 模块注入（import 解析——read 后、expand 前：
+    // forms 级合并，单一编译单元；Span 指向 preamble.krf（独立 file））
+    let forms = resolve_prelude_imports(forms, &mut table, &mut sm)?;
+
     // 2. Expander：Stx → CoreExpr（visit = 变换器注册完成）
-    let mut ectx = ExpandCtxt::new(table);
-    let core = expand_program(&forms, &mut ectx).map_err(|e| DriverError::from_expand(&e, &sm))?;
-    let table = ectx.table;
+    let core = match expander {
+        ExpanderKind::Bootstrap => {
+            let mut t = table;
+            let core = crate::bootstrap_expander::expand_program(&forms, file_id, &mut t)
+                .map_err(|e| DriverError::from_expand(&e, &sm))?;
+            table = t;
+            core
+        }
+        ExpanderKind::Seed => {
+            let mut ectx = ExpandCtxt::new(table);
+            let core =
+                expand_program(&forms, &mut ectx).map_err(|e| DriverError::from_expand(&e, &sm))?;
+            table = ectx.table;
+            core
+        }
+    };
 
     // 2.5 R9 能力权限验证（r8——13 §3.1.3 条款 3「编译期错误」：
     // front 管线全路径生效 run/eval/check/compile；首个违规即阻断
     // fail-closed；E0006 家族与 E0005 静态检查分离）
     verify_io_capabilities(&core, &table, &sm)?;
 
-    // 3. 相位簿记：declare + visit（§8.9 单模块生命周期）
+    // 3. 相位簿记：declare + visit（§8.9——TD-021 多模块：全部 module
+    // 形式按出现序 declare（prelude 注入在前、用户模块在后），visit 主
+    // 模块（最后一个 module 形式——import 边传递依赖 visit；无 module
+    // 程序行为与单模块时代一致：find_map 兜底 main）
     let mut registry = ModuleRegistry::new();
-    let module_name = core
+    let mut main_module_span = Span::dummy();
+    for e in core.iter() {
+        if let CoreExpr::Module {
+            name,
+            imports,
+            exports,
+            span,
+            ..
+        } = e.as_ref()
+        {
+            let owned_imports = imports.clone();
+            let owned_exports = exports.clone();
+            registry
+                .declare(*name, owned_imports, owned_exports)
+                .map_err(|m| {
+                    // 声明错误挂该 module 形式 Span（诊断定位——门审计
+                    // 发现项修复：此前 dummy 无定位 + 无渲染）
+                    let diag = Diagnostic::error(Some(DiagnosticCode(2)), m.clone(), *span);
+                    DriverError {
+                        stage: Stage::Expand,
+                        rendered: render_diagnostic(&diag, &sm),
+                        diagnostic: diag,
+                    }
+                })?;
+            main_module_span = *span;
+        }
+    }
+    // 无 module 形式的程序：main 兜底声明（镜像旧单模块行为——
+    // visit 前提是已 declare）
+    if !core
         .iter()
-        .find_map(|e| match e.as_ref() {
-            CoreExpr::Module { name, .. } => Some(*name),
-            // _ 臂理由：非 module 顶形式不参与查找（find_map 取首个 module 形式）
-            _ => None,
-        })
-        .unwrap_or(main_sym);
-    let (imports, exports) = core
-        .iter()
-        .find_map(|e| match e.as_ref() {
-            CoreExpr::Module {
-                imports, exports, ..
-            } => Some((imports.clone(), exports.clone())),
-            // _ 臂理由：非 module 顶形式不参与查找（find_map 取首个 module 形式）
-            _ => None,
-        })
-        .unwrap_or((vec![], vec![]));
-    registry
-        .declare(module_name, imports, exports)
-        .map_err(|m| {
+        .any(|e| matches!(e.as_ref(), CoreExpr::Module { .. }))
+    {
+        registry.declare(main_sym, vec![], vec![]).map_err(|m| {
             let diag = Diagnostic::error(Some(DiagnosticCode(2)), m.clone(), Span::dummy());
             DriverError {
                 stage: Stage::Expand,
-                rendered: format!("[expand] {}", m),
+                rendered: render_diagnostic(&diag, &sm),
                 diagnostic: diag,
             }
         })?;
+    }
+    let module_name = core
+        .iter()
+        .rev()
+        .find_map(|e| match e.as_ref() {
+            CoreExpr::Module { name, .. } => Some(*name),
+            // _ 臂理由：非 module 顶形式不参与查找（rev 取最后一个——
+            // 主模块 = 用户模块（prelude 注入序在前））
+            _ => None,
+        })
+        .unwrap_or(main_sym);
     registry.visit(module_name).map_err(|m| {
-        let diag = Diagnostic::error(Some(DiagnosticCode(2)), m.clone(), Span::dummy());
+        // visit 错误挂主模块形式 Span（循环依赖/未声明导入的定位——
+        // 门审计发现项修复：此前 dummy 无定位 + 无渲染）
+        let diag = Diagnostic::error(Some(DiagnosticCode(2)), m.clone(), main_module_span);
         DriverError {
             stage: Stage::Expand,
-            rendered: format!("[expand] {}", m),
+            rendered: render_diagnostic(&diag, &sm),
             diagnostic: diag,
         }
     })?;
@@ -798,6 +939,31 @@ pub fn dump_stx(source: &str, filename: &str) -> Result<String, DriverError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn production_expander_is_bootstrap() {
+        // E1-β 生产切换守护（§2.3-11 实测判别，非推断）：独立线程内
+        // （thread_local 状态零残留）——编译前自举 Expander 未加载，
+        // 编译后已加载 ⇒ compile_front 的展开段确实经 bootstrap_
+        // expander（VM 上运行）；辅以宏产物展开代次标记（≥1——retag
+        // 统一 +1）双信号确认。
+        let ok = std::thread::spawn(|| {
+            let before = crate::bootstrap_expander::is_loaded();
+            let src = "(define-syntax m (syntax-rules () ((m x) (begin x)))) (m 42)";
+            let (front, _hit) = compile_front_cached(src, "t.krf").expect("编译失败");
+            let after = crate::bootstrap_expander::is_loaded();
+            let has_expansion_mark = front.core.iter().any(|e| match e.as_ref() {
+                CoreExpr::Begin { span, .. } => span.expansion_id >= 1,
+                _ => false,
+            });
+            (!before, after, has_expansion_mark)
+        })
+        .join()
+        .expect("探针线程失败");
+        assert!(ok.0, "独立线程起始应未加载自举 Expander");
+        assert!(ok.1, "生产编译后自举 Expander 应已加载（VM 路径活性）");
+        assert!(ok.2, "宏产物应携带展开代次标记（retag +1）");
+    }
 
     #[test]
     fn run_simple_program() {

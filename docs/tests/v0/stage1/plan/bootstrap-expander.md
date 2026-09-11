@@ -41,3 +41,41 @@
 - kerf-expander（种子 oracle：expand_program + ExpandCtxt）
 - kerf-compiler + kerf-vm（行为面 compile + run_program）
 - 判据边界：expansion_id 不参与（E1-α——r6 Reader parity 同口径）
+
+
+---
+
+## E1-β 增补（r15，Task 34-a/b——宏收口 + 生产切换）
+
+> **Date**: 2026-09-11（r15）
+> **依据**: lang-design 03-macro-system §2.2/§2.4；07-bootstrap §3.2/§3.3；sop §9.4/§9.5
+
+### 测试目标（E1-β）
+
+验证自举 Expander 的**完整宏系统**与 Rust 种子行为等价，且**生产
+管线切换**后零回归：
+
+1. **宏 parity**（+17 测试）：define-syntax 注册/nil 字面量、syntax-rules
+   解析错误（六类逐字）、卫生 α 重命名（tmp$hyg$N 计数器单调）、省略号
+   （零/一/多段 + 复合 (a b ...)）、字面量集合（同名符号匹配 + 子句
+   依序）、嵌套列表/向量模式、糖名覆盖（注册表单表替换语义）、module
+   体内注册、模式形状不匹配、深度上限 500（自指宏——消息逐字）、
+   非列表模式子句解析合法（应用时跳过）；
+2. **行为面**（+4）：swap! 运行期交换（卫生不串扰）、递归 my-or 短路、
+   卫生无捕获（inc-tmp + 用户 tmp）、深度上限结构化错误（非 VM 帧溢出）；
+3. **生产切换守护**（driver 单元，+1）：独立线程活性探针（编译前
+   is_loaded=false → 编译后 true）+ 宏产物展开代次 ≥1。
+
+### 关键镜像点（实测驱动发现）
+
+- **Span 并集代次守卫**：节点形状 v2 = (tag s e exp scopes ...)——
+  instantiate 的 Span 并集镜像 Span::merge 保守策略（代次不同 → 丢弃
+  跨距）；糖产物内宏调用（use-site 代次 ≥1）产物 Span 落模板范围；
+- **retag 代次 +1**（bumped_expansion）；全部糖构造器代次来源逐位
+  镜像（构造节点 = span 来源节点的代次；dummy 关键字 = 0）；
+- **核心节点携带代次**（(tag s e exp ...) → 桥重建 Span）——「展开
+  相位标记」诊断特性（E3）经生产切换保持；
+- **变换器注册表单表**：用户宏覆盖糖名 + 卫生基名回退对两类同权
+  （镜像 ctx.transformers HashMap 惰性注册语义）；
+- **foldl/for-each 序章补定义**：chars->str→foldl 此前为死代码路径，
+  宏卫生基名回退首次激活（R1 反射——实测驱动补定义）。

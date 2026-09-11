@@ -1,13 +1,15 @@
-//! E1-α 自举 Expander parity 套件（Stage 1 批次 E / Task 33-a）。
+//! E1 自举 Expander parity 套件（Stage 1 批次 E / Task 33-a + 34-a）。
 //!
-//! 验收门（plan §5 批次 E「E1 Expander kerf 重写」α 阶段）：
+//! 验收门（plan §5 批次 E「E1 Expander kerf 重写」α + β 阶段）：
 //! - **结构 parity**：自举 Expander（expander.krf，VM 上运行）与种子
 //!   Expander（kerf-expander/*.rs，Rust）在正例语料上——CoreExpr 树
 //!   （原语形态 + Span(start,end) + 作用域集 + param_scopes）递归一致
 //!   （符号按名——两实现各自 intern 序不保证一致，名字是唯一稳定口径；
-//!   expansion_id 不参与判据——E1-α 边界，r6 Reader parity 同口径）；
+//!   expansion_id 不参与判据——E1 边界，r6 Reader parity 同口径）；
 //! - **错误 parity**：负例语料——消息 + Span(start,end) 逐字一致；
-//! - **E1-α 边界**：define-syntax 显式报错（宏/define-syntax 属 E1-β）；
+//! - **E1-β 宏收口**（Task 34-a）：define-syntax/syntax-rules/卫生 α
+//!   重命名/省略号（零/多段/复合）/字面量/多子句/糖覆盖/深度上限——
+//!   全部与种子逐字镜像（宏 parity 语料 15 组 + 负例 6 组）；
 //! - **行为面**：自举展开产物经 compile + VM 执行，与 run_source（种子
 //!   全管线）结果一致——展开产物是可执行 CoreExpr 的端到端证明。
 //!
@@ -502,15 +504,138 @@ fn parity_err_module_require_keyword() {
     parity_err("(syntax-rules () _)");
 }
 
-// ---- E1-α 边界（显式报错，不静默——§2.3 原则 4） ----
+// ---- E1-β 宏收口 parity：正例 ----
 
 #[test]
-fn boundary_define_syntax_reports_explicitly() {
-    let mut t = SymbolTable::new();
-    let forms = bootstrap_read("(define-syntax m (syntax-rules () ((m x) x)))", 0, &mut t)
-        .expect("读取失败");
-    let err = expand_program(&forms, 0, &mut t).expect_err("define-syntax 应显式报 E1-α 边界错误");
-    assert!(err.message.contains("E1-α"), "实际错误：{}", err.message);
+fn parity_define_syntax_yields_nil_and_registers() {
+    // define-syntax 本体 → nil 字面量（Phase 1 形式运行期无操作）
+    parity("(define-syntax m (syntax-rules () ((m x) x)))");
+    // 注册后调用：透传宏归约到实参展开
+    parity("(define-syntax m (syntax-rules () ((m x) x))) (m 42)");
+    parity("(define-syntax m (syntax-rules () ((m x) x))) (m (+ 1 2))");
+}
+
+#[test]
+fn parity_macro_hygiene_renames_introduced() {
+    // 模板引入标识符 tmp → tmp$hyg$N（α 重命名；关键字/模式变量保留）
+    parity(
+        r"(define-syntax swap!
+                 (syntax-rules ()
+                   ((swap! a b)
+                    (begin (set! tmp a) (set! a b) (set! b tmp)))))
+               (let ((tmp 1) (x 2)) (swap! tmp x))",
+    );
+    // 同一模板多个引入标识符 → 计数器单调（tmp$hyg$1 / other$hyg$2）
+    parity(
+        r"(define-syntax m
+                 (syntax-rules ()
+                   ((m a) (let ((tmp a) (other 2)) (+ tmp other)))))
+               (m 5)",
+    );
+}
+
+#[test]
+fn parity_macro_ellipsis_zero_one_many() {
+    // 省略号：零段/一段/多段（多子句 + 自引用递归宏——宏名保留集）
+    let src = "(define-syntax my-or
+                 (syntax-rules ()
+                   ((my-or) false)
+                   ((my-or a rest ...) (if a true (my-or rest ...)))))";
+    parity(&format!("{} (my-or)", src));
+    parity(&format!("{} (my-or 1)", src));
+    parity(&format!("{} (my-or false 1)", src));
+    parity(&format!("{} (my-or false false 2)", src));
+}
+
+#[test]
+fn parity_macro_literals_and_multi_clause() {
+    // 字面量集合：同名符号才匹配（子句依序尝试）
+    parity(
+        "(define-syntax f (syntax-rules (to) ((f x to y) (+ x y)) ((f x y) (- x y)))) (f 1 to 2)",
+    );
+    parity("(define-syntax f (syntax-rules (to) ((f x to y) (+ x y)) ((f x y) (- x y)))) (f 1 2)");
+    // 字面量不匹配 → 落入下一子句（模式变量绑定）
+    parity("(define-syntax g (syntax-rules (else) ((g x else) x) ((g x y) y))) (g 7 else)");
+}
+
+#[test]
+fn parity_macro_nested_patterns() {
+    // 嵌套列表模式 + 向量模式（结构匹配 + 模式变量绑定）
+    parity("(define-syntax m (syntax-rules () ((m (a b)) (+ a b)))) (m (3 4))");
+    parity("(define-syntax v (syntax-rules () ((v [a]) (list a)))) (v [9])");
+    parity("(define-syntax w (syntax-rules () ((w (a (b c))) (+ a (* b c))))) (w (1 (2 3)))");
+    // 字面量 datum 模式（数字/字符串按值相等）
+    parity("(define-syntax n (syntax-rules () ((n 1 x) x) ((n _ y) y))) (n 1 100)");
+    parity("(define-syntax n (syntax-rules () ((n 1 x) x) ((n _ y) y))) (n 2 100)");
+}
+
+#[test]
+fn parity_macro_overrides_sugar() {
+    // 用户宏覆盖糖名（注册表优先于惰性糖注册——单表替换语义）
+    parity("(define-syntax when (syntax-rules () ((when c t) (if c t nil)))) (when true 1)");
+    // 覆盖后调用：走用户 rules 产物（结构 parity 全树一致）
+    parity("(define-syntax unless (syntax-rules () ((unless c t) (if c nil t)))) (unless false 2)");
+}
+
+#[test]
+fn parity_macro_compound_ellipsis() {
+    // 复合省略号模式：(a b ...) 形态——余部逐元素结构匹配
+    parity("(define-syntax pair-up (syntax-rules () ((pair-up (a b) ...) (list a b)))) (pair-up)");
+    parity("(define-syntax pair-up (syntax-rules () ((pair-up (a b) ...) (list a b)))) (pair-up (1 2))");
+}
+
+#[test]
+fn parity_define_syntax_in_module_body() {
+    // module 体内注册（相位 visit = 变换器注册完成）
+    parity("(module m (define-syntax f (syntax-rules () ((f x) x))) (f 1))");
+}
+
+// ---- E1-β 宏收口 parity：负例（消息 + Span 逐字一致） ----
+
+#[test]
+fn parity_err_define_syntax_shapes() {
+    parity_err("(define-syntax m)");
+    parity_err("(define-syntax m (syntax-rules () ((m x) x)) extra)");
+    parity_err("(define-syntax 1 (syntax-rules () ((m x) x)))");
+    parity_err("(define-syntax m 1)");
+    parity_err("(define-syntax m (let () 1))");
+}
+
+#[test]
+fn parity_err_syntax_rules_parse() {
+    // 缺参 / 字面量非符号 / 字面量集非列表 / 子句非列表 / 子句非二元 / 零子句
+    parity_err("(define-syntax m (syntax-rules))");
+    parity_err("(define-syntax m (syntax-rules (1) ((m x) x)))");
+    parity_err("(define-syntax m (syntax-rules 1 ((m x) x)))");
+    parity_err("(define-syntax m (syntax-rules () 1))");
+    parity_err("(define-syntax m (syntax-rules () (m x y)))");
+    parity_err("(define-syntax m (syntax-rules ()))");
+}
+
+#[test]
+fn parity_syntax_rules_non_list_pattern_clause_accepted() {
+    // 非列表模式子句在解析层合法（应用时按子句跳过——镜像 match_clause
+    // 的 None 路径；种子与本实现均注册成功并返回 nil 字面量）
+    parity("(define-syntax m (syntax-rules () (m x)))");
+}
+
+#[test]
+fn parity_err_macro_no_clause_match() {
+    // 全部子句不匹配 → 「宏「m」展开失败：宏调用与全部子句模式均不匹配」
+    parity_err("(define-syntax m (syntax-rules () ((m x y) x))) (m 1)");
+    parity_err("(define-syntax m (syntax-rules () ((m) 1))) (m 1)");
+}
+
+#[test]
+fn parity_err_macro_depth_limit() {
+    // 自指宏：无限展开 → 深度上限结构化报错（非栈溢出——§19.2 不变式 1）
+    parity_err("(define-syntax loop2 (syntax-rules () ((loop2) (loop2)))) (loop2)");
+}
+
+#[test]
+fn parity_err_macro_pattern_shape_mismatch() {
+    // 结构不匹配（列表模式对非列表实参 → 下一子句 → 全不匹配）
+    parity_err("(define-syntax m (syntax-rules () ((m (a)) a))) (m 1)");
 }
 
 // ---- 行为面（自举产物端到端可执行） ----
@@ -534,4 +659,76 @@ fn behavior_cond_while_fib() {
 fn behavior_inner_define_and_shadowing() {
     behavior("(define (f x) (define (g y) (+ x y)) (g 1)) (f 5)");
     behavior("(define x 10) ((lambda (x) x) 20)");
+}
+
+#[test]
+fn behavior_macro_swap_runtime() {
+    // 宏产物经 compile + VM 执行：swap! 交换运行期变量（卫生引入 tmp
+    // 不与用户 tmp 串扰——α 重命名的运行期证明）
+    behavior(
+        r"(define-syntax swap!
+                  (syntax-rules ()
+                    ((swap! a b)
+                     (let ((tmp a))
+                       (begin (set! a b) (set! b tmp))))))
+                (define x 1) (define y 2)
+                (begin (swap! x y) (- x y))",
+    );
+}
+
+#[test]
+fn behavior_macro_recursive_or() {
+    // 省略号 + 自引用递归宏：my-or 逐参短路求值（truthy 严格 bool——
+    // 条件位仅 bool，§19.5 陷阱 3 口径）
+    behavior(
+        r"(define-syntax my-or
+                  (syntax-rules ()
+                    ((my-or) false)
+                    ((my-or a rest ...) (if a a (my-or rest ...)))))
+                (my-or false false true)",
+    );
+    behavior(
+        r"(define-syntax my-or
+                  (syntax-rules ()
+                    ((my-or) false)
+                    ((my-or a rest ...) (if a a (my-or rest ...)))))
+                (my-or false false)",
+    );
+    behavior(
+        r"(define-syntax my-or
+                  (syntax-rules ()
+                    ((my-or) false)
+                    ((my-or a rest ...) (if a a (my-or rest ...)))))
+                (my-or false)",
+    );
+}
+
+#[test]
+fn behavior_macro_hygiene_no_capture() {
+    // 卫生核心：宏引入 tmp 与用户 tmp 互不可见（词法绑定各自解析）
+    behavior(
+        r"(define-syntax inc-tmp
+                  (syntax-rules ()
+                    ((inc-tmp) (let ((tmp 1)) tmp))))
+                (define tmp 10)
+                (+ tmp (inc-tmp))",
+    );
+}
+
+#[test]
+fn behavior_macro_depth_limit_structured_error() {
+    // 自指宏：结构化深度错误（非 VM 帧溢出——错误面经桥返回）
+    let mut t = SymbolTable::new();
+    let forms = bootstrap_read(
+        "(define-syntax loop2 (syntax-rules () ((loop2) (loop2)))) (loop2)",
+        0,
+        &mut t,
+    )
+    .expect("读取失败");
+    let err = expand_program(&forms, 0, &mut t).expect_err("应报深度上限错误");
+    assert!(
+        err.message.contains("宏展开深度超过上限 500"),
+        "实际错误：{}",
+        err.message
+    );
 }

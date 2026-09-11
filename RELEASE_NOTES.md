@@ -1,3 +1,42 @@
+## v0.3.0-r15（2026-09-11）——批次 E 收口：E1-β 宏系统 + 生产切换 + TD-021 prelude + Stage 1 门审查 APPROVED（553 全绿）
+
+### 交付一：E1-β 宏收口——expander.krf 完整宏系统（syntax-rules 卫生宏，VM 上运行）
+
+- **宏机制**（expander.krf +~470 行）：define-syntax 注册（变换器注册表 = 名字单表——用户宏 'rules / 糖惰性注册 'builtin，HashMap 替换语义镜像：用户宏可覆盖糖名）+ syntax-rules 解析（字面量集合/子句 (模式 模板)/五类解析错误逐字镜像）+ **模式匹配**（通配 `_`/字面量（同名 sym）/省略号（零/多段/复合单层）/字面量 datum 值相等/嵌套列表/向量 `[...]`——trial 语义经函数式绑定传递）+ **模板实例化**（模式变量替换保留用户 Span/作用域、(var ...) 省略号拼接跳格、悬垂省略号按普通符号走实例化——报错优于静默）+ **卫生 α 重命名**（`name$hyg$N`——num->str 递归构造；同标识符同实例化恒同映射；保留集（宏自引用）+ 核心关键字豁免）+ **深度计数 500**（链长语义——expand-form 入口快照/出口回滚，兄弟不累计；超限结构化报错非栈溢出）+ retag def∪use 并集 + 卫生基名回退（rsplit $hyg$ + 后缀纯数字保守校验）
+- **Span 并集代次守卫镜像**（实测驱动的发现——parity 失败暴露）：节点形状升 v2 = `(tag s e exp scopes ...)`（exp = Span.expansion_id，桥侧发射/读回）；**instantiate 的 Span 并集须镜像 Span::merge 保守策略——代次不同 → 丢弃该跨距**（糖产物内宏调用：use-site 代次 ≥1 vs 模板 0 → 产物 Span 落模板范围）；retag 代次 +1（bumped_expansion）；全部构造器（糖/提升/宏）逐位镜像代次来源
+- **核心节点携带代次**（生产切换的相位可观测性保持）：core 节点 `(tag s e exp ...)` → 桥重建 `Span{expansion_id}`——「宏引入引用未绑定错误应携带 expansion N 标记」（E3 诊断特性）经切换后保持
+- **实测驱动修复**（§2.3-11——全部经 parity 双实现实跑发现）：foldl/for-each 序章补定义（chars->str→foldl 此前为死代码——卫生基名回退首次激活）+ 宏产物品类 6 处（let 括号/字面量 tag 铸造/letrec 先用后绑/...的 r14 既有 + E1-β 新发现：set/require/define-syntax 代次字段漏挂×3、模块注册簿错误无 Span 无渲染×2）
+
+### 交付二：生产切换（E1-β——读 + 展开两段全自举）
+
+- **compile_front 展开段** → `bootstrap_expander::expand_program`（VM 上 expander.krf）——**「语言能表达自身前端」的完整生产命题**；Rust 种子保留双角色：自举引导（reader.krf/expander.krf/preamble.krf 的编译经 compile_front_seed）+ parity oracle（测试对照）
+- **切换守护**：driver 单元 `production_expander_is_bootstrap`——独立线程（thread_local 零残留）编译前活性探针 `is_loaded()` = false → 编译后 = true（实测判别非推断）+ 宏产物展开代次标记 ≥1 双信号
+- **553:0:0**（528 基线零回归——全套件经自举 Reader + 自举 Expander 生产管线执行）
+
+### 交付三：TD-021 高阶函数用户面注入（P3 清偿——模块/import 承载）
+
+- **kerf-prelude 模块**（`bootstrap/preamble.krf`）：map/filter/foldl/for-each（reader.krf 序章同源）；用户程序 `(module 名 (import kerf-prelude) ...)` 声明导入
+- **注入机制**（P1/P3/P5 三否决全规避）：read 后、expand 前 forms 级合并（独立 file_id——Span 指向 preamble.krf，无源码拼接诊断污染）；单一编译单元（无跨程序全局合并）；零 VM 再入；**多模块按序 declare + 主模块 visit**（§8.9 单模块生命周期扩展——import 边传递依赖）；同名 define 显式报「重复定义」（不静默遮蔽）；无 import 声明保持未绑定（opt-in 语义）
+- **prelude_tests 7 case**：用户面可见/组合管道（filter→map→foldl = 50）/for-each 副作用/双路径一致/opt-in 负例/名字捕获显式失败/未知导入
+
+### 交付四：Stage 1 门审查（§7.3 + §21.3 四条验收——APPROVED）
+
+- **审计集** `examples/audit/stage1_gate_audit_r1.rs`（50 case，可重运行）：§7.3.1 配比满足（A 单语句 12 / B 多语句 12 / C 复杂 10 / D 恢复 6 / E 边界 6 / P 正向 4）+ §7.1.1 **七类全覆盖**（语法/未绑定/空应用/参数个数/类型不匹配/循环依赖（双模块源码 → DFS 灰标记结构化 Err）/宏深度（自指宏经生产路径））+ §7.3.2 边界 6（本批次修复面：Span 代次守卫糖内宏/require·set 代次/prelude/模块内宏注册）——全部 case 经**生产管线**（自举读+展开）
+- **审计发现项 2（已修复）**：模块注册簿错误（未声明模块/循环依赖）无 Span 定位 + 无诊断渲染——修复：挂 module 形式 Span + render_diagnostic（P2 诊断质量）
+- **§21.3 四条件锚定**：① 子集表达前端——生产管线自举（VM Reader + VM Expander 含宏）② VM 上正确运行——自举 Expander 承载全部生产展开 ③ 标准库最小集——prelude 管道（列表 hofs 用户面）+ stdlib（列表/字符串/I/O）④ 增量编译——P04 缓存确定性 + 第二次 check 命中观测 + 静态检查 0 错
+- **结论**：APPROVED（50/50 PASS + 配比满足 + 七类全覆盖 + 零新 P0/P1）——Stage 1 全批次（A/B/C/D/吸收/E）交付闭环，进入 Stage 2 准备
+
+### 交付五：质量口径
+
+- **§3.2 六命令实跑全绿**（clean 起步：498 files/123.6MiB → build 9.39s 零告警 → check 0/0 → fmt 零 diff → clippy -D warnings 0 → test **553:0:0**（单元 184 + 集成 369））；双审计集 EXIT 0（stage0 41 + stage1 50）；CLI 冒烟 fib 75025 + ⇒ 144 + kerf test 2/2 + 宏+prelude 自检 ⇒ 10
+- 文档同步：tech-debt-register TD-021 → 已解决（r15）+ matrix 553 对账 + stage-1/plan.md 批次 E 行收口 + bootstrap-expander.md E1-β 增补 + prelude.md + stage1 门审计测试计划
+
+### 下一步（Stage 2 准备——§21 阶段规划先行）
+
+Stage 2 启动条件核对（§7.3.3 收敛裁定 + §21.5 切换信号）→ 阶段规划（§21 + §13.1 设计对齐 + §17 排版图）→ 后端策略裁定（LLVM 可选后端引入评估——永不入自举链边界重申）+ TD-007 残留（10_000 完整口径）与 TD-022（Reader 帧消耗 O(n)）的 TCO 决策点。
+
+---
+
 # RELEASE_NOTES
 
 ## v0.1.0 —— Stage 0 语义验证（2026-09-09）

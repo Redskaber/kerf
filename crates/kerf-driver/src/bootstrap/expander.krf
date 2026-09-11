@@ -1,13 +1,17 @@
-; expander.krf — kerf 自举 Expander（Stage 1 批次 E / E1-α：核心形式 + 九糖）
+; expander.krf — kerf 自举 Expander（Stage 1 批次 E / E1-β：宏收口）
 ;
-; 本文件以 kerf 源码实现展开器子集（9 核心形式 + 9 内置语法糖 + 内部
-; define 提升 + TD-004 fresh-scope 作用域注入 + quote datum 转换），
-; 在 Stage 0 VM 上运行（07-bootstrap §3.2 混合期构成：Expander 属新
-; 语言子集）。行为与种子实现（kerf-expander/*.rs，Rust）对齐——
-; CoreExpr（原语形态 + Span(start,end) + 作用域集 + param_scopes）与
-; 错误（消息 + Span）的 parity 由 tests/v0/stage1/plan/bootstrap_
-; expander_tests.rs 验收（影子路径——生产展开仍走 Rust 种子；
-; 宏/define-syntax 属 E1-β）。
+; 本文件以 kerf 源码实现展开器（9 核心形式 + 9 内置语法糖 + 内部
+; define 提升 + TD-004 fresh-scope 作用域注入 + quote datum 转换 +
+; define-syntax/syntax-rules 宏系统：模式匹配（通配/字面量/省略号/
+; 嵌套列表/向量）+ 模板实例化（模式变量替换/省略号拼接）+ 卫生
+; α 重命名（$hyg$N——同标识符同次实例化恒同映射）+ 展开深度计数
+; （500 上限——超限报错非栈溢出，§19.2 不变式 1），在 Stage 0 VM 上
+; 运行（07-bootstrap §3.2 混合期构成：Expander 属新语言子集）。
+; 行为与种子实现（kerf-expander/*.rs，Rust）对齐——CoreExpr（原语
+; 形态 + Span(start,end) + 作用域集 + param_scopes）与错误（消息 +
+; Span）的 parity 由 tests/v0/stage1/plan/bootstrap_expander_tests.rs
+; 验收（生产展开路径切换至本实现——E1-β；Rust 种子保留为 parity
+; oracle 与自举种子，07-bootstrap 自举种子经典角色）。
 ;
 ; 契约（与 kerf-driver/src/bootstrap_expander.rs 桥对接）：
 ; - 入口 (lexp-expand-program forms)：
@@ -27,13 +31,19 @@
 ;     ('set s e 名字str scopes 值) ('define s e 名字str 值)
 ;     ('begin s e 项...) ('module s e 名字str (导入) (导出) 体...)
 ;     ('require s e 能力str...)
-; - E1-α 边界（显式报错，不静默——§2.3 原则 4）：
-;     define-syntax → 「宏展开属 E1-β」错误（parity 语料不含宏）；
-;     糖链恒收缩 + 源码嵌套 ≤256 → 展开深度上限 500 不可达（宏经
-;     E1-β 一并收口）；宏产物 Span 展开代次（expansion_id）不参与
-;     parity 判据（r6 Reader parity 同口径——start/end 逐字一致）。
+; - E1-β 边界（显式登记，不静默——§2.3 原则 4）：
+;     宏产物 Span 展开代次（expansion_id）不参与 parity 判据（r6
+;     Reader parity 同口径——start/end 逐字一致）；嵌套省略号
+;     （两级 ellipsis）与 syntax-parse 显式推迟（TD-005 口径不变）；
+;     深度上限 500 经宏展开计数可达且必达（超限报错非栈溢出）。
+; - 语义基准：变换器注册表 = 名字str 单表（用户宏 'rules / 糖惰性注册
+;     'builtin——镜像 ctx.transformers HashMap 替换语义）；卫生基名
+;     回退（name$hyg$N → 基名查表，后缀纯数字保守校验）对两类同权。
 
 ; ===== 序章：高阶函数（reader.krf 同款）=====
+; map/filter（E1-α）+ foldl/for-each（E1-β 补齐——chars->str 的 foldl
+; 消费此前为死代码路径，宏卫生基名回退首次激活它：登记后实测补定义，
+; R1 反射（实测驱动，非臆测））
 
 (define (map f lst)
   (if (null? lst)
@@ -47,25 +57,40 @@
           (cons (car lst) (filter pred (cdr lst)))
           (filter pred (cdr lst)))))
 
+(define (foldl f init lst)
+  (if (null? lst)
+      init
+      (foldl f (f init (car lst)) (cdr lst))))
+
+(define (for-each f lst)
+  (if (null? lst)
+      nil
+      (let ((ignored (f (car lst))))
+        (for-each f (cdr lst)))))
+
 ; ===== 列表与节点访问 =====
 
 (define (second x) (car (cdr x)))
 (define (third x) (car (cdr (cdr x))))
 (define (fourth x) (car (cdr (cdr (cdr x)))))
+(define (fifth x) (car (cdr (cdr (cdr (cdr x))))))
 
-; 节点固定字段：tag s e scopes；fields = 其后内容
+; 节点固定字段：tag s e exp scopes；fields = 其后内容（exp = 展开代次，
+; 镜像 Span.expansion_id——仅参与 instantiate 的 Span 并集守卫：代次
+; 不同 → 丢弃该跨距（Span::merge 保守策略）；桥侧输入恒 0）
 (define (node-tag n) (car n))
 (define (node-s n) (second n))
 (define (node-e n) (third n))
-(define (node-scopes n) (fourth n))
-(define (node-fields n) (cdr (cdr (cdr (cdr n)))))
+(define (node-exp n) (fourth n))
+(define (node-scopes n) (fifth n))
+(define (node-fields n) (cdr (cdr (cdr (cdr (cdr n))))))
 ; 字段访问：cdr 步进（算术索引不经 int 参数内置——保守类型检查的
-; num 联合边界，与种子行为等价：list-ref n (+ 4 i)）
+; num 联合边界，与种子行为等价：list-ref n (+ 5 i)）
 (define (drop-k lst k)
   (if (= k 0)
       lst
       (drop-k (cdr lst) (- k 1))))
-(define (node-field n i) (car (drop-k n (+ 4 i))))
+(define (node-field n i) (car (drop-k n (+ 5 i))))
 (define (node-count n) (+ 1 (length (node-fields n))))
 (define (sym-name n) (node-field n 0))
 
@@ -92,30 +117,33 @@
     (begin (set! SCOPE-NEXT (+ SCOPE-NEXT 1)) s)))
 
 ; 深注入（镜像 Stx::add_scope_to_all）：重建节点树，每节点作用域并入 s
+; （展开代次保持——注入不触碰代次）
 (define (inject-scope node s)
   (cons (node-tag node)
         (cons (node-s node)
               (cons (node-e node)
-                    (cons (cons s (node-scopes node))
-                          (inject-children (node-tag node)
-                                           (node-fields node)
-                                           s))))))
+                    (cons (node-exp node)
+                          (cons (cons s (node-scopes node))
+                                (inject-children (node-tag node)
+                                                 (node-fields node)
+                                                 s)))))))
 
 (define (inject-children tag fields s)
   (if (or (eq? tag 'list) (eq? tag 'vec))
       (map (lambda (c) (inject-scope c s)) fields)
       fields))
 
-; 重打作用域标签（镜像 macro_sys::retag_scopes 替换语义——糖产物全节点
-; 作用域统一为 use-site；Span 展开代次见文件头 E1-α 边界注记）
+; 重打作用域标签（镜像 macro_sys::retag_scopes：作用域替换 + 展开代次
+; +1（bumped_expansion——§19.2 不变式 1））
 (define (retag-scope node scopes)
   (cons (node-tag node)
         (cons (node-s node)
               (cons (node-e node)
-                    (cons scopes
-                          (retag-children (node-tag node)
-                                          (node-fields node)
-                                          scopes))))))
+                    (cons (+ (node-exp node) 1)
+                          (cons scopes
+                                (retag-children (node-tag node)
+                                                (node-fields node)
+                                                scopes)))))))
 
 (define (retag-children tag fields scopes)
   (if (or (eq? tag 'list) (eq? tag 'vec))
@@ -141,18 +169,18 @@
 (define (err? v) (and (pair? v) (eq? (car v) 'err)))
 (define (xperr msg s e) (list 'err msg s e))
 
-(define (make-node tag s e scopes fields)
-  (cons tag (cons s (cons e (cons scopes fields)))))
+(define (make-node tag s e exp scopes fields)
+  (cons tag (cons s (cons e (cons exp (cons scopes fields))))))
 
-(define (sym-node s e name) (make-node 'sym s e nil (list name)))
+(define (sym-node s e exp name) (make-node 'sym s e exp nil (list name)))
 ; 注意：true/false/nil 在 kerf 源码中是字面量（Bool/Nil）而非符号——
 ; 节点 tag 需 Symbol，经 string->symbol 铸造（与桥侧 tag("true") 同名）
 (define NIL-TAG (string->symbol "nil"))
 (define TRUE-TAG (string->symbol "true"))
 (define FALSE-TAG (string->symbol "false"))
-(define (nil-node s e) (make-node NIL-TAG s e nil nil))
-(define (true-node s e) (make-node TRUE-TAG s e nil nil))
-(define (false-node s e) (make-node FALSE-TAG s e nil nil))
+(define (nil-node s e exp) (make-node NIL-TAG s e exp nil nil))
+(define (true-node s e exp) (make-node TRUE-TAG s e exp nil nil))
+(define (false-node s e exp) (make-node FALSE-TAG s e exp nil nil))
 
 ; 糖引入标识符唯一化名（镜像 HygieneCtx：每次糖实例化计数从 0 起 →
 ; fresh_symbol 恒为 1 号 → loop$hyg$1；词法遮蔽保证多次 while 不串扰）
@@ -196,28 +224,30 @@
               (if (err? r)
                   r
                   (let ((names (car r)) (values (cdr r)))
-                    (let ((s (node-s bindg)) (e (node-e bindg)))
-                      (make-node 'list s e nil
-                        (cons (make-node 'list s e nil
-                                 (cons (sym-node s e "lambda")
-                                       (cons (make-node 'list s e nil names)
+                    (let ((s (node-s bindg)) (e (node-e bindg))
+                          (x (node-exp bindg)))
+                      (make-node 'list s e x nil
+                        (cons (make-node 'list s e x nil
+                                 (cons (sym-node s e x "lambda")
+                                       (cons (make-node 'list s e x nil names)
                                              (form-args args))))
                               values))))))))))
 
 ; letrec 的 set! 形式列表（镜像：set! 节点 span = pair[0].span，
 ; 头符号 span = 绑定组 span）
-(define (letrec-sets bindings span-s span-e)
+(define (letrec-sets bindings span-s span-e span-x)
   (if (null? bindings)
       nil
       (let ((b (car bindings)))
         (let ((fs (node-fields b)))
           (let ((nm (car fs)) (val (second fs)))
-            (let ((r (letrec-sets (cdr bindings) span-s span-e)))
+            (let ((r (letrec-sets (cdr bindings) span-s span-e span-x)))
               (if (err? r)
                   r
-                  (cons (make-node 'list (node-s nm) (node-e nm) nil
-                           (list (sym-node span-s span-e "set!")
-                                 (sym-node (node-s nm) (node-e nm) (sym-name nm))
+                  (cons (make-node 'list (node-s nm) (node-e nm) (node-exp nm) nil
+                           (list (sym-node span-s span-e span-x "set!")
+                                 (sym-node (node-s nm) (node-e nm) (node-exp nm)
+                                           (sym-name nm))
                                  val))
                         r))))))))
 
@@ -234,23 +264,24 @@
               (if (err? r)
                   r
                   (let ((names (car r)))
-                    (let ((s (node-s bindg)) (e (node-e bindg)))
-                      (let ((sets (letrec-sets (node-fields bindg) s e)))
+                    (let ((s (node-s bindg)) (e (node-e bindg))
+                          (x (node-exp bindg)))
+                      (let ((sets (letrec-sets (node-fields bindg) s e x)))
                         (if (err? sets)
                             sets
                             (let ((begin-node
-                                    (make-node 'list s e nil
-                                      (cons (sym-node s e "begin")
+                                    (make-node 'list s e x nil
+                                      (cons (sym-node s e x "begin")
                                             (append sets (form-args args))))))
-                              (make-node 'list s e nil
-                                (cons (make-node 'list s e nil
-                                         (cons (sym-node s e "lambda")
-                                               (cons (make-node 'list s e nil
+                              (make-node 'list s e x nil
+                                (cons (make-node 'list s e x nil
+                                         (cons (sym-node s e x "lambda")
+                                               (cons (make-node 'list s e x nil
                                                         (map (lambda (n)
-                                                               (sym-node s e (sym-name n)))
+                                                               (sym-node s e x (sym-name n)))
                                                              names))
                                                      (list begin-node))))
-                                      (map (lambda (n) (nil-node s e)) names))))))))))))))
+                                      (map (lambda (n) (nil-node s e x)) names))))))))))))))
 
 ; (let* ((x e) rest...) body...) → (let ((x e)) (let* (rest...) body...))
 ; (let* () body...) → (let () body...)
@@ -263,13 +294,14 @@
             (let ((bindings (node-fields bindg)))
               (if (null? bindings)
                   (desugar-let args)
-                  (let ((s (node-s bindg)) (e (node-e bindg)))
-                    (make-node 'list s e nil
-                      (list (sym-node s e "let")
-                            (make-node 'list s e nil (list (car bindings)))
-                            (make-node 'list s e nil
-                              (cons (sym-node s e "let*")
-                                    (cons (make-node 'list s e nil (cdr bindings))
+                  (let ((s (node-s bindg)) (e (node-e bindg))
+                        (x (node-exp bindg)))
+                    (make-node 'list s e x nil
+                      (list (sym-node s e x "let")
+                            (make-node 'list s e x nil (list (car bindings)))
+                            (make-node 'list s e x nil
+                              (cons (sym-node s e x "let*")
+                                    (cons (make-node 'list s e x nil (cdr bindings))
                                           (form-args args)))))))))))))
 
 ; (cond (c1 e1)...) → 嵌套 if（右向左构造；(test) → test；(else body...) → body）
@@ -294,13 +326,16 @@
                       (let ((node
                               (if is-else
                                   body
-                                  (make-node 'list (node-s test) (node-e test) nil
-                                    (cons (sym-node (node-s test) (node-e test) "if")
+                                  (make-node 'list (node-s test) (node-e test)
+                                             (node-exp test) nil
+                                    (cons (sym-node (node-s test) (node-e test)
+                                                    (node-exp test) "if")
                                           (cons test
                                                 (cons body
                                                       (list (if (null? chain)
                                                                 (nil-node (node-s test)
-                                                                          (node-e test))
+                                                                          (node-e test)
+                                                                          (node-exp test))
                                                                 chain)))))))))
                         (cond-chain (cdr rev-clauses) node))))))))))
 
@@ -310,8 +345,8 @@
         test
         (if (= (length fs) 2)
             (second fs)
-            (make-node 'list (node-s test) (node-e test) nil
-              (cons (sym-node (node-s test) (node-e test) "begin")
+            (make-node 'list (node-s test) (node-e test) (node-exp test) nil
+              (cons (sym-node (node-s test) (node-e test) (node-exp test) "begin")
                     (cdr fs)))))))
 
 ; (and) → true；(and a) → a；(and a b...) → (if a (and b...) false)
@@ -324,16 +359,17 @@
 
 (define (desugar-and-or args unit other)
   (if (null? args)
-      (if (eq? unit true) (true-node 0 0) (false-node 0 0))
+      (if (eq? unit true) (true-node 0 0 0) (false-node 0 0 0))
       (if (null? (cdr args))
           (car args)
-          (let ((s (node-s (car args))) (e (node-e (car args))))
+          (let ((s (node-s (car args))) (e (node-e (car args)))
+                (x (node-exp (car args))))
             (let ((rest (desugar-and-or (cdr args) unit other)))
               (if (eq? unit true)
-                  (make-node 'list s e nil
-                    (list (sym-node s e "if") (car args) rest (false-node s e)))
-                  (make-node 'list s e nil
-                    (list (sym-node s e "if") (car args) (true-node s e) rest))))))))
+                  (make-node 'list s e x nil
+                    (list (sym-node s e x "if") (car args) rest (false-node s e x)))
+                  (make-node 'list s e x nil
+                    (list (sym-node s e x "if") (car args) (true-node s e x) rest))))))))
 
 ; (when c body...) → (if c (begin body...) nil)
 (define (desugar-when args)
@@ -348,37 +384,495 @@
       (when-unless args false)))
 
 (define (when-unless args when-true)
-  (let ((s (node-s (car args))) (e (node-e (car args))))
-    (let ((body (make-node 'list s e nil
-                  (cons (sym-node s e "begin") (form-args args)))))
+  (let ((s (node-s (car args))) (e (node-e (car args)))
+        (x (node-exp (car args))))
+    (let ((body (make-node 'list s e x nil
+                  (cons (sym-node s e x "begin") (form-args args)))))
       (if (eq? when-true true)
-          (make-node 'list s e nil
-            (list (sym-node s e "if") (car args) body (nil-node s e)))
-          (make-node 'list s e nil
-            (list (sym-node s e "if") (car args) (nil-node s e) body))))))
+          (make-node 'list s e x nil
+            (list (sym-node s e x "if") (car args) body (nil-node s e x)))
+          (make-node 'list s e x nil
+            (list (sym-node s e x "if") (car args) (nil-node s e x) body))))))
 
 ; (while c body...) → (letrec ((loop (lambda () (if c (begin body... (loop)) nil)))) (loop))
 (define (desugar-while args)
   (if (null? args)
       (xperr "while 形式：(while 条件 体...)" 0 0)
-      (let ((s (node-s (car args))) (e (node-e (car args))))
-        (let ((loop-call (make-node 'list s e nil (list (sym-node s e LOOP-NAME)))))
-          (let ((body (make-node 'list s e nil
-                        (cons (sym-node s e "begin")
+      (let ((s (node-s (car args))) (e (node-e (car args)))
+            (x (node-exp (car args))))
+        (let ((loop-call (make-node 'list s e x nil
+                           (list (sym-node s e x LOOP-NAME)))))
+          (let ((body (make-node 'list s e x nil
+                        (cons (sym-node s e x "begin")
                               (append (form-args args) (list loop-call))))))
-            (let ((if-form (make-node 'list s e nil
-                              (list (sym-node s e "if") (car args) body
-                                    (nil-node s e)))))
-              (let ((lambda-node (make-node 'list s e nil
-                                  (list (sym-node s e "lambda")
-                                        (make-node 'list s e nil nil)
+            (let ((if-form (make-node 'list s e x nil
+                              (list (sym-node s e x "if") (car args) body
+                                    (nil-node s e x)))))
+              (let ((lambda-node (make-node 'list s e x nil
+                                  (list (sym-node s e x "lambda")
+                                        (make-node 'list s e x nil nil)
                                         if-form))))
-                (let ((binding (make-node 'list s e nil
-                                (list (make-node 'list s e nil
-                                        (list (sym-node s e LOOP-NAME)
+                (let ((binding (make-node 'list s e x nil
+                                (list (make-node 'list s e x nil
+                                        (list (sym-node s e x LOOP-NAME)
                                               lambda-node))))))
-                  (make-node 'list s e nil
-                    (list (sym-node s e "letrec") binding loop-call))))))))))
+                  (make-node 'list s e x nil
+                    (list (sym-node s e x "letrec") binding loop-call))))))))))
+
+; ===== 宏系统（E1-β：define-syntax + syntax-rules + 卫生 α 重命名）=====
+; 镜像 kerf-expander/macro_sys.rs + expander.rs try_macro_step——变换器
+; 注册表（名字str → ('rules 字面量 子句 def作用域集) | ('builtin)）承
+; 载用户宏与糖惰性注册（单表语义：用户 define-syntax 可覆盖糖名，卫生
+; 基名回退对两类同权——镜像 ctx.transformers HashMap 替换语义）。
+
+; 展开深度（§19.2 不变式 1：超限报错非栈溢出；链长语义——expand-form
+; 入口快照、出口回滚（兄弟不累计——当前展开路径上的宏/糖步总数），
+; 镜像 expand_form 的 entry_depth / 出口回写）
+(define DEPTH 0)
+(define MAX-EXP-DEPTH 500)
+
+; 变换器注册表与卫生上下文（每次宏应用重置——镜像 HygieneCtx::new 于
+; apply_named；renames 每子句实例化复位、计数器跨子句保持）
+(define TRANSFORMERS nil)
+(define HYG-COUNTER 0)
+(define HYG-RENAMES nil)
+(define HYG-PRESERVE nil)
+
+; ---- 数字 → 字符串（$hyg$N 后缀构造；计数恒正——无需负数路径）----
+
+(define DIGIT-STRS (list "0" "1" "2" "3" "4" "5" "6" "7" "8" "9"))
+
+(define (num->str n)
+  (if (< n 10)
+      (list-ref DIGIT-STRS n)
+      (str-append (num->str (/ n 10)) (list-ref DIGIT-STRS (mod n 10)))))
+
+; ---- 注册表操作 ----
+
+(define (registry-ref name) (assoc name TRANSFORMERS))
+
+(define (registry-hit? name) (not (bool? (registry-ref name))))
+
+; 注册/覆盖（镜像 HashMap::insert 替换语义——重定义后同名取新变换器）
+(define (registry-put! name entry)
+  (set! TRANSFORMERS
+    (cons (cons name entry)
+          (filter (lambda (e) (not (eq? (car e) name))) TRANSFORMERS))))
+
+; ---- 卫生基名回退（镜像 hygienic_base_symbol：rsplit "$hyg$" + 后缀
+; 纯数字保守校验；复用 quote 路径的 find-last-hyg 字符游标实现）----
+
+(define DIGIT-CHARS (list "0" "1" "2" "3" "4" "5" "6" "7" "8" "9"))
+
+(define (all-digits? chars)
+  (if (null? chars)
+      true
+      (and (not (bool? (member (car chars) DIGIT-CHARS)))
+           (all-digits? (cdr chars)))))
+
+; → 基名str 或 nil（无 $hyg$ / 后缀空 / 后缀非纯数字）
+(define (hyg-base-name name)
+  (let ((r (find-last-hyg (str-chars name))))
+    (if (null? r)
+        nil
+        (let ((suffix (cdr r)))
+          (if (or (null? suffix) (not (all-digits? suffix)))
+              nil
+              (chars->str (car r)))))))
+
+; ---- 变换器解析（镜像 try_macro_step 优先级：注册表精确 → 卫生基名
+; 回退 → 未注册糖名惰性注册 → nil）----
+; → (名字 种类 . 载荷) 或 nil（种类 ∈ {'rules 'builtin}）
+
+(define (resolve-transformer name)
+  (if (null? name)
+      nil
+      (if (registry-hit? name)
+          (cons name (cdr (registry-ref name)))
+          (let ((base (hyg-base-name name)))
+            (if (null? base)
+                (lazy-sugar name)
+                (if (registry-hit? base)
+                    (cons base (cdr (registry-ref base)))
+                    (lazy-sugar name)))))))
+
+; 未注册糖名 → 惰性注册 builtin（镜像 ctx.register_transformer 的惰性
+; 路径——注册后卫生基名回退同权，与 Rust 单表语义逐位一致）
+(define (lazy-sugar name)
+  (if (is-sugar-head? name)
+      (begin (registry-put! name (list 'builtin)) (list name 'builtin))
+      nil))
+
+; ---- 变换器步（镜像 try_macro_step 主体：深度计数 → 应用 → def∪use
+; retag → 经 expand-form 全分派再入）----
+
+(define (transformer-step node tf)
+  (let ((s (node-s node)) (e (node-e node))
+        (tf-name (car tf)))
+    (set! DEPTH (+ DEPTH 1))
+    (if (> DEPTH MAX-EXP-DEPTH)
+        (begin
+          (set! DEPTH (- DEPTH 1))
+          (xperr (str-append "宏展开深度超过上限 "
+                             (str-append (num->str MAX-EXP-DEPTH)
+                                         "（疑似无限递归展开）"))
+                 s e))
+        (let ((use-scopes (node-scopes node))
+              (args (form-args (node-fields node))))
+          (let ((product
+                  (if (eq? (second tf) 'rules)
+                      (let ((r (rules-apply (third tf) (fourth tf)
+                                            tf-name args)))
+                        (if (err? r)
+                            r
+                            (retag-scope r (scope-union (fifth tf)
+                                                        use-scopes))))
+                      (let ((r (desugar-dispatch tf-name args)))
+                        (if (err? r)
+                            r
+                            (retag-scope r use-scopes))))))
+            (if (err? product)
+                (xperr (str-append
+                         (str-append "宏「" tf-name)
+                         (str-append "」展开失败：" (second product)))
+                       s e)
+                (expand-form product)))))))
+
+; 作用域集并集（镜像 ScopeSet::union；桥侧排序去重重建——序不影响）
+(define (scope-union a b)
+  (if (null? a)
+      b
+      (if (bool? (member (car a) b))
+          (scope-union (cdr a) b)
+          (cons (car a) (scope-union (cdr a) b)))))
+
+; ---- 用户宏应用（镜像 Transformer::apply_named + SyntaxRules::apply）----
+; 卫生上下文重置 + preserve(self_name)（宏自引用不重命名——递归宏正确
+; 性要求，Stage 0 裁定）；逐子句匹配 → 命中后实例化
+
+(define (rules-apply literals clauses self-name args)
+  (set! HYG-COUNTER 0)
+  (set! HYG-RENAMES nil)
+  (set! HYG-PRESERVE (list self-name))
+  (match-clauses clauses literals args))
+
+(define (match-clauses clauses literals args)
+  (if (null? clauses)
+      (xperr "宏调用与全部子句模式均不匹配" 0 0)
+      (let ((clause (car clauses)))
+        (let ((r (match-clause (car clause) literals args)))
+          (if (null? r)
+              (match-clauses (cdr clauses) literals args)
+              (begin
+                (set! HYG-RENAMES nil)
+                (instantiate-template (second clause) (second r))))))))
+
+; 子句匹配：模式（含宏名首元素——跳过）对实参序列 → ('ok 绑定) 或 nil
+; （模式非列表 → 跳过子句——镜像 match_clause 的 None 路径）
+(define (match-clause pattern literals args)
+  (if (not (eq? (node-tag pattern) 'list))
+      nil
+      (let ((pfs (node-fields pattern)))
+        (match-sequence (if (null? pfs) nil (cdr pfs))
+                        literals args nil))))
+
+; 序列匹配（镜像 match_sequence）：尾部省略号（末元素 "..." 符号 →
+; 倒数第二元素为省略号模式）/ 无省略号（长度精确）
+(define (match-sequence pats literals args bindings)
+  (if (and (>= (length pats) 2)
+           (is-ellipsis-node? (car (last-pair pats))))
+      (let ((fixed (drop-last (drop-last pats)))
+            (ell-pat (car (last-pair (drop-last pats)))))
+        (match-prefix-ellipsis fixed ell-pat args literals bindings))
+      (match-exact-seq pats args literals bindings)))
+
+(define (is-ellipsis-node? node)
+  (and (eq? (node-tag node) 'sym) (eq? (sym-name node) "...")))
+
+; 尾部省略号路径：固定段前缀匹配 + 余部处理（符号 → 序列绑定；复合 →
+; 逐元素结构匹配——Stage 0 骨架边界：仅单层复合）
+(define (match-prefix-ellipsis fixed ell-pat args literals bindings)
+  (let ((r (match-prefix fixed args literals bindings)))
+    (if (null? r)
+        nil
+        (let ((bs (second r))
+              (rest (list-tail args (length fixed))))
+          (if (eq? (node-tag ell-pat) 'sym)
+              (list 'ok (bind-seq (sym-name ell-pat) rest bs))
+              (match-compound ell-pat rest literals bs))))))
+
+; 固定段：模式前缀对实参前缀（实参不足 → nil）
+(define (match-prefix pats args literals bindings)
+  (if (null? pats)
+      (list 'ok bindings)
+      (if (null? args)
+          nil
+          (let ((r (match-datum (car pats) (car args) literals bindings)))
+            (if (null? r)
+                nil
+                (match-prefix (cdr pats) (cdr args) literals (second r)))))))
+
+; 无省略号：长度相等 + 逐项（镜像 args.len() == fixed_pats.len()）
+(define (match-exact-seq pats args literals bindings)
+  (if (not (= (length pats) (length args)))
+      nil
+      (match-prefix pats args literals bindings)))
+
+; 复合省略号模式：余部逐元素结构匹配，绑定累进（镜像 inner 克隆-提交）
+(define (match-compound pat rest literals bindings)
+  (if (null? rest)
+      (list 'ok bindings)
+      (let ((r (match-datum pat (car rest) literals bindings)))
+        (if (null? r)
+            nil
+            (match-compound pat (cdr rest) literals (second r))))))
+
+; ---- 绑定构造与查找 ----
+; 绑定 = (名字str 标记 . 值)，标记 ∈ {'single 'seq}；同名旧绑定移除后
+; 压入（镜像 retain + push——后绑定胜出）；查找取首个命中（镜像
+; bindings.iter().find）
+
+(define (bind-single name node bindings)
+  (cons (cons name (cons 'single node))
+        (filter (lambda (b) (not (eq? (car b) name))) bindings)))
+
+(define (bind-seq name nodes bindings)
+  (cons (cons name (cons 'seq nodes))
+        (filter (lambda (b) (not (eq? (car b) name))) bindings)))
+
+(define (binding-lookup name bindings)
+  (if (null? bindings)
+      nil
+      (if (eq? (car (car bindings)) name)
+          (car bindings)
+          (binding-lookup name (cdr bindings)))))
+
+; ---- 单元素匹配（镜像 match_datum：省略号非法位/通配/字面量/模式变
+; 量/字面量 datum 相等/列表与向量结构 trial 匹配）----
+
+(define (match-datum pat arg literals bindings)
+  (let ((ptag (node-tag pat)))
+    (cond
+      ((eq? ptag 'sym)
+       (let ((nm (sym-name pat)))
+         (cond
+           ((eq? nm "...") nil)
+           ((eq? nm "_") (list 'ok bindings))
+           ((not (bool? (member nm literals)))
+            (if (and (eq? (node-tag arg) 'sym)
+                     (eq? (sym-name arg) nm))
+                (list 'ok bindings)
+                nil))
+           (else (list 'ok (bind-single nm arg bindings))))))
+      ((or (eq? ptag 'int) (eq? ptag 'float) (eq? ptag 'str)
+           (eq? ptag 'true) (eq? ptag 'false) (eq? ptag 'nil))
+       (if (and (eq? (node-tag arg) ptag) (datum-literal-eq? pat arg))
+           (list 'ok bindings)
+           nil))
+      ((eq? ptag 'list)
+       (if (eq? (node-tag arg) 'list)
+           (match-sequence (node-fields pat) literals (node-fields arg)
+                           bindings)
+           nil))
+      ((eq? ptag 'vec)
+       (if (eq? (node-tag arg) 'vec)
+           (match-sequence (node-fields pat) literals (node-fields arg)
+                           bindings)
+           nil))
+      (else nil))))
+
+; 字面量 datum 相等（镜像 StxLiteral PartialEq：int/float/str 值相等；
+; bool/nil 同 tag 恒等）
+(define (datum-literal-eq? pat arg)
+  (let ((t (symbol->string (node-tag pat))))
+    (cond ((eq? t "int") (= (node-field pat 0) (node-field arg 0)))
+          ((eq? t "float") (= (node-field pat 0) (node-field arg 0)))
+          ((eq? t "str") (eq? (node-field pat 0) (node-field arg 0)))
+          (else true))))
+
+; ---- 模板实例化（镜像 instantiate_template）----
+; 模式变量 → 绑定值（单值：用户节点原样——用户 Span/作用域；序列变量
+; 在非省略号位：保留符号，由展开器统一按未绑定处理）；保留集与核心
+; 关键字不重命名；其余引入标识符 α 重命名（Span/作用域随模板）；列表/
+; 向量：项序列实例化 + (var ...) 省略号拼接 + 产物项 Span 并集（空 →
+; 模板 Span）+ 模板作用域（终值经 def∪use retag 统一覆盖）。
+
+(define (instantiate-template template bindings)
+  (let ((tag (node-tag template)))
+    (let ((tname (symbol->string tag)))
+      (cond
+        ((eq? tname "sym")
+         (let ((b (binding-lookup (sym-name template) bindings)))
+           (cond
+             ((not (null? b))
+              (if (eq? (second b) 'single)
+                  (cdr (cdr b))
+                  template))
+             ((or (is-preserved? (sym-name template))
+                  (is-keyword? (sym-name template)))
+              template)
+             (else (fresh-sym-node template)))))
+        ((or (eq? tname "int") (eq? tname "float") (eq? tname "str")
+             (eq? tname "true") (eq? tname "false") (eq? tname "nil"))
+         template)
+        ((or (eq? tname "list") (eq? tname "vec"))
+         (let ((out (instantiate-items (node-fields template) bindings)))
+           (let ((sp (if (null? out)
+                         (list (node-s template) (node-e template)
+                               (node-exp template))
+                         (span-merge-items out))))
+             (make-node tag (car sp) (second sp) (third sp)
+                        (node-scopes template) out))))
+        (else template)))))
+
+; 引入标识符 α 重命名（镜像 fresh_symbol：同基名本次实例化恒同映射）
+(define (fresh-sym-node template)
+  (make-node 'sym (node-s template) (node-e template)
+             (node-exp template) (node-scopes template)
+             (list (hyg-fresh-name (sym-name template)))))
+
+(define (hyg-fresh-name base)
+  (let ((hit (assoc base HYG-RENAMES)))
+    (if (not (bool? hit))
+        (cdr hit)
+        (begin
+          (set! HYG-COUNTER (+ HYG-COUNTER 1))
+          (let ((fresh (str-append base (str-append "$hyg$"
+                                                    (num->str HYG-COUNTER)))))
+            (set! HYG-RENAMES (cons (cons base fresh) HYG-RENAMES))
+            fresh)))))
+
+(define (is-preserved? nm)
+  (not (bool? (member nm HYG-PRESERVE))))
+
+; 项序列实例化（镜像 instantiate 的 while 循环：(var ...) 命中序列绑
+; 定 → 全量拼接 + 跳两格；否则逐项（悬垂省略号按普通符号走实例化——
+; 保留/重命名，由展开器统一报未绑定，报错优于静默））
+(define (instantiate-items items bindings)
+  (if (null? items)
+      nil
+      (let ((item (car items))
+            (next-ell (if (null? (cdr items))
+                          false
+                          (is-ellipsis-node? (second items)))))
+        (if next-ell
+            (let ((b (if (eq? (node-tag item) 'sym)
+                         (binding-lookup (sym-name item) bindings)
+                         nil)))
+              (if (and (not (null? b)) (eq? (second b) 'seq))
+                  (append (cdr (cdr b))
+                          (instantiate-items (cdr (cdr items)) bindings))
+                  (cons (instantiate-template item bindings)
+                        (instantiate-items (cdr items) bindings))))
+            (cons (instantiate-template item bindings)
+                  (instantiate-items (cdr items) bindings))))))
+
+; 产物项 Span 并集（镜像 Span::merge 链：首项起步逐项并入；**展开
+; 代次不同 → 丢弃该跨距**（保守策略——文件或代次不一致时返回 self，
+; 保证合并始终可用）；min 起 / max 止；结果代次 = 首项代次）
+(define (span-merge-items items)
+  (span-merge-loop (cdr items) (node-s (car items)) (node-e (car items))
+                   (node-exp (car items))))
+
+(define (span-merge-loop items s e x)
+  (if (null? items)
+      (list s e x)
+      (let ((it (car items)))
+        (if (= (node-exp it) x)
+            (span-merge-loop (cdr items)
+                             (min2 s (node-s it)) (max2 e (node-e it)) x)
+            (span-merge-loop (cdr items) s e x)))))
+
+(define (min2 a b) (if (< a b) a b))
+(define (max2 a b) (if (> a b) a b))
+
+; ---- define-syntax 展开（镜像 expand_define_syntax：形状校验 →
+; syntax-rules 解析 → 注册（def 作用域 = define-syntax 形式整体作用域
+; 集）→ Phase 1 形式运行期无操作（nil 字面量））----
+
+(define (expand-define-syntax node)
+  (let ((items (node-fields node))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
+    (if (not (= (length items) 3))
+        (xperr "define-syntax 形式：(define-syntax 名 (syntax-rules ...))" s e)
+        (let ((name-node (second items)))
+          (if (not (eq? (node-tag name-node) 'sym))
+              (xperr "define-syntax 名必须是符号"
+                     (node-s name-node) (node-e name-node))
+              (let ((rules (third items)))
+                (if (not (is-syntax-rules-head? rules))
+                    (xperr
+                      "define-syntax 第二参数必须是 (syntax-rules ...) 形式"
+                      (node-s rules) (node-e rules))
+                    (let ((parsed (syntax-rules-parse rules)))
+                      (if (err? parsed)
+                          (xperr (str-append "syntax-rules 解析失败："
+                                             (second parsed))
+                                 (node-s rules) (node-e rules))
+                          (begin
+                            (registry-put!
+                              (sym-name name-node)
+                              (list 'rules (car parsed) (second parsed)
+                                    (node-scopes node)))
+                            (list 'lit s e x nil)))))))))))
+
+; rules 形式头判定：列表 + 首元素 sym "syntax-rules"（调用方前置校验）
+(define (is-syntax-rules-head? rules)
+  (and (eq? (node-tag rules) 'list)
+       (not (null? (node-fields rules)))
+       (eq? (node-tag (car (node-fields rules))) 'sym)
+       (eq? (sym-name (car (node-fields rules))) "syntax-rules")))
+
+; syntax-rules 解析（镜像 SyntaxRules::parse）→ (字面量名列表 子句列
+; 表) 或 ('err 消息 0 0)（Span 由调用方挂 rules 形式——镜像 String 错
+; 误经 map_err 统一附 rules_stx.span 的口径）
+(define (syntax-rules-parse rules)
+  (let ((items (node-fields rules)))
+    (if (< (length items) 2)
+        (xperr "syntax-rules 缺少参数（至少需要字面量集合与一个子句）" 0 0)
+        (if (not (eq? (node-tag (car items)) 'sym))
+            (xperr "syntax-rules 首元素必须是符号" 0 0)
+            (let ((lit-node (second items)))
+              (if (not (eq? (node-tag lit-node) 'list))
+                  (xperr "syntax-rules 第二元素必须是字面量列表" 0 0)
+                  (let ((lits (literal-names (node-fields lit-node))))
+                    (if (err? lits)
+                        lits
+                        (let ((clauses
+                                (parse-clauses (cdr (cdr items)) nil)))
+                          (if (err? clauses)
+                              clauses
+                              (if (null? clauses)
+                                  (xperr "syntax-rules 至少需要一个子句" 0 0)
+                                  (list lits clauses))))))))))))
+
+(define (literal-names nodes)
+  (if (null? nodes)
+      nil
+      (if (not (eq? (node-tag (car nodes)) 'sym))
+          (xperr "syntax-rules 字面量必须是符号" 0 0)
+          (let ((r (literal-names (cdr nodes))))
+            (if (err? r)
+                r
+                (cons (sym-name (car nodes)) r))))))
+
+(define (parse-clauses nodes acc)
+  (if (null? nodes)
+      (reverse acc)
+      (let ((c (car nodes)))
+        (if (or (not (eq? (node-tag c) 'list))
+                (not (= (length (node-fields c)) 2)))
+            (xperr "syntax-rules 子句必须是 (pattern template) 二元列表" 0 0)
+            (let ((fs (node-fields c)))
+              (parse-clauses (cdr nodes)
+                             (cons (list (car fs) (second fs)) acc)))))))
+
+; 去尾（省略号序列切分用；调用保证非空列表）
+(define (drop-last lst)
+  (if (null? (cdr lst))
+      nil
+      (cons (car lst) (drop-last (cdr lst)))))
 
 ; ===== quote datum → 值（镜像 core_forms::datum_to_value）=====
 
@@ -412,8 +906,6 @@
 ; 最后一次出现前缀，无则原样；无数字校验（与 core_forms 口径一致）。
 ; 经字符表模式匹配实现（算术索引不经 int 参数内置——保守类型检查
 ; 的 num 联合边界））
-(define (fifth x) (car (cdr (cdr (cdr (cdr x))))))
-
 (define (str-chars s) (map cdr (str->pos-chars s)))
 
 (define HYG-CHARS (list "$" "h" "y" "g" "$"))
@@ -459,7 +951,8 @@
 
 (define (expand-core-form kw-name node)
   (let ((items (node-fields node))
-        (s (node-s node)) (e (node-e node)))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
     (cond
       ((eq? kw-name "lambda") (expand-lambda node))
       ((eq? kw-name "if")
@@ -473,8 +966,8 @@
                        t
                        (let ((el (if (= (length items) 4)
                                      (expand-form (fourth items))
-                                     (list 'lit s e nil))))
-                         (if (err? el) el (list 'if s e c t el)))))))))
+                                     (list 'lit s e x nil))))
+                         (if (err? el) el (list 'if s e x c t el)))))))))
       ((eq? kw-name "set!")
        (if (not (= (length items) 3))
            (xperr "set! 形式：(set! 名 值)" s e)
@@ -484,18 +977,18 @@
                  (let ((v (expand-form (third items))))
                    (if (err? v)
                        v
-                       (list 'set s e (sym-name target)
+                       (list 'set s e x (sym-name target)
                              (node-scopes target) v)))))))
       ((eq? kw-name "define") (expand-define node))
       ((eq? kw-name "begin")
        (let ((r (expand-seq (form-args items))))
-         (if (err? r) r (cons 'begin (cons s (cons e r))))))
+         (if (err? r) r (cons 'begin (cons s (cons e (cons x r)))))))
       ((eq? kw-name "module") (expand-module node))
       ((eq? kw-name "quote")
        (if (not (= (length items) 2))
            (xperr "quote 形式：(quote 数据)" s e)
            (let ((v (datum->value (second items))))
-             (if (err? v) v (list 'lit s e v)))))
+             (if (err? v) v (list 'lit s e x v)))))
       ((eq? kw-name "require") (expand-require node))
       ((or (eq? kw-name "import") (eq? kw-name "export"))
        (xperr "import/export 只能出现在 module 形式内部" s e))
@@ -505,8 +998,7 @@
        (xperr "语法糖形式应经内置变换器处理（内部不变式破坏）" s e))
       ((eq? kw-name "else")
        (xperr "else 只能出现在 cond 子句的测试位置" s e))
-      ((eq? kw-name "define-syntax")
-       (xperr "define-syntax 暂不经自举 Expander（E1-α 边界——宏展开经 E1-β 收口）" s e))
+      ((eq? kw-name "define-syntax") (expand-define-syntax node))
       ((eq? kw-name "syntax-rules")
        (xperr "syntax-rules 只能出现在 define-syntax 内部" s e))
       (else (xperr "未知关键字" s e)))))
@@ -514,7 +1006,8 @@
 ; (lambda (参数...) 体...)——fresh scope 深注入（TD-004 镜像）
 (define (expand-lambda node)
   (let ((items (node-fields node))
-        (s (node-s node)) (e (node-e node)))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
     (if (< (length items) 3)
         (xperr "lambda 形式：(lambda (参数...) 体...)" s e)
         (let ((fresh (fresh-scope)))
@@ -527,7 +1020,7 @@
                   (let ((body (expand-body body-forms)))
                     (if (err? body)
                         body
-                        (list 'lambda s e
+                        (list 'lambda s e x
                               (map sym-name params)
                               (map node-scopes params)
                               body))))))))))
@@ -606,7 +1099,9 @@
 (define (wrap-body exprs forms)
   (if (null? (cdr exprs))
       (car exprs)
-      (cons 'begin (cons (node-s (car forms)) (cons (node-e (car forms)) exprs)))))
+      (cons 'begin (cons (node-s (car forms))
+                         (cons (node-e (car forms))
+                               (cons (node-exp (car forms)) exprs))))))
 
 ; 提升主体：((lambda (名...) (begin (set! 名 值)... 体...)) nil...)
 ; 值形式逐个校验并构造（镜像 hoist 循环的错误短路序）
@@ -616,18 +1111,19 @@
         (set-forms (make-setbangs defines)))
     (if (err? set-forms)
         set-forms
-        (let ((s (node-s span-form)) (e (node-e span-form)))
+        (let ((s (node-s span-form)) (e (node-e span-form))
+            (x (node-exp span-form)))
           (let ((body-forms (append set-forms rest)))
             (let ((lambda-node
-                    (make-node 'list s e nil
-                      (cons (sym-node 0 0 "lambda")
-                            (cons (make-node 'list s e nil
-                                     (map (lambda (n) (sym-node s e n)) names))
+                    (make-node 'list s e x nil
+                      (cons (sym-node 0 0 0 "lambda")
+                            (cons (make-node 'list s e x nil
+                                     (map (lambda (n) (sym-node s e x n)) names))
                                   body-forms)))))
               (let ((app-node
-                      (make-node 'list s e nil
+                      (make-node 'list s e x nil
                         (cons lambda-node
-                              (map (lambda (n) (nil-node s e)) names)))))
+                              (map (lambda (n) (nil-node s e x)) names)))))
                 (expand-form app-node))))))))
 
 ; 逐 define：先值校验/构造，再 set! 形式（错误短路）
@@ -645,9 +1141,9 @@
 ; (set! 名 值) 形式（镜像 make_setbang——全部字段 span = define 节点
 ; span，作用域 ∅；值预先校验）
 (define (make-setbang-with def value)
-  (make-node 'list (node-s def) (node-e def) nil
-    (list (sym-node (node-s def) (node-e def) "set!")
-          (sym-node (node-s def) (node-e def) (define-name def))
+  (make-node 'list (node-s def) (node-e def) (node-exp def) nil
+    (list (sym-node (node-s def) (node-e def) (node-exp def) "set!")
+          (sym-node (node-s def) (node-e def) (node-exp def) (define-name def))
           value)))
 
 ; define 名字（镜像 define_name 校验：不完整/函数糖首元素/非符号）
@@ -674,10 +1170,11 @@
   (let ((items (node-fields def)))
     (let ((target (second items)))
       (if (eq? (node-tag target) 'list)
-          (let ((s (node-s target)) (e (node-e target)))
-            (make-node 'list s e nil
-              (cons (sym-node 0 0 "lambda")
-                    (cons (make-node 'list s e nil (cdr (node-fields target)))
+          (let ((s (node-s target)) (e (node-e target))
+                (x (node-exp target)))
+            (make-node 'list s e x nil
+              (cons (sym-node 0 0 0 "lambda")
+                    (cons (make-node 'list s e x nil (cdr (node-fields target)))
                           (form-body items)))))
           (if (not (= (length items) 3))
               (xperr "define 值形式必须是单个表达式"
@@ -688,7 +1185,8 @@
 ; （函数糖路径：参数表/lambda 节点 span = define 整体 span）
 (define (expand-define node)
   (let ((items (node-fields node))
-        (s (node-s node)) (e (node-e node)))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
     (if (< (length items) 3)
         (xperr "define 形式：(define 名 值) 或 (define (名 参数...) 体...)" s e)
         (let ((target (second items)))
@@ -699,15 +1197,16 @@
                            (node-s target) (node-e target))
                     (let ((fname (sym-name (car flist))))
                       (let ((lambda-node
-                              (make-node 'list s e nil
-                                (cons (sym-node 0 0 "lambda")
-                                      (cons (make-node 'list s e nil
+                              (make-node 'list s e x nil
+                                (cons (sym-node 0 0 0 "lambda")
+                                      (cons (make-node 'list s e x nil
                                                (cdr flist))
                                             (form-body items))))))
                         (expand-form
-                          (make-node 'list s e nil
-                            (list (sym-node 0 0 "define")
-                                  (sym-node (node-s target) (node-e target) fname)
+                          (make-node 'list s e x nil
+                            (list (sym-node 0 0 0 "define")
+                                  (sym-node (node-s target) (node-e target)
+                                            (node-exp target) fname)
                                   lambda-node)))))))
               (if (not (eq? (node-tag target) 'sym))
                   (xperr "define 目标必须是符号" (node-s target) (node-e target))
@@ -718,12 +1217,13 @@
                       (let ((v (expand-form (third items))))
                         (if (err? v)
                             v
-                            (list 'define s e (sym-name target) v))))))))))
+                            (list 'define s e x (sym-name target) v))))))))))
 
 ; (module 名 [(import ...)] [(export ...)] 体...)——镜像 expand_module
 (define (expand-module node)
   (let ((items (node-fields node))
-        (s (node-s node)) (e (node-e node)))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
     (if (< (length items) 2)
         (xperr "module 形式：(module 名 [(import ...)] [(export ...)] 体...)" s e)
         (let ((name-node (second items)))
@@ -740,9 +1240,11 @@
                             (cons 'module
                                   (cons s
                                         (cons e
-                                              (cons (sym-name name-node)
-                                                    (cons imports
-                                                          (cons exports body))))))))))))))))
+                                              (cons x
+                                                    (cons (sym-name name-node)
+                                                          (cons imports
+                                                                (cons exports
+                                                                      body)))))))))))))))))
 
 ; 头部 import/export 解析 → (导入列表 导出列表 体起始序号)
 (define (module-header items idx)
@@ -787,7 +1289,8 @@
 ; (require io read|write ...)——镜像 expand_require
 (define (expand-require node)
   (let ((items (node-fields node))
-        (s (node-s node)) (e (node-e node)))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
     (if (< (length items) 3)
         (xperr "require 形式：(require io read|write)——主体与能力项不可缺省" s e)
         (let ((subj (second items)))
@@ -802,7 +1305,7 @@
                   (let ((caps (require-caps (form-body items) nil)))
                     (if (err? caps)
                         caps
-                        (cons 'require (cons s (cons e caps)))))))))))
+                        (cons 'require (cons s (cons e (cons x caps))))))))))))
 
 (define (require-caps cap-nodes acc)
   (if (null? cap-nodes)
@@ -834,7 +1337,14 @@
             (let ((r (expand-seq (cdr forms))))
               (if (err? r) r (cons f r)))))))
 
+; trampoline 入口（镜像 expand_form：入口深度快照 + 变换器解析分派 +
+; 出口回写——当前展开路径上的宏/糖步计数，兄弟不累计）
 (define (expand-form node)
+  (let ((entry-depth DEPTH))
+    (let ((r (expand-form-dispatch node)))
+      (begin (set! DEPTH entry-depth) r))))
+
+(define (expand-form-dispatch node)
   (let ((tag (node-tag node)))
     (if (eq? tag 'list)
         (expand-list-trampoline node)
@@ -845,35 +1355,39 @@
   (let ((tag (node-tag node)))
     (let ((tname (symbol->string tag)))
       (cond
-      ((eq? tname "int") (list 'lit (node-s node) (node-e node) (node-field node 0)))
-      ((eq? tname "float") (list 'lit (node-s node) (node-e node) (node-field node 0)))
-      ((eq? tname "str") (list 'lit (node-s node) (node-e node) (node-field node 0)))
-      ((eq? tname "true") (list 'lit (node-s node) (node-e node) true))
-      ((eq? tname "false") (list 'lit (node-s node) (node-e node) false))
-      ((eq? tname "nil") (list 'lit (node-s node) (node-e node) nil))
+      ((eq? tname "int")
+       (list 'lit (node-s node) (node-e node) (node-exp node)
+             (node-field node 0)))
+      ((eq? tname "float")
+       (list 'lit (node-s node) (node-e node) (node-exp node)
+             (node-field node 0)))
+      ((eq? tname "str")
+       (list 'lit (node-s node) (node-e node) (node-exp node)
+             (node-field node 0)))
+      ((eq? tname "true")
+       (list 'lit (node-s node) (node-e node) (node-exp node) true))
+      ((eq? tname "false")
+       (list 'lit (node-s node) (node-e node) (node-exp node) false))
+      ((eq? tname "nil")
+       (list 'lit (node-s node) (node-e node) (node-exp node) nil))
       ((eq? tname "sym")
-       (list 'var (node-s node) (node-e node) (sym-name node)
-             (node-scopes node)))
+       (list 'var (node-s node) (node-e node) (node-exp node)
+             (sym-name node) (node-scopes node)))
       ((eq? tname "vec")
        (xperr "向量不能出现在表达式位置（仅用于绑定组/模式）"
               (node-s node) (node-e node)))
       (else (xperr (str-append "未知 datum 节点[leaf]:" tname)
                    (node-s node) (node-e node)))))))
 
-; trampoline：糖头循环展开（产物可能是任意节点——经 expand-form 全
-; 分派再入，镜像 expand_form 的 while + match 结构）
+; trampoline：变换器头循环展开（镜像 expand_form 的 while + try_macro_
+; step：注册表（用户宏 + 惰性糖注册）→ 变换器步 → 产物经 expand-form
+; 全分派再入；未命中 → 核心形式/函数应用）
 (define (expand-list-trampoline node)
   (let ((name (head-name node)))
-    (if (and (not (null? name)) (is-sugar-head? name))
-        (let ((product (desugar-dispatch name (form-args (node-fields node)))))
-          (if (err? product)
-              (xperr (str-append
-                       (str-append "宏「" name)
-                       (str-append "」展开失败：" (second product)))
-                     (node-s node) (node-e node))
-              (expand-form
-                (retag-scope product (node-scopes node)))))
-        (expand-list-final node))))
+    (let ((tf (resolve-transformer name)))
+      (if (null? tf)
+          (expand-list-final node)
+          (transformer-step node tf)))))
 
 (define (desugar-dispatch name args)
   (cond ((eq? name "let") (desugar-let args))
@@ -890,7 +1404,8 @@
 ; trampoline 收敛后：核心形式或函数应用（函数先求值，参数从左到右）
 (define (expand-list-final node)
   (let ((items (node-fields node))
-        (s (node-s node)) (e (node-e node)))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
     (if (null? items)
         (xperr "空列表不能作为表达式求值" s e)
         (let ((name (head-name node)))
@@ -902,11 +1417,19 @@
                     (let ((args (expand-seq (form-args items))))
                       (if (err? args)
                           args
-                          (cons 'app (cons s (cons e (cons fn-core args)))))))))))))
+                          (cons 'app (cons s (cons e (cons x
+                              (cons fn-core args))))))))))))))
 
 ; ===== 入口 =====
 
 ; forms（datum 节点列表）→ core 节点列表 或 ('err msg s e)
+; 每次调用全量复位（镜像 ExpandCtxt::new：变换器表/深度/卫生上下文
+; /作用域分配器——跨调用零残留，与种子侧每程序新建 ctx 语义一致）
 (define (lexp-expand-program forms)
   (set! SCOPE-NEXT 1)
+  (set! DEPTH 0)
+  (set! TRANSFORMERS nil)
+  (set! HYG-COUNTER 0)
+  (set! HYG-RENAMES nil)
+  (set! HYG-PRESERVE nil)
   (expand-seq forms))

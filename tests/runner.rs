@@ -120,3 +120,8 @@ mod scope_set_tests;
 
 #[path = "v0/stage1/plan/bootstrap_expander_tests.rs"]
 mod bootstrap_expander_tests;
+
+// 批次 E（r15：E1-β 宏收口 + 生产切换 + TD-021 prelude 模块注入）
+
+#[path = "v0/stage1/plan/prelude_tests.rs"]
+mod prelude_tests;

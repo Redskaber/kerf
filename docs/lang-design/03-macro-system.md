@@ -72,6 +72,7 @@ impl ModuleRegistry {
 
 **能力边界（P1 处理程度的精确划定）**：
 - ✅ 已实现：syntax-rules 宏（模式/字面量/省略号/模板实例化）、Rust 内置变换器（语法糖推导，[01-核心原语 §3](./01-core-forms.md) 推导表）、卫生重命名（引入标识符唯一化）、宏自引用（递归宏）、展开深度上限保护
+- ✅ **E1-β（r15）**：宏系统整体以 kerf 源码重写并切换为**生产路径**（expander.krf——define-syntax/syntax-rules 全模式面 + 卫生 α + 深度 500 + Span 并集代次守卫；Rust 种子保留为 parity oracle + 自举引导；parity 36 测试）
 - ⛔ Stage 0 推迟：`syntax-parse` 类结构化宏 DSL（Stage 2+）、宏展开调试工具（宏展开逐步跟踪，Stage 2+）、过程宏（任意 Rust 代码作为变换器——信任模型未定，[13-能力矩阵 §3.2](./13-capability-matrix.md)）
 
 ### 2.1 变换器契约（Stage 0 冻结，kerf-expander/src/macro_sys.rs）

@@ -1,22 +1,23 @@
-//! 自举 Expander（E1-α：Expander kerf 重写——核心形式 + 九糖影子路径）。
+//! 自举 Expander（E1-β：Expander kerf 重写生产切换——含宏收口）。
 //!
 //! 架构（07-bootstrap §3.2 混合期构成；r6 自举 Reader 同型三件套）：
 //! - **展开逻辑**：`bootstrap/expander.krf`（kerf 源码，经种子管线编译
 //!   为字节码后在 Stage 0 VM 上运行——`lexp-expand-program` 入口，
 //!   与 kerf-expander 的 `expand_program` 接口形状对齐，§11）；
 //! - **桥（本模块）**：宿主侧调用（`call_closure`）+ 值树双向转换
-//!   （`Stx` → VM datum 节点含作用域集 → VM core 节点 → `CoreExpr`
-//!   作用域集重建）；
-//! - **种子（kerf-expander）**：parity 测试的 oracle（自举种子经典
-//!   角色——两实现互为印证；**E1-α 影子路径**：生产展开仍走 Rust，
-//!   宏/define-syntax 生产切换属 E1-β）。
+//!   （`Stx` → VM datum 节点含作用域集与展开代次 → VM core 节点 →
+//!   `CoreExpr` 作用域集/代次重建）；
+//! - **种子（kerf-expander）**：自举引导（expander.krf 的编译）+ parity
+//!   测试的 oracle（自举种子经典角色——两实现互为印证）。
 //!
-//! E1-α 边界（expander.krf 文件头同步登记）：define-syntax 显式报错；
-//! 宏产物 Span 展开代次（expansion_id）不参与 parity 判据。
+//! **E1-β 生产切换**：`compile_front`（生产管线）的展开段经本模块——
+//! 读 + 展开两段均自举（07 §3.3「语言能表达自身前端」的完整生产命题）。
+//! 切换守护：driver `production_expander_is_bootstrap`（宏产物
+//! CoreExpr Span 展开代次判别——本桥产出保留源节点代次）。
 //!
-//! 堆契约：Expander 程序的持久堆承载全局数据（KEYWORDS/SCOPE-NEXT
-//! 等）与各次调用中间产物——GC 以（栈+帧+全局）为根集，跨调用回收
-//! 安全；输入节点树在持久堆上构造（一次性，调用后可回收）。
+//! 堆契约：Expander 程序的持久堆承载全局数据（KEYWORDS/SCOPE-NEXT/
+//! TRANSFORMERS 等）与各次调用中间产物——GC 以（栈+帧+全局）为根集，
+//! 跨调用回收安全；输入节点树在持久堆上构造（一次性，调用后可回收）。
 //!
 //! 并发契约：thread_local 状态（Rc 值非 Sync）——每线程惰性编译加载一次。
 
@@ -65,8 +66,9 @@ thread_local! {
 /// 自举展开入口：`Vec<Stx>` → `Vec<Rc<CoreExpr>>`（与
 /// `kerf_expander::expand_program` 同形——parity oracle 对照面）。
 ///
-/// E1-α 影子路径：测试与宿主自检消费；生产展开路径（compile_front）
-/// 仍走 Rust 种子——切换属 E1-β（宏收口后）。
+/// **E1-β 生产路径**：`compile_front` 消费（含宏展开）；种子路径
+/// [`crate::driver::compile_front_seed`]（bootstrap 加载与 parity
+/// oracle）仍走 Rust `kerf_expander::expand_program`。
 pub fn expand_program(
     forms: &[Stx],
     file_id: FileId,
@@ -96,6 +98,14 @@ pub fn expand_program(
         }
         Ok(out)
     })
+}
+
+/// 自举 Expander 状态活性探针（E1-β 生产切换守护：生产编译路径
+/// 是否真的经 VM Expander——`loaded` 后 `compile_front` 产出的任何
+/// 程序都应使本探针为真）。
+#[cfg(test)]
+pub(crate) fn is_loaded() -> bool {
+    BOOTSTRAP_EXP.with(|cell| cell.borrow().is_some())
 }
 
 /// 以线程局部状态执行（惰性初始化）。
@@ -180,11 +190,14 @@ fn vm_error_to_expand(e: &VmError, sm: &SourceMap) -> ExpandError {
 
 // ---- 反向值桥：Stx → VM datum 节点 ----
 
-/// `Stx` → datum 节点值 `(tag s e scopes ...)`（符号名以 str 携带；
-/// 作用域集 = int 列表——正向桥按 ScopeSet 排序去重语义重建）。
+/// `Stx` → datum 节点值 `(tag s e exp scopes ...)`（符号名以 str 携带；
+/// 作用域集 = int 列表——正向桥按 ScopeSet 排序去重语义重建；exp =
+/// 展开代次（Span.expansion_id——E1-β 宏 parity：instantiate 的 Span
+// 并集守卫依赖代次判等，桥侧输入恒源码代次 0）。
 fn stx_to_node(stx: &Stx, table: &SymbolTable, heap: &mut Heap) -> Value {
     let s = Value::Int(stx.span.start as i64);
     let e = Value::Int(stx.span.end as i64);
+    let exp = Value::Int(stx.span.expansion_id as i64);
     let scopes = scope_list_value(&stx.scopes, heap);
     let tag = |name: &str| Value::Symbol(Rc::from(name));
     let items: Vec<Value> = match &stx.datum {
@@ -192,25 +205,30 @@ fn stx_to_node(stx: &Stx, table: &SymbolTable, heap: &mut Heap) -> Value {
             tag("sym"),
             s,
             e,
+            exp,
             scopes,
             Value::Str(Rc::from(table.name(*sym))),
         ],
         StxDatum::Literal(l) => match l {
-            StxLiteral::Int(v) => vec![tag("int"), s, e, scopes, Value::Int(*v)],
-            StxLiteral::Float(v) => vec![tag("float"), s, e, scopes, Value::Float(*v)],
-            StxLiteral::Str(v) => vec![tag("str"), s, e, scopes, Value::Str(v.clone())],
-            StxLiteral::Bool(b) => {
-                vec![tag(if *b { "true" } else { "false" }), s, e, scopes]
+            StxLiteral::Int(v) => vec![tag("int"), s, e, exp, scopes, Value::Int(*v)],
+            StxLiteral::Float(v) => {
+                vec![tag("float"), s, e, exp, scopes, Value::Float(*v)]
             }
-            StxLiteral::Nil => vec![tag("nil"), s, e, scopes],
+            StxLiteral::Str(v) => {
+                vec![tag("str"), s, e, exp, scopes, Value::Str(v.clone())]
+            }
+            StxLiteral::Bool(b) => {
+                vec![tag(if *b { "true" } else { "false" }), s, e, exp, scopes]
+            }
+            StxLiteral::Nil => vec![tag("nil"), s, e, exp, scopes],
         },
         StxDatum::List(children) => {
-            let mut v = vec![tag("list"), s, e, scopes];
+            let mut v = vec![tag("list"), s, e, exp, scopes];
             v.extend(children.iter().map(|c| stx_to_node(c, table, heap)));
             v
         }
         StxDatum::Vector(children) => {
-            let mut v = vec![tag("vec"), s, e, scopes];
+            let mut v = vec![tag("vec"), s, e, exp, scopes];
             v.extend(children.iter().map(|c| stx_to_node(c, table, heap)));
             v
         }
@@ -264,8 +282,10 @@ fn as_expand_err(v: &Value, heap: &Heap, file_id: FileId) -> Option<ExpandError>
     None
 }
 
-/// core 节点值 `(tag s e ...)` → `CoreExpr`（符号名经用户表 intern——
-/// 与种子同一 intern 入口；作用域集经 ScopeSet 排序去重重建）。
+/// core 节点值 `(tag s e exp ...)` → `CoreExpr`（符号名经用户表 intern——
+/// 与种子同一 intern 入口；作用域集经 ScopeSet 排序去重重建；exp =
+/// 展开代次——E1-β 生产切换后保留（宏相位可观测性诊断「expansion N」
+/// 标记的产出通道，§19.1）。
 fn core_from_value(
     v: &Value,
     heap: &Heap,
@@ -273,14 +293,20 @@ fn core_from_value(
     table: &mut SymbolTable,
 ) -> Result<Rc<CoreExpr>, ExpandError> {
     let fields = value_list_fields(v, heap).map_err(read_to_expand)?;
-    if fields.len() < 3 {
+    if fields.len() < 4 {
         return Err(internal_x("core 节点字段数异常"));
     }
     let tag = as_symbol_name(&fields[0]).map_err(read_to_expand)?;
     let s = as_int(&fields[1]).map_err(read_to_expand)?;
     let e = as_int(&fields[2]).map_err(read_to_expand)?;
-    let span = Span::new(file_id, s as u32, e as u32);
-    let rest = &fields[3..];
+    let exp = as_int(&fields[3]).map_err(read_to_expand)?;
+    let span = Span {
+        file_id,
+        start: s as u32,
+        end: e as u32,
+        expansion_id: exp as u32,
+    };
+    let rest = &fields[4..];
     match tag {
         "lit" => Ok(Rc::new(CoreExpr::Literal {
             value: literal_from_value(rest.first().ok_or_else(|| internal_x("lit 缺值"))?, heap)?,

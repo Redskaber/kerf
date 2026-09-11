@@ -1,0 +1,42 @@
+; preamble.krf — kerf-prelude 模块（TD-021：高阶函数用户面注入载体）
+;
+; 模块系统承载（批次 E 设计裁定，tech-debt-register TD-021 三否决后的
+; 正确路径——「正确 > 妥协：不做看起来像但不是的半吊子注入」）：
+; - 用户程序在 module 头声明 (import kerf-prelude) ⇒ 前段在 read 后、
+;   expand 前将本模块的顶层形式注入同一编译单元（forms 级合并——
+;   各形式携带本文件 Span（独立 file_id），无源码拼接的 Span 诊断
+;   污染（P1 否决口径）；
+; - 单一编译单元 → 单一程序/单一全局表（P3 否决口径：无跨程序合并、
+;   无 SymbolTable 可比性问题）；
+; - 零 VM 递归再入（P5 否决口径：宏调用闭包的 re-entry 越界不存在）。
+; - 名字捕获显式失败：用户同名 define → 编译期「重复定义变量」结构
+;   化报错（不静默遮蔽——§2.3 原则 4）。
+;
+; 相位簿记：本模块经 ModuleRegistry declare/visit（import 边传递依赖
+; visit——§8.9 单模块生命周期扩展为多模块按序 declare）。
+;
+; 实现来源：map/filter/foldl/for-each 与 reader.krf 序章同源（B3 自举
+; 验证命题本体的用户面交付——「用 kerf 源码 preamble 实现」）。
+
+(module kerf-prelude
+  (import)
+  (export map filter foldl for-each)
+  (define (map f lst)
+    (if (null? lst)
+        nil
+        (cons (f (car lst)) (map f (cdr lst)))))
+  (define (filter pred lst)
+    (if (null? lst)
+        nil
+        (if (pred (car lst))
+            (cons (car lst) (filter pred (cdr lst)))
+            (filter pred (cdr lst)))))
+  (define (foldl f init lst)
+    (if (null? lst)
+        init
+        (foldl f (f init (car lst)) (cdr lst))))
+  (define (for-each f lst)
+    (if (null? lst)
+        nil
+        (let ((ignored (f (car lst))))
+          (for-each f (cdr lst))))))
