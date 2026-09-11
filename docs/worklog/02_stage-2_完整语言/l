@@ -1,8 +1,10 @@
 # l — Stage 2 完整语言 里程碑路由
 
-覆盖：2026-09-11 ~ · r17-r18 · Task 38-x~40-x（38-g 补记 + 40-a~40-g 批次 H） · 记忆类分布：e+s+p（r17/r18 含规程勘误实录）
+覆盖：2026-09-11 ~ · r17-r20 · Task 38-x~42-x（38-g 补记 + 40-a~40-g 批次 H + 41-a~c 批间插入轮 r19 + 42-a/z 批次 I 启动 r20） · 记忆类分布：e+s+p（r17-r20 含勘误实录）
 
 | 编号 | 概述（检索关键词） | 类型 | 覆盖 | 记忆类 | 状态 |
 |------|-------------------|------|------|--------|------|
+| 04 | r20 批次 I 执行启动·I1 切口评估与迁移设计（42-a）·**切口 = compile_module 单点**（三件套第三实例：compiler.krf + bootstrap_compiler.rs 桥 + 种子 oracle——输入节点复用 expander.krf 输出契约）·**bytecode_equal :145 = §21.3 条件 2 现成机器判据**（全结构含 debug_spans）·INC1-INC8（字节码域留 Rust / analyzing 不在自举关键路径（front_from_core 无 check 实证）绑 42-f / eval 退役排 42-d / ~80% 口径精确化=三段 100% kerf）·段序 S1-S3 DAG·parity 三门 A/B/C（门 B 自举链 B₁/B₂ 隔离运行）·CompilerKind 切换点 P1-P5（缓存键分桶 B11）·确定性纪律（SCOPE-NEXT:1471 入口复位实证）·638:0:0 零回归·v0.4.0 | file | r20 · Task 42-a~z | e+s+p | active |
+| 03 | r19 批间插入轮·能力模型泛化设计（用户指令 41-a）·**裁定 D1：当前过窄**（IO 第一实例三面遮蔽模型本体）·模型层骨架 capability_model.rs P3 冻结（CapabilityModelFamily + TokenCalculus 演算位——io 族归属机器证明/ffi CPointer 第二实例）·化学反应矩阵 C1-C6（×效应×多阶段×缓存×FFI×HM×工具链——正交不合并）·术语消歧（13 §3.1「语言能力」）·批次 I 细化（42-x 八 MUV——Effect D12 与能力 M2 同轮）·迁移 M1-M6 零破坏·638:0:0·v0.4.0 | file | r19 · Task 41-a~c | e+s+p | active |
 | 02 | r18 批次 H·语义演进评估轮·H1 五项评估全票（Stage 2 原语集零变更——8 形态迁移 Stage 3 候选）·H2 三债清偿（**TCO 落地** TD-022：TailCall 帧复用 + 尾位穿线 + 指令预算护栏；**TD-007 resolved** 10_000 完整口径：Rc + uniform_tag + 迭代 retag + 扁平 Drop；TD-017 维持 256；TD-023 降级 -70% 实测）·H3 Effect 设计冻结（12 裁定——D12 实现窗口批次 I 后段）·H4 HM PoC（约束三段式双门全过——fib : (num→num)）·40-g 预留层标准化（mod.rs 344→66 行 + 4 能力族文件）·TD-025 resolved（krf 六头协议 + retag 快路径——C02 73×+）·634:0:0·v0.4.0 | file | r18 · Task 40-a~g | e+s+p | active |
 | 01 | r17 批次 G·后端/FFI/类型三主线·G3 FFI 所有权模型（pin/unpin 形式化 + 线性令牌 + 13 边界 case，§21.3 阻塞解除）·G1 QBE 后端 PoC（QBE 1.3 落位 tools/qbe + kerf-backend 第 10 crate 契约迁移（原则 27）+ AnnotatedANF 实化 + phi/跳转回填 + **fib(12)=144 本地码端到端与 VM 一致**，§21.3 条件 3）·G2 HM 设计轮（约束三段式裁定 + GO 有条件——H4 新增 MUV）·TD-013 resolved（双路径恢复 + check_source_recover 合并报告 + CLI check 恢复模式）·TD-024 PoC 边界 B1·605:0:0·CLI 13 子命令·v0.4.0·r17 包（含 qbe 工具链 + 包内自举 605） | file | r17 · Task 38-a~g（38-g 终验补记——40-a 清偿） | e+s+p | active |

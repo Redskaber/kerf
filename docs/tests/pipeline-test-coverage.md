@@ -2,8 +2,8 @@
 
 > **Author**: Super Z（QA-A 角色）
 > **Date**: 2026-09-11（r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
-> **Version**: v0.3.0-r19
-> **Status**: Active（r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
+> **Version**: v0.3.0-r20
+> **Status**: Active（r20 对账：638 基线零增量（设计轮——批次 I 执行启动 42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](../develop/v0/stage-2/i1-incision-migration-design.md) §5 parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）；r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
 
 ## 1. 测试目标
 

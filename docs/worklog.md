@@ -3431,3 +3431,150 @@ Stage Summary:
   §13.1（设计对齐——effect D12 + capability M2 双同轮协调显式化）、
   §8.4.5（决策附条款号——每 MUV 输入/输出/验收可量化）
 - 下一步：41-c r19 收尾交付（§3.2 六命令 + tar.gz + web + git）
+---
+Task ID: 41-c
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，批间插入轮 r19 收尾交付）
+Task: MUV 41-c：r19 收尾交付（§3.2 六命令 + 对账六面 + r19 tar.gz 包内自举验证 + web 同步 + git + 树压实）
+
+Work Log:
+- **§3.2 六命令全绿（clean 起步终验）**：cargo clean → build
+  --release 12.49s 零告警 → check 0 errors 0 warnings → fmt --check
+  零 diff → clippy --all-targets -D warnings 0 → test --release
+  --workspace **638:0:0**（单元 202 + 集成 436——634 + 4 净增）
+- 审计子集复验：gate 19 + reserved_ext_tests 12（**零改动兼容
+  实证——原则 27**）+ capability 25 全过；CLI 冒烟四路径：VM run
+  fib ⇒ 144 / native fib（print-free 变体——TD-024 PoC 边界内）
+  exit 144 / check ok / require 门控端到端（print 输出 + nil）
+- **对账六面**：RELEASE_NOTES v0.4.0-r19（三交付节——预插入头部）/
+  matrix v0.1.0-r19（638 总量 + r19 增量行 + 单元表 202/driver 64）/
+  登记册 v0.3.0-r19（零债务面注记）/ pipeline v0.3.0-r19（Tier 1
+  202 + T1-driver 64/64 + Tier 2 436 零变更注 + 函数口径 638——
+  r15 拆分口径 + 净增注记）/ v0.5-roadmap r19 行 / plan.md §5a（41-b
+  已交付）
+- **勘误实录（GATE 1 诚实记录）**：① r18 矩阵「单元 198 + 集成
+  438」= 636 ≠ 634 内部矛盾——实测 436 与 r17 增量链 409+27 吻合，
+  修正 438→436（matrix r19 增量注 + 登记册口径注 + pipeline 三处
+  同步——r7 计数修正同型先例）；② pipeline 文档 markdown 链接
+  typo（atrix.md 缺 m——两处）顺手修正；③ grep -v 统计口径误伤
+  （"10 passed" 含 "0 passed" 子串——修正统计管道后包内复验 638）
+- **r19 tar.gz**（1.58MB——§19.4 r17 版命令：src/crates/tests/docs/
+  examples/tools/scripts + Cargo 三件 + README/RELEASE_NOTES；根
+  worklog.md 不入包——PHASE 5 规则）+ **包内自举验证**：/tmp 解包
+  → 全新 cargo build --release 12.68s → VM fib 144 + native 144 +
+  require 门控 + check → 全量测试 **638:0:0 复跑**（0 FAILED）
+- web 同步：kerf-data.ts（Stage 2 status r19 + points 三条新节点 +
+  PACKAGE_CONTENTS r19 四条更新）+ site-footer.tsx（两段 r19 文案
+  ——含设计五篇 + rec 树 19 条目）；/api/download 按 mtime 自动
+  选取 r19 包（r6 修复口径——无需路由改动）；bun run lint EXIT 0
+- git 入账（1a578c9——17 files, +648/-23）+ rec 树压实（02 层
+  03_r19 rec + 两层 l 路由更新：未压实区间 r19 终态 + 02 行 r17-r19）
+
+Stage Summary:
+- **批间插入轮 r19（41-a~c）全交付闭环**：能力模型泛化设计（10 节
+  + 12 裁定 + 6 反应 + 6 迁移）+ 模型层骨架 P3 冻结（Probe 4——
+  io/ffi 族归属机器证明）+ 批次 I 细化（42-x 八 MUV）+ 收尾（638:0:0
+  + §3.2 全绿 + 对账六面 + r19 包内自举 + web + git + 树压实）
+- 遵循：GATE 1（实测口径——勘误实录三处如实入档）、§19.4（打包 +
+  包内验证）、§8.4.5（六面对账 + 计数交叉验证——r18 矛盾修正）、
+  §8.6（rec 树三原语——l 稀疏路由更新）、R4（代码为准——native
+  冒烟按 TD-024 边界用 print-free 变体）
+- 下一步：批次 I 执行启动（42-a I1 切口评估与迁移设计——compiler
+  本体盘点 + 分段方案 + parity oracle 扩展；下一 session）
+---
+Task ID: 42-a
+Agent: Super Z (main) — ARCH-A/DEV-A（L3 多角色会话，批次 I 执行启动 r20）
+Task: MUV 42-a：I1 切口评估与迁移设计（compiler 本体盘点 + 分段迁移方案 + parity oracle 扩展设计 + 切换点）
+
+Work Log:
+- 现状核对（代码实锚——R4 实测优先）：compile_front 管线五步实测
+  （driver.rs:266-470：自举 read → prelude 注入 → 自举 expand →
+  R9 验证 + registry 簿记 → **compile_module:229（Rust——I1 迁移
+  对象）**）；kerf-compiler 五文件行数实测（compile 798 / typecheck
+  669 / hm 1040 / bytecode 273 / opcode 261）；三件套先例×2 复核
+  （reader.krf 471 + bootstrap.rs 534；expander.krf 1477 +
+  bootstrap_expander.rs 589——值树契约 + 桥 + 种子 oracle 模式）
+- **关键实锚发现**：① BcProgram::bytecode_equal（bytecode.rs:145
+  ——注释明示「两次编译输出必须一致，§21.3」）= §21.3 条件 2 的
+  **现成机器判据**（全结构 PartialEq 含 debug_spans——无弱化灰区）；
+  ② analyzing 段不在生产编译路径（front_from_core:353 主链无
+  check 调用——check_program 仅 check_source 两入口消费）→ 自举
+  命题不依赖 typecheck；③ SCOPE-NEXT 入口复位（expander.krf:1471
+  `(set! SCOPE-NEXT 1)`）= 逐调用确定性纪律的既有实证（fixpoint
+  先决）；④ 缓存键无 CompilerKind 维度（B11——迁移期切换点须分桶）
+- 设计文档交付：docs/develop/v0/stage-2/i1-incision-migration-design.md
+  （v1.0——10 节 + 附录：现状基线 12 实锚 B1-B12 / 本体盘点表
+  S0-S6（段×文件×行数×依赖×裁定）/ **切口裁定 INC1-INC8** /
+  段切分 DAG（S1-S3 无环证明）/ 分段方案六字段（映射 42-b/c/d）/
+  parity 三门 A/B/C / 切换点 P1-P5 / 确定性纪律 4 条 / 80/20 口径
+  核算 / 风险 6 项 / 回写义务 4）
+- **核心裁定**：INC1 切口 = compile_module 单点（三件套第三实例
+  ——compiler.krf + bootstrap_compiler.rs 桥 + 种子 oracle；输入
+  节点格式复用 expander.krf 输出契约——零新设计）；INC2 字节码域
+  留 Rust（VM 宿主契约——15 §5.3）；INC3 组合根留 Rust；INC6
+  analyzing 不迁（I1 范围内——迁移评估绑 42-f/HM 同轮，12 §2.5
+  行 309 口径）；INC7 eval 退役排 42-d（12 §2.5 行 299——终态
+  VM 单路径 + T1 收口）；INC8 ~80% 口径精确化（读+展开+编译三段
+  100% kerf = §21.3 条件 1 机器口径）
+- parity 三门设计：门 A 段 parity（bytecode_equal——S1 基础组 ≥8
+  + S2 扩展组 ≥12，语料特化四组：深尾递归/捕获链/点对递归/遮蔽）；
+  门 B 自举一致性（§21.3 条件 2——自举链 B₁/B₂ 隔离运行，四程序
+  逐一 bytecode_equal + 加强判据 B₀/B₁）；门 C 回归门（全套件 +
+  双审计 + T1 收口 + CLI 冒烟）
+- plan.md Status 行更新（批次 I 执行启动 r20 交付 + 42-b 执行待续）
+
+Stage Summary:
+- i1-incision-migration-design.md 交付（10 节——12 实锚 + 8 切口
+  裁定 + 3 段序 + parity 三门 + 5 切换点 + 4 确定性纪律）；§5a
+  42-b/c/d 行以本设计为验收合同（六字段具体化——语料/判据/切换
+  守护全部可执行化）
+- 遵循：§13.1（设计对齐——12 §2.5 行 299/309 + 07 §3.2/§3.3 +
+  15 §5.3 交叉）、§2.3-11（确定性边界先行——切口在动手前裁定）、
+  §12（最优>最小——切口选架构最优位置而非最小改动）、§8.4.5
+  （决策附条款号——INC 逐条依据）
+- 下一步：42-z r20 收尾交付（§3.2 + tar.gz + web + git + 树压实）
+---
+Task ID: 42-z
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，批次 I 执行启动 r20 收尾交付）
+Task: MUV 42-z：r20 收尾交付（§3.2 六命令 + 对账六面 + r20 tar.gz 包内自举验证 + web 同步 + git + 树压实）
+
+Work Log:
+- **§3.2 六命令全绿（clean 起步终验）**：cargo clean（109.8MiB）→
+  build --release 12.94s 零告警 → check 0 errors 0 warnings →
+  fmt --check 零 diff → clippy --all-targets -D warnings 0 → test
+  --release --workspace **638:0:0**（单元 202 + 集成 436——设计轮
+  零测试增量，零回归精确复现 r19 基线；逐二进制：span 11 + syntax
+  11 + core 10 + reader 23 + expander 32 + compiler 15 + runtime 9
+  + vm 18 + driver 64 + backend 9）
+- CLI 冒烟四路径 + 负例：VM run fib ⇒ 144（print fib(25)=75025 +
+  终值 fib(12)）/ native fib（print-free 变体——TD-024 PoC 边界
+  内）exit 144（QBE SSA → 汇编 → 可执行全链）/ check ok（2 原型 /
+  9 常量 / 5 全局引用 / 38 指令）/ require 门控端到端（(require io
+  write) + print 输出 + 终值 nil）；**E0002 负例**（未知能力项
+  「print」fail-closed 拒绝——R9 防线实证，冒烟初版的诚实记录）
+- **对账六面**：RELEASE_NOTES v0.4.0-r20（两交付节——预插入头部）/
+  matrix v0.1.0-r20（r20 增量行：零测试增量——纯设计轮注记 + 638
+  复跑）/ pipeline v0.3.0-r20（r20 对账注记——parity 三门为 42-b/c/d
+  增量测试的验收合同）/ 登记册 v0.3.0-r20（设计轮零债务面 + eval
+  退役排 42-d 注记）/ v0.5-roadmap r20 行 / plan.md Status（42-a
+  交付 + 42-b 执行待续）
+- **r20 tar.gz**（§19.4 r17 版命令：src/crates/tests/docs/examples/
+  tools/scripts + Cargo 三件 + README/RELEASE_NOTES；根 worklog.md
+  不入包——PHASE 5 规则）+ 包内自举验证（/tmp 解包 → 全新 cargo
+  build --release → VM/native/check/gate 冒烟 → 全量测试复跑）
+- web 同步：kerf-data.ts（Stage 2 状态 r20 + points 新节点 +
+  PACKAGE_CONTENTS r20）+ site-footer.tsx（r20 文案段）；/api/download
+  按 mtime 自动选取 r20 包（r6 修复口径）；bun run lint EXIT 0
+- git 入账 + rec 树压实（02 层 04_r20 rec + 两层 l 路由更新：未压实
+  区间 r20 终态 + 02 行 r17-r20）
+
+Stage Summary:
+- **批次 I 执行启动 r20（42-a + 42-z）交付闭环**：I1 切口评估与
+  迁移设计（12 实锚 + INC1-INC8 + 段序 S1-S3 + parity 三门 +
+  CompilerKind 切换点 + 确定性纪律）+ 收尾（638:0:0 零回归 +
+  §3.2 全绿 + 对账六面 + r20 包内自举 + web + git + 树压实）
+- 遵循：GATE 1（实测口径——E0002 负例如实入档）、§19.4（打包 +
+  包内验证）、§8.4.5（六面对账）、§8.6（rec 树三原语——l 稀疏
+  路由更新）
+- 下一步：42-b I1 前段基础核心形式 kerf 化（S1 八臂——作用域机 +
+  闭包捕获 + 回填；compiler.krf + bootstrap_compiler.rs 桥 + parity
+  门 A 基础组 ≥8 case；跨 session 按段分批交付）

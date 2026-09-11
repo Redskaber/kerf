@@ -1,3 +1,20 @@
+## v0.4.0-r20（2026-09-11）——批次 I 执行启动：I1 切口评估与迁移设计（638 零回归）
+
+### 交付一：I1 切口评估与迁移设计（42-a——批次 I 首 MUV）
+
+- `stage-2/i1-incision-migration-design.md`（10 节 + 附录）：**现状基线 12 实锚 B1-B12**（compile_module 单一入口 :229 / 十臂全景 / 作用域解析机 / bytecode_equal :145 现成 §21.3 判据 / 三件套先例×2 / analyzing 不在生产编译路径（front_from_core 实证）/ eval 参考路径独立 / SCOPE-NEXT 入口复位 :1471 / TCO 尾位穿线 / $hyg$N 回退 / 缓存键缺口 / 全结构比较无灰区）+ **本体盘点表**（S0-S6 段×文件×行数×依赖×裁定——compile.rs 798 迁移主体 / 字节码域 534 留 Rust / 组合根留 Rust / typecheck+hm 1709 绑 42-f / eval.rs 391 排退役）
+- **切口裁定 INC1-INC8**：切口位置 = compile_module 单点（三件套第三实例——compiler.krf + bootstrap_compiler.rs 桥 + 种子 oracle）；值树契约复用 expander.krf 输出格式（输入零新设计）；字节码域留 Rust（VM 宿主契约）；组合根留 Rust（编排非编译逻辑）；**analyzing 段不迁**（I1 范围内——自举命题不依赖 typecheck，迁移评估绑 42-f/HM 同轮）；**eval 退役裁定排 42-d**（12 §2.5 行 299 口径）；**~80% 口径精确化**（读+展开+编译三段 100% kerf = §21.3 条件 1 机器口径）
+- **段序 S1-S3（DAG 无环）**：S1=42-b 基础八臂（含作用域机+闭包捕获+回填——最难段 B3 风险前置）→ S2=42-c module/require 面+糖全管线 parity → S3=42-d 生产切换+自举终局
+- **parity 三门 A/B/C**：门 A 段 parity（`bytecode_equal` 全结构含 debug_spans——基础组 ≥8 + 扩展组 ≥12）；门 B 自举一致性（§21.3 条件 2 机器判据——自举链 B₁/B₂ 隔离运行四程序逐一 bytecode_equal + 加强判据 B₀/B₁ 种子-自举全链终验）；门 C 回归门（全套件+双审计+T1 收口+CLI 冒烟）
+- **切换点 P1-P5**：CompilerKind 镜像 ExpanderKind / 守护 production_compiler_is_bootstrap / 无 parity 不切换 + 单点回退 / **缓存键分桶（B11——种子与自举产物不得混享缓存）** / eval 退役终态口径
+- **确定性纪律**（fixpoint 先决）：入口复位（SCOPE-NEXT :1471 实证延伸）+ 插入序即索引 + 符号 str 携带桥回 intern + 门 B 隔离运行
+
+### 交付二：对账与收尾（42-z）
+
+- plan.md Status 行（批次 I 执行启动 r20 交付 + 42-b 执行待续）+ §5a 42-b/c/d 行引用本设计为验收合同；matrix v0.1.0-r20（零测试增量注记 + 638 复跑）/ pipeline v0.3.0-r20 / 登记册 v0.3.0-r20（设计轮零债务面 + eval 退役排 42-d 注记）/ v0.5-roadmap r20 行
+- **§3.2 六命令全绿**（clean 起步终验）：build --release 12.94s 零告警 / check 0/0 / fmt 零 diff / clippy -D 0 / **test --release --workspace 638:0:0**（单元 202 + 集成 436——零回归精确复现 r19 基线）；CLI 冒烟四路径：VM run fib ⇒ 144（print fib(25)=75025 + 终值 fib(12)）/ native fib（print-free 变体——TD-024 PoC 边界内）exit 144 / check ok（2 原型/9 常量/38 指令）/ require 门控端到端（print 输出 + nil）+ **E0002 负例**（未知能力项「print」fail-closed 拒绝——R9 防线实证）
+- r20 tar.gz 打包（§19.4 r17 版命令）+ 包内自举验证 + web 同步（kerf-data r20 三节点 + footer）+ git 入账
+
 ## v0.4.0-r19（2026-09-11）——批间插入轮：能力模型泛化设计 + 模型层骨架冻结 + 批次 I 细化（638 全绿）
 
 ### 交付一：能力模型定位审思与泛化设计（41-a——用户指令轮）
