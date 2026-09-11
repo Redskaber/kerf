@@ -12,14 +12,14 @@
 
 ## 1. 字节码 VM（原 §8.12）
 
-switch-dispatch 循环，设计估算约 35 个操作码（原 §8.12）；**Stage 0 冻结实现为 40 个操作码**（kerf-compiler/src/opcode.rs，enum 显式枚举 + 守护测试 `opcode_count_matches_spec` 逐项列举断言 40——「enum ↔ 测试 ↔ 文档」三方冻结）。**全 40 项显式枚举（八组，与 opcode.rs 模块头分组逐项一致）**：
+switch-dispatch 循环，设计估算约 35 个操作码（原 §8.12）；**Stage 0 冻结实现为 41 个操作码**（kerf-compiler/src/opcode.rs，enum 显式枚举 + 守护测试 `opcode_count_matches_spec` 逐项列举断言 41——「enum ↔ 测试 ↔ 文档」三方冻结。**r21/42-b 修正**：TAIL_CALL（r18/40-c TD-022 TCO 引入）此前漏列于测试枚举与本文表格——三方冻结漂移按 sop R4（代码为准 + 本次修正文档）补齐，40→41）。**全 41 项显式枚举（八组，与 opcode.rs 模块头分组逐项一致）**：
 
 | 组 | 操作码（个数） |
 |----|----------------|
 | 栈操作（7） | `PUSH_CONST k` / `PUSH_NIL` / `PUSH_TRUE` / `PUSH_FALSE` / `POP` / `DUP` / `SWAP` |
 | 变量访问（7） | `LOAD_LOCAL i` / `STORE_LOCAL i` / `LOAD_GLOBAL k` / `STORE_GLOBAL k` / `DEFINE_GLOBAL k` / `LOAD_CAPTURED i` / `STORE_CAPTURED i` |
 | 控制流（2） | `JUMP t` / `JUMP_IF_FALSE t` |
-| 函数操作（3） | `CLOSURE proto, n_captures` / `CALL n` / `RET` |
+| 函数操作（4） | `CLOSURE proto, n_captures` / `CALL n` / `TAIL_CALL n`（TD-022/H2 TCO 尾调用帧复用，r18） / `RET` |
 | 算术与比较（12） | `ADD` / `SUB` / `MUL` / `DIV` / `MOD` / `NUM_LT` / `NUM_GT` / `NUM_LE` / `NUM_GE` / `NUM_EQ` / `EQ` / `NOT` |
 | 数据构造（3） | `MAKE_PAIR` / `CAR` / `CDR` |
 | 谓词（5） | `IS_NULL` / `IS_PAIR` / `IS_INT` / `IS_BOOL` / `IS_PROCEDURE` |
@@ -114,7 +114,7 @@ fn compile_expr(e: &CoreExpr, out: &mut CodeBuf) -> Result<(), CompileError> {
 
 ## 3. VM 执行循环（原 §19.5）
 
-switch-dispatch 循环，处理全部 **40 个操作码**（冻结实现，本文 §1 全枚举；操作码按**八组**分类：栈操作 7 / 变量访问 7 / 控制流 2 / 函数操作 3 / 算术与比较 12 / 数据构造 3 / 谓词 5 / 终止 1——设计估算约 35 的偏差见 §1 漂移注记）。运行时错误捕获含堆栈追踪生成（run_program 错误路径保留**最内 16 帧**调用点，渲染为 note 行——深递归下外层无信息量，防诊断爆炸；`VmError.trace` 的唯一生产者）。**迭代式主循环**：递归经调用帧栈承载，Rust 栈深度恒定（深递归程序不爆宿主栈——与 [05-运行时 §4](./05-runtime.md) 显式工作栈同构的防御；帧数上限 `MAX_FRAMES = 100_000`，超限报结构化「调用帧超过上限」错误）。
+switch-dispatch 循环，处理全部 **41 个操作码**（冻结实现，本文 §1 全枚举；操作码按**八组**分类：栈操作 7 / 变量访问 7 / 控制流 2 / 函数操作 4（含 TAIL_CALL——r21 修正补齐） / 算术与比较 12 / 数据构造 3 / 谓词 5 / 终止 1——设计估算约 35 的偏差见 §1 漂移注记）。运行时错误捕获含堆栈追踪生成（run_program 错误路径保留**最内 16 帧**调用点，渲染为 note 行——深递归下外层无信息量，防诊断爆炸；`VmError.trace` 的唯一生产者）。**迭代式主循环**：递归经调用帧栈承载，Rust 栈深度恒定（深递归程序不爆宿主栈——与 [05-运行时 §4](./05-runtime.md) 显式工作栈同构的防御；帧数上限 `MAX_FRAMES = 100_000`，超限报结构化「调用帧超过上限」错误）。
 
 **执行循环骨架**：
 

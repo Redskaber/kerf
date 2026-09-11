@@ -153,3 +153,10 @@ mod hm_inference_tests;
 
 #[path = "v0/stage2/plan/multi_error_recovery_tests.rs"]
 mod multi_error_recovery_tests;
+
+// 批次 I（r21：I1 前段自举 Compiler parity——八臂 + 作用域机 + 捕获 +
+// 回填 + 常量池 + TCO 尾位；bytecode_equal 全结构判据；42-b 承载——
+// i1-incision-migration-design §5 门 A 基础组）
+
+#[path = "v0/stage2/plan/bootstrap_compiler_tests.rs"]
+mod bootstrap_compiler_tests;

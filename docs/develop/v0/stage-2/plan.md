@@ -3,7 +3,7 @@
 > **Author**: Super Z（PM-A/ARCH-A/PL-A 联合）
 > **Date**: 2026-09-11
 > **Version**: v0.4.0-plan
-> **Status**: Active（批次 F r16 交付闭环；批次 G r17 交付（38-a~g：605:0:0）；**批次 H r18 交付**（40-a~g：634:0:0）；**批间插入轮 r19 交付**（41-a~c：能力模型泛化设计——模型层骨架 capability_model.rs P3 冻结 + 化学反应矩阵 6 条；**批次 I 细化完成**（42-x 八 MUV 分解——本文件 §5a）；**批次 I 执行启动 r20 交付**（42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](./i1-incision-migration-design.md) 切口裁定 INC1-INC8 + 段序 S1-S3 + parity 三门 + CompilerKind 切换点；42-b 执行待续）；Effect 实现窗口 D12 = I 后段（42-f，与能力管线泛化 M2 同轮协调））
+> **Status**: Active（批次 F r16 交付闭环；批次 G r17 交付（38-a~g：605:0:0）；**批次 H r18 交付**（40-a~g：634:0:0）；**批间插入轮 r19 交付**（41-a~c：能力模型泛化设计——模型层骨架 capability_model.rs P3 冻结 + 化学反应矩阵 6 条；**批次 I 细化完成**（42-x 八 MUV 分解——本文件 §5a）；**批次 I 执行启动 r20 交付**（42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](./i1-incision-migration-design.md) 切口裁定 INC1-INC8 + 段序 S1-S3 + parity 三门 + CompilerKind 切换点）；**批次 I 执行 r21 交付**（42-b：I1 前段基础核心形式 kerf 化——compiler.krf 八臂 + bootstrap_compiler.rs 桥 + 门 A parity 19 测试（基础组 ≥8 超额）+ R4 操作码三方冻结修正 40→41，657:0:0 零回归；42-c 执行待续——module/require 两臂 + 糖全管线 parity 扩展组 ≥12）；Effect 实现窗口 D12 = I 后段（42-f，与能力管线泛化 M2 同轮协调））
 > **输入**: sop.md §21（阶段推进规划）、§17（任务规划排版图）、§18（依赖审查）、§13.1（设计对齐）、§14（深度审查协议——阶段末环）、§4（MUV）、§19（打包）；[12-roadmap §1.3/§2.5](../../lang-design/12-roadmap.md)；[08-后端策略](../../lang-design/08-backend-evolution.md)；[13-能力矩阵 §3.3-§3.5](../../lang-design/13-capability-matrix.md)；[stage-1/plan](../stage-1/plan.md)（批次 A-E 交付实录 + 批次 F 注记）；r15 门审查（Task 34-d APPROVED + §6.3 五角色全票 GO）；r16 批次 F 深审环（deep-review-round1 + 偏差清单 17 项 + TD-023 新登记）
 > **上游**: Stage 1 r15（553:0:0 全绿 / 读+展开两段全自举 / stage1_gate_audit_r1 50 case APPROVED）
 

@@ -2,14 +2,14 @@
 
 > **Author**: Super Z（QA-A 角色）
 > **Date**: 2026-09-11（r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
-> **Version**: v0.3.0-r20
-> **Status**: Active（r20 对账：638 基线零增量（设计轮——批次 I 执行启动 42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](../develop/v0/stage-2/i1-incision-migration-design.md) §5 parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）；r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
+> **Version**: v0.4.0-r21
+> **Status**: Active（r21 对账：657 基线（批次 I 执行 42-b +19——bootstrap_compiler_tests 门 A parity：bytecode_equal 全结构判据 13 + 42-c 边界负例 2 + 行为面 4；操作码冻结测试修正 40→41 零计数变更）；r20 对账：638 基线零增量（设计轮——批次 I 执行启动 42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](../develop/v0/stage-2/i1-incision-migration-design.md) §5 parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）；r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
 
 ## 1. 测试目标
 
 记录编译流水线（read → expand → lower → compile → vm → runtime → driver）的**路径覆盖状态**，
-作为外循环投票（§6.3）的数据源。计数基线：**638 测试函数 / 638 通过 / 0 失败 / 0 忽略**
-（[matrix.md](./matrix.md) r19 口径——单元 202 + 集成 436）；负向 case 口径见 §2 统计行。
+作为外循环投票（§6.3）的数据源。计数基线：**657 测试函数 / 657 通过 / 0 失败 / 0 忽略**
+（[matrix.md](./matrix.md) r21 口径——单元 202 + 集成 455）；负向 case 口径见 §2 统计行。
 
 ## 2. 三层覆盖记录（§9.5.1 格式：Tier / 名称 / 覆盖阶段 / 预期输出 / 状态）
 
@@ -27,7 +27,7 @@
 | T1-vm | kerf-vm 单测 | 执行 | 帧协议/错误形状/**Value 十变体** | ✅ 18/18 |
 | T1-driver | kerf-driver 单测 | 管线编排/能力/效应/缓存/自举桥 | 全管线/**52 内置注册**/预留冻结（Probe——**r19 增 capability_model 骨架 + 族归属证明**）/effects 12/capability 13/**生产切换守护（活性探针 + 代次双信号）** | ✅ **64/64**（r8 +25 / r12 +8 Probe / r15 +1 切换守护 / r18 +2 拆分 / r19 +4 模型骨架） |
 
-### Tier 2 —— 阶段间（集成测试，436 函数，tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16；r18 +27：tco_tests 12 + hm_inference_tests 15；**r19 零变更（骨架冻结零集成接触）**）
+### Tier 2 —— 阶段间（集成测试，455 函数，tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16；r18 +27：tco_tests 12 + hm_inference_tests 15；r19 零变更（骨架冻结零集成接触）；**r21 +19：bootstrap_compiler_tests 门 A parity（I1 前段自举 Compiler——三件套第三实例：bytecode_equal 全结构判据 + 42-c 边界负例 + 行为面端到端）**）
 
 | ID | 名称 | 覆盖阶段 | 预期输出 | 状态 |
 |----|------|---------|---------|------|

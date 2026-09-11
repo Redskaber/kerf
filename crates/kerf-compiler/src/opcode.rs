@@ -185,9 +185,11 @@ mod tests {
 
     #[test]
     fn opcode_count_matches_spec() {
-        // 冻结契约：40 个操作码（04-bytecode-vm §1 全枚举对齐）。
+        // 冻结契约：41 个操作码（04-bytecode-vm §1 全枚举对齐）。
         // 逐一列举以保证计数稳定——新增/删除任何变体都必须同步
         // 04 文档与本清单（双向冻结：enum ↔ 测试 ↔ 文档三方一致）。
+        // r21/42-b 修正：TailCall（r18/40-c TCO 引入）此前漏列于本
+        // 清单——三方冻结漂移按 R4（代码为准 + 本次修正文档）补齐。
         let ops = [
             // 栈操作（7）
             Op::PushConst(0),
@@ -208,12 +210,13 @@ mod tests {
             // 控制流（2）
             Op::Jump(0),
             Op::JumpIfFalse(0),
-            // 函数操作（3）
+            // 函数操作（4：含 TailCall——TD-022/H2 TCO，r18）
             Op::Closure {
                 proto: 0,
                 n_captures: 0,
             },
             Op::Call(0),
+            Op::TailCall(0),
             Op::Ret,
             // 算术与比较（12）
             Op::Add,
@@ -241,7 +244,11 @@ mod tests {
             // 终止（1）
             Op::Halt,
         ];
-        assert_eq!(ops.len(), 40, "操作码总数（Stage 0 冻结契约）");
+        assert_eq!(
+            ops.len(),
+            41,
+            "操作码总数（Stage 0 冻结契约——r21 修正 40→41）"
+        );
     }
 
     #[test]

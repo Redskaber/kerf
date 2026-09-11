@@ -1,0 +1,791 @@
+; compiler.krf — kerf 自举 Compiler（Stage 2 批次 I / I1 前段：基础核心形式）
+;
+; 本文件以 kerf 源码实现编译器段（compile.rs 798 行的语义镜像——八臂：
+; Literal/VarRef/If/Begin/SetBang/Define/App/Lambda + 作用域解析机 +
+; 闭包捕获 + 跳转回填 + 常量池 intern + 尾位穿线 TCO），在 Stage 0 VM
+; 上运行（07-bootstrap §3.2 混合期构成：Compiler 属新语言子集）。
+; 行为与种子实现（kerf-compiler/compile.rs，Rust）的 parity 判据 =
+; BcProgram::bytecode_equal（全结构含 debug_spans——INC5），由
+; tests/v0/stage2/plan/bootstrap_compiler_tests.rs 验收（i1-incision-
+; migration-design §5 门 A 基础组）。生产切换（CompilerKind）属 42-d
+; ——本段当前为 parity 影子路径（种子仍是生产编译器）。
+;
+; 契约（与 kerf-driver/src/bootstrap_compiler.rs 桥对接）：
+; - 入口 (lexc-compile-program nodes)：
+;     nodes = core 节点列表（输入格式，见下）
+;     正常 → ('prog (proto 节点...) (const 节点...) (全局名 str 列表))
+;     错误 → ('err 消息 起始字节 结束字节)
+; - 输入 core 节点 = (tag s e exp ...)（tag 为 quote 符号值；s/e = Span
+;     起止字节；exp = 展开代次——镜像 bootstrap_expander.rs 输出格式）：
+;     ('lit s e x 字面量值)——字面量值为消歧标记形态（Str/Symbol/Float
+;     在 VM 值面无谓词区分，桥侧定型标记——INC4 实现期修订，见
+;     i1-incision-migration-design.md INC4 注记）：
+;       ('int v) ('float v) ('str s) ('true) ('false) ('nil)
+;       ('sym 名字str) ('pair 左 右)
+;     ('var s e x 名字str 作用域int列表)
+;     ('app s e x 函数 参数...) ('if s e x 条件 真分支 假分支)
+;     ('lambda s e x (名字str...) (作用域int列表...) 体)
+;     ('set s e x 名字str 作用域 值) ('define s e x 名字str 值)
+;     ('begin s e x 项...)
+;     ('module s e x 名 (导) (导) 体...) / ('require s e x 能力str...)
+;     —— module/require 两臂属 42-c 迁移面（本段显式边界错误——
+;     §2.3-4 显式失败，不静默）
+; - 输出 proto 节点 = ('proto 名形 (参数名...) nlocals (捕获名...)
+;     (捕获源...) (指令...) (span 三元组...) 自由变量)：
+;     名形 = ('main)（Symbol(u32::MAX-1) 魔法标记）| ('anon)
+;     （Symbol(u32::MAX-2)）| ('name 名字str)（首个形参名）
+;     捕获源 = ('local i) | ('captured i)
+;     指令 = ('op 码int 操作数...)——码表见下方 OP-* 定义（opcode.rs
+;     声明序 0..=40；Closure 双操作数 proto/n_captures）
+;     span 三元组 = (起始 结束 代次)——file_id 由桥侧统一注入
+;     （bytecode_equal 判据含 expansion_id，故三元组非对——INC4 注记）
+; - 输出 const 节点 = ('const 类型tag 值)：
+;     ('const 'int v) ('const 'float v) ('const 'str s) ('const 'bool b)
+;     ('const 'nil nil) ('const 'sym 名字str)（全局引用名）
+;     ('const 'symlit 名字str)（quote 符号字面量——TD-002 口径）
+; - 确定性纪律（§7——fixpoint 先决）：入口全量复位（镜像
+;   CompileCtxt::new 的每次调用新上下文语义）；常量池/全局索引 =
+;   首次插入序（关联列表——镜像 Rust intern 查后插的确定性；krf 无
+;   HashMap 天然满足禁哈希序）；符号一律 str 携带（桥回 intern）。
+; - 全局符号卫生回退（B10）：LOAD_GLOBAL 未命中的 $hyg$N 剥离回退是
+;   VM/driver 运行期行为（resolve_hygiene_fallbacks）——本编译段按
+;   原名发射 LoadGlobal，与种子同口径（编译期零感知）。
+
+; ===== 序章：高阶函数（expander.krf 同款）=====
+
+(define (map f lst)
+  (if (null? lst)
+      nil
+      (cons (f (car lst)) (map f (cdr lst)))))
+
+(define (filter pred lst)
+  (if (null? lst)
+      nil
+      (if (pred (car lst))
+          (cons (car lst) (filter pred (cdr lst)))
+          (filter pred (cdr lst)))))
+
+(define (foldl f init lst)
+  (if (null? lst)
+      init
+      (foldl f (f init (car lst)) (cdr lst))))
+
+; ===== 列表访问 =====
+
+(define (first x) (car x))
+(define (second x) (car (cdr x)))
+(define (third x) (car (cdr (cdr x))))
+(define (fourth x) (car (cdr (cdr (cdr x)))))
+(define (fifth x) (car (cdr (cdr (cdr (cdr x))))))
+(define (sixth x) (car (cdr (cdr (cdr (cdr (cdr x)))))))
+(define (seventh x) (car (cdr (cdr (cdr (cdr (cdr (cdr x))))))))
+(define (eighth x) (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr x)))))))))
+
+; 节点固定字段：tag s e exp；fields = 其后内容（四头字段协议——core
+; 节点形态，与 expander.krf 输出一致）
+(define (node-tag n) (car n))
+(define (node-s n) (second n))
+(define (node-e n) (third n))
+(define (node-exp n) (fourth n))
+(define (node-fields n) (cdr (cdr (cdr (cdr n)))))
+
+; 去尾（作用域帧弹出——帧表按出现序）
+(define (drop-last lst) (reverse (cdr (reverse lst))))
+
+; member 命中返回子表 / 未命中返回 false——contains? 归一为布尔
+; （truthy 语义仅 Bool，不能直接以 member 结果作条件）
+(define (contains? x lst)
+  (not (bool? (member x lst))))
+
+; assoc 命中返回键值对 / 未命中返回 false——idx-lookup 未命中归一 nil
+(define (idx-lookup key al)
+  (let ((r (assoc key al)))
+    (if (bool? r) nil r)))
+
+; 错误值构造与判别（契约：('err 消息 起始 结束)）
+(define (cerr msg s e) (list 'err msg s e))
+(define (err? v)
+  (and (pair? v) (eq? (car v) 'err)))
+
+; ===== 操作码常量（opcode.rs 声明序 0..=40——桥侧同表映射 Op）=====
+
+(define OP-PUSH-CONST 0)      ; (op 0 k)
+(define OP-PUSH-NIL 1)
+(define OP-PUSH-TRUE 2)
+(define OP-PUSH-FALSE 3)
+(define OP-POP 4)
+(define OP-DUP 5)
+(define OP-SWAP 6)
+(define OP-LOAD-LOCAL 7)      ; (op 7 i)
+(define OP-STORE-LOCAL 8)
+(define OP-LOAD-GLOBAL 9)     ; (op 9 gi)
+(define OP-STORE-GLOBAL 10)
+(define OP-DEFINE-GLOBAL 11)
+(define OP-LOAD-CAPTURED 12)
+(define OP-STORE-CAPTURED 13)
+(define OP-JUMP 14)           ; (op 14 t)
+(define OP-JUMP-IF-FALSE 15)
+(define OP-CLOSURE 16)        ; (op 16 proto n_captures)
+(define OP-CALL 17)           ; (op 17 n)
+(define OP-TAIL-CALL 18)      ; TCO 尾位（TD-022/H2——B9 必含面）
+(define OP-RET 19)
+(define OP-ADD 20)
+(define OP-SUB 21)
+(define OP-MUL 22)
+(define OP-DIV 23)
+(define OP-MOD 24)
+(define OP-NUM-LT 25)
+(define OP-NUM-GT 26)
+(define OP-NUM-LE 27)
+(define OP-NUM-GE 28)
+(define OP-NUM-EQ 29)
+(define OP-EQ 30)
+(define OP-NOT 31)
+(define OP-MAKE-PAIR 32)
+(define OP-CAR 33)
+(define OP-CDR 34)
+(define OP-IS-NULL 35)
+(define OP-IS-PAIR 36)
+(define OP-IS-INT 37)
+(define OP-IS-BOOL 38)
+(define OP-IS-PROCEDURE 39)
+(define OP-HALT 40)
+
+; 跳转占位操作数（Rust u32::MAX——回填前哨兵）
+(define PATCH-SENTINEL 4294967295)
+
+; ===== 编译状态（镜像 CompileCtxt——每次入口复位）=====
+; CC-SCOPES   = 帧列表（帧 = (局部绑定 . 捕获绑定)——按出现序，帧 0 = main）
+; CC-PROTOS   = 原型记录列表（rust 序追加；记录 = (名形 参数 nlocals
+;               捕获名 捕获源 code-rev spans-rev 自由变量)）
+; CC-CUR      = 当前发射原型索引；当前窗口的指令/span 在 CC-CODE-REV /
+;               CC-SPANS-REV（逆序累积——发射 O(1)，lambda 切换时回写）
+; CC-CONSTS   = ('const tag 值) 节点列表（插入序 = 池索引）
+; CC-GLOBAL-IDX = (名字str . 池索引) 关联列表（intern_global 快查）
+; CC-GLOBAL-REFS = 全局名 str 列表（首次插入序）
+; CC-PATCHES  = (原型 . pc) 待回填队列（§19.3 不变式 2：完成时清空）
+
+(define CC-SCOPES nil)
+(define CC-PROTOS nil)
+(define CC-CUR 0)
+(define CC-CODE-REV nil)
+(define CC-SPANS-REV nil)
+(define CC-CONSTS nil)
+(define CC-GLOBAL-IDX nil)
+(define CC-GLOBAL-REFS nil)
+(define CC-PATCHES nil)
+; 自由变量分析暂存（lambda 编译期）
+(define CC-BOUND nil)
+(define CC-FREE nil)
+(define CC-CAP-NAMES nil)
+(define CC-CAP-BINDINGS nil)
+(define CC-CAP-SRCS nil)
+(define CC-FREEVARS nil)
+
+; ===== 发射原语（镜像 emit/here/emit_jump/patch_jump）=====
+
+; 当前原型指令数（here()——最终序位置 = 下一条指令的 pc）
+(define (here) (length CC-CODE-REV))
+
+; 发射一条指令 + span（debug_spans 与 code 逐 pc 对齐——§19.3 不变式 3）
+(define (emit! opnode s e x)
+  (begin
+    (set! CC-CODE-REV (cons opnode CC-CODE-REV))
+    (set! CC-SPANS-REV (cons (list s e x) CC-SPANS-REV))))
+
+; 发射占位跳转并登记回填（返回 pc）
+(define (emit-jump opcode s e x)
+  (let ((pc (here)))
+    (begin
+      (emit! (list 'op opcode PATCH-SENTINEL) s e x)
+      (set! CC-PATCHES (cons (cons CC-CUR pc) CC-PATCHES))
+      pc)))
+
+; 回填跳转目标（逆序列表中最终位 pc ↔ 逆序位 = 长度-1-pc）
+(define (patch-jump pc)
+  (let ((target (here)))
+    (begin
+      (set! CC-CODE-REV (patch-code CC-CODE-REV (- target 1 pc) target))
+      (set! CC-PATCHES (remove-patch CC-PATCHES CC-CUR pc))
+      target)))
+
+; 替换逆序码表中第 k 位指令的目标操作数（Jump/JumpIfFalse 恰一操作数）
+(define (patch-code lst k target)
+  (if (= k 0)
+      (cons (list 'op (second (car lst)) target) (cdr lst))
+      (cons (car lst) (patch-code (cdr lst) (- k 1) target))))
+
+; 从回填队列移除匹配 (原型 pc) 项
+(define (remove-patch patches p c)
+  (if (null? patches)
+      nil
+      (let ((ent (car patches)))
+        (if (and (= (car ent) p) (= (cdr ent) c))
+            (remove-patch (cdr patches) p c)
+            (cons ent (remove-patch (cdr patches) p c))))))
+
+; 原型记录按索引替换（窗口切换回写）
+(define (proto-set-at! idx rec)
+  (set! CC-PROTOS (proto-set-loop CC-PROTOS idx rec 0)))
+
+(define (proto-set-loop lst idx rec k)
+  (if (= k idx)
+      (cons rec (cdr lst))
+      (cons (car lst) (proto-set-loop (cdr lst) idx rec (+ k 1)))))
+
+; ===== 常量池（镜像 ConstPool::intern——按值去重，首次插入序即索引）=====
+
+; 结构相等（eq? 对序对是引用相等——const 节点需逐字段递归比较；
+; Float 按 f64 == 语义镜像 Rust HashMap 的 Hash+Eq 去重行为：
+; +0.0/-0.0 去重合一、NaN 永不去重）
+(define (const-eq? a b)
+  (if (eq? (second a) (second b))
+      (let ((ta (third a)) (tb (third b)))
+        (cond ((eq? (second a) 'int) (eq? ta tb))
+              ((eq? (second a) 'float) (eq? ta tb))
+              ((eq? (second a) 'str) (eq? ta tb))
+              ((eq? (second a) 'sym) (eq? ta tb))
+              ((eq? (second a) 'symlit) (eq? ta tb))
+              ((eq? (second a) 'bool) (eq? ta tb))
+              ; 'nil 常量形态永不构造（Bool/Nil 直发指令不进池——
+              ; 种子同口径）；nil 字面量标记在 kerf 中非符号，此处不可比
+              (else false)))
+      false))
+
+(define (const-index-of cnode consts i)
+  (if (null? consts)
+      nil
+      (if (const-eq? cnode (car consts))
+          i
+          (const-index-of cnode (cdr consts) (+ i 1)))))
+
+(define (intern-const cnode)
+  (let ((idx (const-index-of cnode CC-CONSTS 0)))
+    (if (null? idx)
+        (let ((i (length CC-CONSTS)))
+          (begin
+            (set! CC-CONSTS (append CC-CONSTS (list cnode)))
+            i))
+        idx)))
+
+; ===== 全局引用登记（镜像 intern_global——常量池索引 + 去重登记）=====
+
+(define (intern-global namestr)
+  (let ((hit (idx-lookup namestr CC-GLOBAL-IDX)))
+    (if (null? hit)
+        (let ((i (intern-const (list 'const 'sym namestr))))
+          (begin
+            (set! CC-GLOBAL-REFS (append CC-GLOBAL-REFS (list namestr)))
+            (set! CC-GLOBAL-IDX (cons (cons namestr i) CC-GLOBAL-IDX))
+            i))
+        (cdr hit))))
+
+; ===== 作用域解析机（镜像 match_bindings + resolve_var——TD-004/r13）=====
+
+; 帧内子集匹配：同名且 binder.scopes ⊆ ref_scopes 中取 max-cardinality
+; （并列先注册优先——严格大于才替换）；返回 (槽位 . 绑定作用域集) 或 nil
+(define (match-bindings bindings name ref-scopes)
+  (mb-loop bindings name ref-scopes 0 nil 0))
+
+(define (mb-loop bindings name ref-scopes i best best-rank)
+  (if (null? bindings)
+      best
+      (let ((b (car bindings)))
+        (if (and (eq? (car b) name) (scope-subset? (cdr b) ref-scopes))
+            (let ((rank (length (cdr b))))
+              (if (or (null? best) (> rank best-rank))
+                  (mb-loop (cdr bindings) name ref-scopes (+ i 1)
+                           (cons i (cdr b)) rank)
+                  (mb-loop (cdr bindings) name ref-scopes (+ i 1)
+                           best best-rank)))
+            (mb-loop (cdr bindings) name ref-scopes (+ i 1)
+                     best best-rank)))))
+
+; 作用域集子集判定（binder ⊆ ref——逐元素成员检查）
+(define (scope-subset? sub ref)
+  (if (null? sub)
+      true
+      (if (contains? (car sub) ref)
+          (scope-subset? (cdr sub) ref)
+          false)))
+
+; 帧栈自顶（内层）向下解析；帧 0 仅局部（main 原型帧不构成闭包语义）；
+; 其余帧局部先于捕获；首个含子集匹配的帧胜出；无候选 → 全局。
+; 返回 ('local 槽位 绑定作用域集) / ('captured 槽位 绑定作用域集) /
+; ('global nil)
+(define (resolve-var name ref-scopes)
+  ; 逆序传入：首 = 最内层帧 = 索引 fi（镜像 Rust .rev() 自顶向下）
+  (rv-loop (reverse CC-SCOPES) name ref-scopes
+           (- (length CC-SCOPES) 1)))
+
+(define (rv-loop frames name ref-scopes fi)
+  (if (null? frames)
+      (list 'global nil)
+      (let ((frame (car frames)))
+        (if (= fi 0)
+            (let ((m (match-bindings (car frame) name ref-scopes)))
+              (if (null? m)
+                  (rv-loop (cdr frames) name ref-scopes (- fi 1))
+                  (list 'local (car m) (cdr m))))
+            (let ((ml (match-bindings (car frame) name ref-scopes)))
+              (if (null? ml)
+                  (let ((mc (match-bindings (cdr frame) name ref-scopes)))
+                    (if (null? mc)
+                        (rv-loop (cdr frames) name ref-scopes (- fi 1))
+                        (list 'captured (car mc) (cdr mc))))
+                  (list 'local (car ml) (cdr ml))))))))
+
+; ===== 自由变量出现（镜像 free_var_occurrences——绑定屏蔽 + letrec* 序）=====
+; CC-BOUND = LIFO 列表（cons 头 = 最近绑定 = Rust Vec 尾）；CC-FREE =
+; 逆序累积（消费时 reverse = 遍历序）。
+; 语义镜像注记：Lambda 形参注入「新名才入栈」+ 弹出数恒为形参计数
+; （Rust shadowed 计数口径原样镜像——同名形参遮蔽外层绑定时的弹出
+; 行为与种子逐位一致，含其自由变量口径的既有行为）。
+
+(define (fvo-bound-add! namestr)
+  (if (contains? namestr CC-BOUND)
+      nil
+      (set! CC-BOUND (cons namestr CC-BOUND))))
+
+(define (fvo-pop! n)
+  (if (= n 0)
+      nil
+      (begin
+        (set! CC-BOUND (cdr CC-BOUND))
+        (fvo-pop! (- n 1)))))
+
+(define (fvo-has-name? free namestr)
+  (if (null? free)
+      false
+      (if (eq? (car (car free)) namestr)
+          true
+          (fvo-has-name? (cdr free) namestr))))
+
+(define (fvo-push-free! namestr scopes)
+  (if (and (not (contains? namestr CC-BOUND))
+           (not (fvo-has-name? CC-FREE namestr)))
+      (set! CC-FREE (cons (cons namestr scopes) CC-FREE))
+      nil))
+
+(define (fvo-node node)
+  (let ((tag (symbol->string (node-tag node)))
+        (fields (node-fields node)))
+    (cond
+      ((eq? tag "var")
+       (fvo-push-free! (first fields) (second fields)))
+      ((eq? tag "lit") nil)
+      ((eq? tag "lambda")
+       (let ((shadowed (length (first fields))))
+         (begin
+           (fvo-params! (first fields))
+           (fvo-node (third fields))
+           (fvo-pop! shadowed))))
+      ((eq? tag "app")
+       (begin
+         (fvo-node (first fields))
+         (fvo-seq (cdr fields))))
+      ((eq? tag "if")
+       (begin
+         (fvo-node (first fields))
+         (fvo-node (second fields))
+         (fvo-node (third fields))))
+      ((eq? tag "set")
+       (begin
+         (fvo-push-free! (first fields) (second fields))
+         (fvo-node (third fields))))
+      ((eq? tag "define")
+       (begin
+         (fvo-node (second fields))
+         (fvo-bound-add! (first fields))))
+      ((eq? tag "begin")
+       (fvo-seq fields))
+      ((eq? tag "require") nil)
+      ((eq? tag "module")
+       (fvo-seq (cdr (cdr (cdr fields)))))
+      (else nil))))
+
+(define (fvo-params! params)
+  (if (null? params)
+      nil
+      (begin
+        (fvo-bound-add! (car params))
+        (fvo-params! (cdr params)))))
+
+(define (fvo-seq items)
+  (if (null? items)
+      nil
+      (begin
+        (fvo-node (car items))
+        (fvo-seq (cdr items)))))
+
+; ===== Lambda 编译（镜像 compile_lambda——闭包捕获转换 §8.5/§19.3）=====
+
+; 捕获解析：遍历自由变量（遍历序），Local/Captured → 捕获槽（携带
+; 命中绑定的绑定作用域集）；Global → 原型内全局引用（零捕获）。
+; 自由变量总表（含全局引用名）恒记录。
+(define (capture-resolve-loop free)
+  (if (null? free)
+      nil
+      (let ((nm (car (car free)))
+            (sc (cdr (car free))))
+        (begin
+          (set! CC-FREEVARS (cons nm CC-FREEVARS))
+          (let ((r (resolve-var nm sc)))
+            (begin
+              (if (eq? (car r) 'local)
+                  (begin
+                    (set! CC-CAP-NAMES (cons nm CC-CAP-NAMES))
+                    (set! CC-CAP-BINDINGS
+                      (cons (cons nm (third r)) CC-CAP-BINDINGS))
+                    (set! CC-CAP-SRCS
+                      (cons (list 'local (second r)) CC-CAP-SRCS)))
+                  nil)
+              (if (eq? (car r) 'captured)
+                  (begin
+                    (set! CC-CAP-NAMES (cons nm CC-CAP-NAMES))
+                    (set! CC-CAP-BINDINGS
+                      (cons (cons nm (third r)) CC-CAP-BINDINGS))
+                    (set! CC-CAP-SRCS
+                      (cons (list 'captured (second r)) CC-CAP-SRCS)))
+                  nil)
+              (capture-resolve-loop (cdr free))))))))
+
+; 形参绑定（绑定作用域集 = param_scopes[i]，缺失容错为空集——镜像
+; param_scopes.get(i).cloned().unwrap_or_default()）
+(define (param-bindings paramstrs paramscopes)
+  (pb-loop paramstrs paramscopes 0))
+
+(define (pb-loop paramstrs paramscopes i)
+  (if (null? paramstrs)
+      nil
+      (cons (cons (car paramstrs)
+                  (if (< i (length paramscopes))
+                      (nth-or-nil paramscopes i)
+                      nil))
+            (pb-loop (cdr paramstrs) paramscopes (+ i 1)))))
+
+(define (nth-or-nil lst k)
+  (if (= k 0)
+      (car lst)
+      (nth-or-nil (cdr lst) (- k 1))))
+
+; 原型名形：首个形参名 / 无参匿名标记
+(define (proto-name-form paramstrs)
+  (if (null? paramstrs)
+      (list 'anon)
+      (list 'name (car paramstrs))))
+
+(define (compile-lambda fields s e x)
+  (let ((paramstrs (first fields))
+        (paramscopes (second fields))
+        (body (third fields)))
+    (begin
+      ; 1. 自由变量出现（bound 起点 = 形参——LIFO 形态镜像 Vec 尾）
+      (set! CC-BOUND (params->bound paramstrs nil))
+      (set! CC-FREE nil)
+      (fvo-node body)
+      ; 2. 捕获解析（对当前作用域栈——新帧尚未压入）
+      (set! CC-CAP-NAMES nil)
+      (set! CC-CAP-BINDINGS nil)
+      (set! CC-CAP-SRCS nil)
+      (set! CC-FREEVARS nil)
+      (capture-resolve-loop (reverse CC-FREE))
+      (let ((cap-names (reverse CC-CAP-NAMES))
+            (cap-binds (reverse CC-CAP-BINDINGS))
+            (cap-srcs (reverse CC-CAP-SRCS))
+            (freevars (reverse CC-FREEVARS)))
+        (let ((proto-idx (length CC-PROTOS)))
+          (begin
+            ; 3. 新原型（捕获描述符随原型冻结；code/spans 空）
+            (set! CC-PROTOS
+              (append CC-PROTOS
+                (list (list (proto-name-form paramstrs)
+                            paramstrs
+                            (length paramstrs)
+                            cap-names cap-srcs nil nil freevars))))
+            ; 4. 新作用域帧（形参绑定 + 捕获绑定）
+            (set! CC-SCOPES
+              (append CC-SCOPES
+                (list (cons (param-bindings paramstrs paramscopes)
+                            cap-binds))))
+            ; 5. 体编译（尾位 = true——TCO；窗口切换）
+            (let ((enc-cur CC-CUR)
+                  (enc-code CC-CODE-REV)
+                  (enc-spans CC-SPANS-REV))
+              (begin
+                (set! CC-CUR proto-idx)
+                (set! CC-CODE-REV nil)
+                (set! CC-SPANS-REV nil)
+                (let ((r (compile-expr body true)))
+                  (if (err? r)
+                      r
+                      (begin
+                        ; 尾部 RET（span = 体的 Span）
+                        (emit! (list 'op OP-RET)
+                               (node-s body) (node-e body) (node-exp body))
+                        ; 6. 回写新原型 code/spans + 弹帧 + 还原窗口
+                        (proto-set-at! proto-idx
+                          (list (proto-name-form paramstrs)
+                                paramstrs
+                                (length paramstrs)
+                                cap-names cap-srcs
+                                CC-CODE-REV CC-SPANS-REV
+                                freevars))
+                        (set! CC-SCOPES (drop-last CC-SCOPES))
+                        (set! CC-CUR enc-cur)
+                        (set! CC-CODE-REV enc-code)
+                        (set! CC-SPANS-REV enc-spans)
+                        ; 7. 外围原型发射 CLOSURE（span = lambda 的 Span）
+                        (emit! (list 'op OP-CLOSURE proto-idx
+                                    (length cap-names))
+                               s e x)
+                        nil)))))))))))
+
+; 形参表 → LIFO 绑定列表（(pn ... p1 p0)——镜像 params.to_vec() 的
+; Vec 尾部 LIFO 语义）
+(define (params->bound params acc)
+  (if (null? params)
+      acc
+      (params->bound (cdr params) (cons (car params) acc))))
+
+; ===== 表达式编译（镜像 compile_expr——八臂；栈平衡不变式 1）=====
+
+(define (compile-expr node tail)
+  (let ((tag (symbol->string (node-tag node)))
+        (s (node-s node))
+        (e (node-e node))
+        (x (node-exp node))
+        (fields (node-fields node)))
+    (cond
+      ; ---- Literal（含引号点对递归——先 car 后 cdr 压栈对齐 MAKE_PAIR）----
+      ((eq? tag "lit") (compile-lit (first fields) s e x))
+      ; ---- VarRef（解析 → LoadLocal/LoadCaptured/LoadGlobal）----
+      ((eq? tag "var") (compile-var (first fields) (second fields) s e x))
+      ; ---- Lambda ----
+      ((eq? tag "lambda") (compile-lambda fields s e x))
+      ; ---- App（求值顺序契约：被调函数先，参数从左到右；尾位 TailCall）----
+      ((eq? tag "app")
+       (let ((rf (compile-expr (first fields) false)))
+         (if (err? rf)
+             rf
+             (compile-app-args (cdr fields) (- (length fields) 1)
+                               s e x tail))))
+      ; ---- If（跳转回填：j_false → then → j_end → patch j_false →
+      ;        else → patch j_end；两臂继承尾位）----
+      ((eq? tag "if")
+       (let ((rc (compile-expr (first fields) false)))
+         (if (err? rc)
+             rc
+             (let ((jf (emit-jump OP-JUMP-IF-FALSE s e x)))
+               (let ((rt (compile-expr (second fields) tail)))
+                 (if (err? rt)
+                     rt
+                     (let ((je (emit-jump OP-JUMP s e x)))
+                       (begin
+                         (patch-jump jf)
+                         (let ((re (compile-expr (third fields) tail)))
+                           (if (err? re)
+                               re
+                               (begin
+                                 (patch-jump je)
+                                 nil)))))))))))
+      ; ---- Set!（值 → DUP → 存储；目标解析与 VarRef 同一口径）----
+      ((eq? tag "set")
+       (let ((rv (compile-expr (third fields) false)))
+         (if (err? rv)
+             rv
+             (begin
+               (emit! (list 'op OP-DUP) s e x)
+               (let ((r (resolve-var (first fields) (second fields))))
+                 (cond
+                   ((eq? (car r) 'local)
+                    (emit! (list 'op OP-STORE-LOCAL (second r)) s e x))
+                   ((eq? (car r) 'captured)
+                    (emit! (list 'op OP-STORE-CAPTURED (second r)) s e x))
+                   (else
+                    (emit! (list 'op OP-STORE-GLOBAL
+                                 (intern-global (first fields)))
+                           s e x))))))))
+      ; ---- Define（仅入口原型：值 → DUP → DefineGlobal；函数体内
+      ;        结构化拒绝——D1 全局泄漏防护，两路径同报）----
+      ((eq? tag "define")
+       (if (not (= CC-CUR 0))
+           (cerr "define 仅允许出现在顶层或函数体头部（begin/表达式位置包裹的 define 不合法——嵌套 define 请置于体头部）"
+                 s e)
+           (let ((rv (compile-expr (second fields) false)))
+             (if (err? rv)
+                 rv
+                 (begin
+                   (emit! (list 'op OP-DUP) s e x)
+                   (emit! (list 'op OP-DEFINE-GLOBAL
+                                (intern-global (first fields)))
+                          s e x))))))
+      ; ---- Begin（末项继承尾位——begin 尾调用 = 尾调用；中间值弹出
+      ;        span = 项自身 Span）----
+      ((eq? tag "begin")
+       (if (null? fields)
+           (emit! (list 'op OP-PUSH-NIL) s e x)
+           (compile-begin-seq fields 0 (length fields) tail)))
+      ; ---- Module/Require：42-c 迁移面（显式边界——不静默）----
+      ((eq? tag "module")
+       (cerr "module 臂属 42-c 迁移面（I1 前段编译器未实现）" s e))
+      ((eq? tag "require")
+       (cerr "require 臂属 42-c 迁移面（I1 前段编译器未实现）" s e))
+      (else
+       (cerr (str-append "未知 core 节点种类：" tag) s e)))))
+
+(define (compile-app-args args argc s e x tail)
+  (if (null? args)
+      (emit! (list 'op (if tail OP-TAIL-CALL OP-CALL) argc) s e x)
+      (let ((r (compile-expr (car args) false)))
+        (if (err? r)
+            r
+            (compile-app-args (cdr args) argc s e x tail)))))
+
+(define (compile-begin-seq items idx total tail)
+  (if (null? items)
+      nil
+      (let ((r (compile-expr (car items)
+                             (and tail (= (+ idx 1) total)))))
+        (if (err? r)
+            r
+            (if (< (+ idx 1) total)
+                (begin
+                  (emit! (list 'op OP-POP)
+                         (node-s (car items)) (node-e (car items))
+                         (node-exp (car items)))
+                  (compile-begin-seq (cdr items) (+ idx 1) total tail))
+                (compile-begin-seq (cdr items) (+ idx 1) total tail))))))
+
+; ---- 字面量（消歧标记形态分派；Bool/Nil 直发指令不进池）----
+; 注：标记分派按名字字符串（'true/'false/'nil 在 kerf 中是 bool/nil
+; 字面量而非符号——eq? 恒假；expander.krf tname 同款纪律）
+
+(define (compile-lit lval s e x)
+  (let ((tname (symbol->string (car lval))))
+    (cond
+      ((eq? tname "int")
+       (emit-push-const (list 'const 'int (second lval)) s e x))
+      ((eq? tname "float")
+       (emit-push-const (list 'const 'float (second lval)) s e x))
+      ((eq? tname "str")
+       (emit-push-const (list 'const 'str (second lval)) s e x))
+      ((eq? tname "sym")
+       (emit-push-const (list 'const 'symlit (second lval)) s e x))
+      ((eq? tname "true")
+       (emit! (list 'op OP-PUSH-TRUE) s e x))
+      ((eq? tname "false")
+       (emit! (list 'op OP-PUSH-FALSE) s e x))
+      ((eq? tname "nil")
+       (emit! (list 'op OP-PUSH-NIL) s e x))
+      ((eq? tname "pair")
+       (compile-lit-pair lval s e x))
+      (else
+       (cerr "未知字面量标记种类" s e)))))
+
+; 引号点对递归：car 构造 → cdr 构造 → MAKE_PAIR（span = 字面量自身）
+(define (compile-lit-pair lval s e x)
+  (let ((rc (compile-lit-val (second lval) s e x)))
+    (if (err? rc)
+        rc
+        (let ((rd (compile-lit-val (third lval) s e x)))
+          (if (err? rd)
+              rd
+              (emit! (list 'op OP-MAKE-PAIR) s e x))))))
+
+(define (compile-lit-val v s e x)
+  (let ((tname (symbol->string (car v))))
+    (if (eq? tname "pair")
+        (compile-lit-pair v s e x)
+        (compile-lit v s e x))))
+
+(define (emit-push-const cnode s e x)
+  (let ((idx (intern-const cnode)))
+    (emit! (list 'op OP-PUSH-CONST idx) s e x)))
+
+(define (compile-var namestr scopes s e x)
+  (let ((r (resolve-var namestr scopes)))
+    (cond
+      ((eq? (car r) 'local)
+       (emit! (list 'op OP-LOAD-LOCAL (second r)) s e x))
+      ((eq? (car r) 'captured)
+       (emit! (list 'op OP-LOAD-CAPTURED (second r)) s e x))
+      (else
+       (emit! (list 'op OP-LOAD-GLOBAL (intern-global namestr)) s e x)))))
+
+; ===== 入口（镜像 compile_module——每次调用全量复位）=====
+
+; 原型记录 → 输出节点（code/spans 逆序转正）
+(define (proto-finish rec)
+  (list 'proto
+        (first rec)      ; 名形
+        (second rec)     ; 参数名
+        (third rec)      ; nlocals
+        (fourth rec)     ; 捕获名
+        (fifth rec)      ; 捕获源
+        (reverse (sixth rec))   ; 指令（最终序）
+        (reverse (seventh rec)) ; span 三元组（最终序）
+        (eighth rec)))   ; 自由变量
+
+; 顶层形式序列：非尾位编译 + 中间值弹出（span = 形式自身）；Halt 终止
+(define (compile-toplevel nodes rem)
+  (if (null? nodes)
+      nil
+      (let ((r (compile-expr (car nodes) false)))
+        (if (err? r)
+            r
+            (if (> rem 1)
+                (begin
+                  (emit! (list 'op OP-POP)
+                         (node-s (car nodes)) (node-e (car nodes))
+                         (node-exp (car nodes)))
+                  (compile-toplevel (cdr nodes) (- rem 1)))
+                (compile-toplevel (cdr nodes) (- rem 1)))))))
+
+; nodes（core 节点列表）→ ('prog ...) 或 ('err msg s e)
+(define (lexc-compile-program nodes)
+  (begin
+    ; 入口复位（确定性纪律——镜像 CompileCtxt::new 每调用新上下文）
+    (set! CC-SCOPES (list (cons nil nil)))
+    (set! CC-PROTOS nil)
+    (set! CC-CUR 0)
+    (set! CC-CODE-REV nil)
+    (set! CC-SPANS-REV nil)
+    (set! CC-CONSTS nil)
+    (set! CC-GLOBAL-IDX nil)
+    (set! CC-GLOBAL-REFS nil)
+    (set! CC-PATCHES nil)
+    (set! CC-BOUND nil)
+    (set! CC-FREE nil)
+    (set! CC-CAP-NAMES nil)
+    (set! CC-CAP-BINDINGS nil)
+    (set! CC-CAP-SRCS nil)
+    (set! CC-FREEVARS nil)
+    ; main 原型占位（帧 0 + 原型 0；渲染名由桥侧魔法标记重建）
+    (set! CC-PROTOS
+      (list (list (list 'main) nil 0 nil nil nil nil nil)))
+    ; 空程序：PushNil（main_span = 首形式 Span 或哑元 (0 0 0)）
+    (if (null? nodes)
+        (emit! (list 'op OP-PUSH-NIL) 0 0 0)
+        nil)
+    (let ((main-s (if (null? nodes) 0 (node-s (car nodes))))
+          (main-e (if (null? nodes) 0 (node-e (car nodes))))
+          (main-x (if (null? nodes) 0 (node-exp (car nodes)))))
+      (let ((r (compile-toplevel nodes (length nodes))))
+        (if (err? r)
+            r
+            (begin
+              (emit! (list 'op OP-HALT) main-s main-e main-x)
+              ; 回填完备性断言（§19.3 不变式 2）
+              (if (null? CC-PATCHES)
+                  (begin
+                    ; main 窗口回写 + 组装输出
+                    (proto-set-at! 0
+                      (list (list 'main) nil 0 nil nil
+                            CC-CODE-REV CC-SPANS-REV nil))
+                    (list 'prog
+                          (map proto-finish CC-PROTOS)
+                          CC-CONSTS
+                          CC-GLOBAL-REFS))
+                  (cerr "跳转回填不完备（自举编译器内部不变量破坏）"
+                        main-s main-e))))))))

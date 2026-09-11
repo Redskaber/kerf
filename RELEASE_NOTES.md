@@ -1,3 +1,30 @@
+## v0.4.0-r21（2026-09-11）——批次 I 执行：I1 前段基础核心形式 kerf 化（三件套第三实例，门 A parity 657 全绿）
+
+### 交付一：compiler.krf——八臂编译段 kerf 实现（42-b 主体，S1 段）
+
+- `crates/kerf-driver/src/bootstrap/compiler.krf`（~790 行）：**compile.rs 798 行的逐语义镜像**——三件套第三实例（r6 Reader / r14/r15 Expander 之后）。八臂全量：Literal（标记化分派 + Bool/Nil 直发不进池 + 引号点对递归先 car 后 cdr 对齐 MAKE_PAIR）/ VarRef（三源解析）/ If（跳转回填 j_false→then→j_end→patch 序）/ Begin（末项继承尾位 + Pop 挂项自身 Span）/ Set!（值→DUP→存储三路径）/ Define（入口原型守卫 + D1 消息逐字）/ App（被调先、参数从左到右 + 尾位 TailCall）/ Lambda（自由变量出现 → 捕获解析 → 新原型 → 新帧 → 体编译 tail=true → RET → 回写 → 弹帧 → CLOSURE 发射）
+- **作用域解析机逐语义镜像**（B3 最难段）：`match-bindings`（同名 + `binder.scopes ⊆ ref_scopes` 子集匹配 + max-cardinality 严格大于替换——并列先注册优先）+ `resolve-var`（帧栈自顶向下；帧 0 仅局部；其余局部先于捕获；首个含子集匹配帧胜出；无候选 → 全局）+ 自由变量遍历（绑定屏蔽 + letrec* 序 + **shadow-pop 计数口径逐位镜像**——形参「新名才入栈 + 弹出恒为形参数」的 Rust 既有行为原样保留）
+- **确定性纪律**（§7/B8）：入口全量复位（CC-* 14 项状态——镜像 CompileCtxt::new 每调用新上下文）+ 常量池/全局索引关联列表首插序（禁哈希序天然满足）+ 符号一律 str 携带桥回 intern + `const-eq?` 结构相等（eq? 对序对是引用相等——逐字段递归；Float 按 f64 == 镜像 Rust HashMap Hash+Eq 去重行为：±0.0 合一、NaN 永不去重）
+- module/require 两臂显式边界错误（42-c 迁移面——§2.3-4 显式失败不静默）
+
+### 交付二：bootstrap_compiler.rs 桥 + 门 A parity 套件（42-b 验收面）
+
+- `crates/kerf-driver/src/bootstrap_compiler.rs`（~640 行）：CoreExpr → core 节点（四头字段协议 tag/s/e/exp——expander 输出同形态）→ `lexc-compile-program` VM 调用 → `('prog ...)` → BcProgram 类型重建（原型名形三态 `'main/'anon/'name`——魔法符号 Symbol(u32::MAX-1/2) 桥侧重建；操作码码表 0..=40 = opcode.rs 声明序；span 三元组桥侧注入 file_id）。**42-b 边界：parity 影子路径**（生产仍走种子 compile_module——CompilerKind 切换属 42-d）
+- **INC4 实现期修订**（登记于切口设计文档注记）：字面量值消歧标记形态（`('int v)('float v)('str s)('sym 名)('pair l r)`——Str/Symbol/Float 在 VM 值面无谓词区分，桥侧定型传递）；span 携带 (s e exp) 三元组（bytecode_equal 判据含 expansion_id——INC4 原文「span对」修正）
+- `tests/v0/stage2/plan/bootstrap_compiler_tests.rs`（19 测试 / 门 A 基础组 ≥8 超额）：**parity 13**（bytecode_equal 全结构含 debug_spans——字面量/常量池去重/引号点对/全局 define/if 回填/begin 尾位/嵌套捕获三链+遮蔽/set! 三路径/尾位穿线含相互尾递归/深嵌套 100 层/确定性双跑/空程序）+ **负例 2**（define 位置 D1 消息+Span 逐字；module/require 42-c 边界不对称断言）+ **行为面 4**（fib 144 / closures 计数器 (4 2) / higher_order map 平方 / 10 万层深尾递归——自举编译段产物 VM 执行 = 生产管线结果，examples/usage 基础件核心语义）
+- **语言陷阱实测发现**（krf 侧修复三处）：`'true/'false/'nil` 在 kerf 中是 bool/nil **字面量**而非符号——标签分派必须经 `symbol->string` 字符串比较（expander.krf tname 同款纪律）；编译期两轮括号失衡（逐行平衡检查修复）
+
+### 交付三：R4 发现项修复——操作码三方冻结漂移补齐
+
+- **opcode_count_matches_spec 修正（40→41）**：TailCall（r18/40-c TD-022 TCO 引入）此前漏列于守护测试枚举——enum 实有 41 变体 vs 测试断言 40（数组恰好 40 项而断言同值——测试自洽但与 enum 漂移）。按 sop 附录 A R4（代码为准 + 本次修正文档）：opcode.rs 测试枚举补齐 + `04-bytecode-vm.md` 三处同步（§1 冻结计数 + 函数操作表行 3→4 + §3 执行循环组计数）
+- 该发现证明门 A parity 语料经双实现实跑的对账价值（§2.3-11 先实测禁臆测——三方冻结契约的漏网只有全量对账才可见）
+
+### 交付四：对账与收尾（42-z'）
+
+- 文档同步五面：plan.md Status（42-b 交付 r21）+ 切口设计 Status/INC4 注记 + matrix v0.1.0-r21（638→657 净 +19 集成；单元 202 + 集成 455）+ pipeline-test-coverage v0.4.0-r21（Tier 2 行 + 657 基线）+ 本 RELEASE_NOTES
+- **§3.2 六命令全绿**（clean 起步终验）：build --release / check 0/0 / fmt 零 diff / clippy --all-targets -D warnings 0 / **test --release --workspace 657:0:0**（638 基线零回归 + 19）；CLI 冒烟 + 双审计集 EXIT 0
+- r21 tar.gz 打包（§19.4 命令）+ 包内自举验证 + web 同步（kerf-data r21 + footer）+ agent-browser E2E + git 入账
+
 ## v0.4.0-r20（2026-09-11）——批次 I 执行启动：I1 切口评估与迁移设计（638 零回归）
 
 ### 交付一：I1 切口评估与迁移设计（42-a——批次 I 首 MUV）

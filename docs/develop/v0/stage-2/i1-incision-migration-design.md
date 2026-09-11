@@ -2,8 +2,8 @@
 
 > **Author**: Super Z（ARCH-A 主导 + DEV-A 实现盘点——L3 多角色会话）
 > **Date**: 2026-09-11（批次 I 执行启动 r20 / MUV 42-a）
-> **Version**: v1.0
-> **Status**: Active（切口裁定 + 段序 + parity 三门 + 切换点设计——42-b/c/d 执行蓝图）
+> **Version**: v1.1
+> **Status**: Active（切口裁定 + 段序 + parity 三门 + 切换点设计——42-b/c/d 执行蓝图；**r21/42-b 已执行 S1 段**：compiler.krf 八臂 + 桥 + 门 A parity 19 测试全绿（基础组 ≥8 超额）——INC4 实现期修订见 §2 注记；42-c/42-d 待续）
 > **输入**: plan.md §5a（42-x 八 MUV）；[12-roadmap §2.5 演进矩阵](../../lang-design/12-roadmap.md)（行 299 元循环求值器「重写升级 + 被编译器替换（I1 范围）」/ 行 309 类型检查器「迁移评估」）；[07-bootstrap §3.2/§3.3](../../lang-design/07-bootstrap-strategy.md)（混合期构成 + 阶段切换信号）；[15-architecture-layers §5.3](../../lang-design/15-architecture-layers.md)（五正交轴）；sop.md §21.3（四条件——条件 1/2 为 I1 对象）；r6/r14/r15 三件套先例（reader/expander 自举）；r18 TCO（尾位穿线——parity 必含面）
 > **上游**: r19 批间插入轮（41-a~c——批次 I 细化 + 638:0:0 基线）
 
@@ -88,7 +88,7 @@ VM/运行时/桥/组合根/analyzing ≈ **~8600 行**。生产**编译器逻辑
 | **INC1** | **切口位置 = compile_module 单点**：生产管线第 4 步整体替换为 `bootstrap_compiler::compile_module`（值树桥——三件套第三实例）；输入 = CoreExpr（桥转 expander.krf 输出同款 tag 节点），输出 = BcProgram 值树（桥转类型） | B1（单一入口）+ B5（先例×2）；§11 接口隔离（管线各段以数据契约交互） |
 | **INC2** | **字节码域留 Rust**：BcProgram/Op/BcConst 是 VM 与 backend 的宿主契约（15 §5.3 轴位）——kerf 侧以 tag 节点表达，桥重建类型；**VM 永不迁移**（项目一行：Stage 0-1 自建 VM） | B4 + 08-backend（后端消费同一域）；原则 27（契约冻结） |
 | **INC3** | **组合根留 Rust**：prelude 注入 / R9 验证 / registry declare/visit / 缓存 / CLI = driver 编排职责（§8.4.6 组合根）——不是「编译逻辑」；compiler.krf 的输入约定 = **已过 R9 + 已声明 registry 的 CoreExpr 列表**（与种子 compile_module 完全同输入） | B6/S3 表；§13.4 J3（子模块零依赖先例——capability_model 同款裁定） |
-| **INC4** | **值树契约复用**：输入节点格式 = expander.krf 输出格式原样（`('lit s e 值) ('var s e 名 scopes) ('app ...) ('lambda s e (名)(作用域集) 体) ('set ...) ('define ...) ('begin ...) ('module s e 名 (导)(导) 体) ('require s e 能力...)`）；输出节点格式（新设计）：`('prog (proto...) (const...) (glob...))` + `('proto 名str (参数名) nlocals (捕获名) (捕获源) (指令) (span对))` + `('op 码int 操作数...)` + `('const 类型tag 值)` + 符号一律 str 携带（桥回 intern——r6/r15 同纪律） | B5（expander.krf 契约头）；桥侧类型重建单一化（CoreExpr 契约不变） |
+| **INC4** | **值树契约复用**：输入节点格式 = expander.krf 输出格式同形态（`('lit s e 值) ('var s e 名 scopes) ('app ...) ('lambda s e (名)(作用域集) 体) ('set ...) ('define ...) ('begin ...) ('module s e 名 (导)(导) 体) ('require s e 能力...)`）；输出节点格式（新设计）：`('prog (proto...) (const...) (glob...))` + `('proto 名形 (参数名) nlocals (捕获名) (捕获源) (指令) (span 三元组...) 自由变量)` + `('op 码int 操作数...)` + `('const 类型tag 值)` + 符号一律 str 携带（桥回 intern——r6/r15 同纪律）。**r21/42-b 实现期修订**（实测发现，登记于本注记）：①字面量值为**消歧标记形态**（`('int v)('float v)('str s)('sym 名)('pair l r)('true)('false)('nil)`——Str/Symbol/Float 在 VM 值面无区分谓词（krf 谓词族仅 int?/bool?/null?/pair?/procedure?），桥侧定型传递——「expander 输出格式原样」精确化为「节点四头形态同构 + 字面量标记化」；②span 携带 **(s e exp) 三元组**（原文「span对」修正——bytecode_equal 判据含 debug_spans 全字段，expansion_id 必传）；③原型名形三态 `'main/'anon/'name`（魔法符号 u32::MAX-1/2 桥侧重建）+ 操作码码表 0..=40 = opcode.rs 声明序 | B5（expander.krf 契约头）；桥侧类型重建单一化（CoreExpr 契约不变）；实测约束（谓词面缺失 + 判据字段） |
 | **INC5** | **比较判据 = `BcProgram::bytecode_equal`**（全结构 derive PartialEq——含 debug_spans）；**无弱化灰区**：B12 证明判据强于操作码级 | B4/B12；§21.3 条件 2（「字节一致」的机器口径） |
 | **INC6** | **analyzing 段不迁**（I1 范围内）：typecheck/hm 不在自举关键路径（B6 代码实锚——生产 run/compile/check 三入口中仅 check 消费，而 check 不产字节码、不参与自举链）；迁移评估按 12 §2.5 行 309 绑定 **42-f 窗口**（HM 生产切换评估同轮——D8 演进轨道），Stage 2 内保持 Rust 实现 + oracle 角色 | B6 + 12 §2.5 行 309 + 15 §5.3（轴 2 独立推导不回流 CoreExpr——typecheck 迁移与否不影响自举命题） |
 | **INC7** | **eval 退役裁定排 42-d**：12 §2.5 行 299「重写升级（eval 自举迁移）+ 被编译器替换（I1 范围）」——终态 = 自举编译器（compile 段）+ VM 执行成为唯一生产路径，eval.rs 参考路径退役（删除或存档——终验 TD-017 口径）；42-d 回写 12 §2.4/§2.5 行 + T1 双路径测试面收口（eval 侧断言迁移为「编译器 parity 断言」） | B7 + 12 §2.5 行 299 + plan §5a 42-d 行 |
