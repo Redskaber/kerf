@@ -1,3 +1,24 @@
+## v0.4.0-r22（2026-09-11）——批次 I 执行：I1 中段糖/module/require 面全迁移（门 A 扩展组全臂 parity，665 全绿）
+
+### 交付一：compiler.krf module/require 两臂迁移（42-c 主体，S2 段）
+
+- **module 臂**（`compile-module-body` + `compile-module-seq`）：镜像 compile.rs:416 逐语义——体 inline 编译**逐项恒非尾位**（区别于 begin 末项继承尾位：module 项不构成尾位——TCO 不参与）+ 中间值 Pop 携项自身 Span + 空体 PushNil 携 module 自身 Span + 首原型名覆写 `'<main>'` **值等价无操作**（Rust `pm.name = Symbol(u32::MAX-1)` 与 proto 0 创建/回写值恒等——设计 v1.2 注记）
+- **require 臂**：PushNil（r8 能力声明零字节码语义——顶层「每形式一值」栈不变式维持；权限验证在 driver 前端 R9/E0006 完成——编译段零感知与种子同口径）
+- 42-b 显式边界错误两处移除——**边界不对称消除**（生产切换点 CompilerKind 属 42-d）；fvo 面 42-b 已预置（module → 体遍历 / require → 空——与 kerf-core expr.rs:358/365 一致），本轮零改动通过
+
+### 交付二：门 A 扩展组 parity 套件（42-c 验收面，19 → 27 测试函数 / 净 +8）
+
+- **parity 扩展组 46 case**（≥12 超额）：module/require 正例组（多项体 Pop + 导入/导出面 + 尾位非继承 + 确定性双跑）/ 糖九件（let 家族 8 + cond/when/unless 9 + and/or/while 10——**全管线 parity**：expander 脱糖 → 双编译路径 bytecode_equal）/ 宏语料 3（swap!（let+set! 混合）+ my-or（递归省略号）+ def-twice（begin 多模式））/ **prelude 注入序**（preamble.krf 全文真实语料——生产前端 import kerf-prelude 实际注入的编译对象 + 用户 module import 面同编）/ **examples/usage 全六件双路径 bytecode_equal**（fib/closures/higher_order/macros/gc_stress/io——require/宏/GC 压力/高阶函数全谱系）
+- 边界断言改写：42-b 的 `parity_err_module_require_boundary`（module/require 自举报边界错误）改写为 `parity_module_require_arms` 正例 parity + 确定性断言（生产切换守护属 42-d）
+- **行为面 +2 组**：糖九件语义（let*/letrec 互递归/while 计数/and/or/when/unless——自举编译段产物 VM 执行 = 生产管线结果）+ module 臂行为面（inline 编译产物执行 = 生产管线含 registry 前端面；闭包+糖+module 混合语料）
+- **语料实测勘误两处（GATE 1 诚实记录）**：① 条件位严格 bool（`(and 1 2 3)` 触 E0004「条件位置需要 bool」——kerf truthy 语义显式定义，行为语料改 `(and true true 3)`；parity 不受影响——编译段不类型检查）；② 同层 let 重名绑定是展开器错误（lambda 形参重名拒绝——语料改跨层嵌套遮蔽）
+
+### 交付三：对账与收尾（43-z）
+
+- 文档同步六面：plan.md Status（42-c 交付 r22 + 42-d 执行待续）+ 切口设计 v1.2（S2 执行注记 + module 名覆写值等价注记）+ matrix v0.1.0-r22（657→665；单元 202 + 集成 463）+ pipeline v0.4.0-r22（Tier 2 表体 bootstrap_compiler_tests 行补齐——r21 头部有表体漏的 R4 同型修正）+ v0.5-roadmap 批次 I 行 + 本 RELEASE_NOTES
+- **§3.2 六命令全绿**（clean 起步终验）：build --release 12.87s 零告警 / check 0 errors 0 warnings / fmt 零 diff / clippy --all-targets -D warnings 0 / **test --release --workspace 665:0:0**（657 基线零回归 + 8；36.6s）；CLI 冒烟六路径（VM fib 75025/144 + macros `(2 1)`⇒42 + io 门控端到端 + check ok 38 指令 + native fib exit 144 + E0006 负例 fail-closed）+ 双审计集 EXIT 0（stage0 41 + stage1 50 APPROVED）
+- r22 tar.gz 打包（§19.4 命令）+ 包内自举验证 + web 同步（kerf-data r22 + footer）+ agent-browser E2E + git 入账
+
 ## v0.4.0-r21（2026-09-11）——批次 I 执行：I1 前段基础核心形式 kerf 化（三件套第三实例，门 A parity 657 全绿）
 
 ### 交付一：compiler.krf——八臂编译段 kerf 实现（42-b 主体，S1 段）

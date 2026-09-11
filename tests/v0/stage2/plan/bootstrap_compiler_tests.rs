@@ -1,22 +1,24 @@
-//! I1 前段自举 Compiler parity 套件（Stage 2 批次 I / Task 42-b）。
+//! I1 自举 Compiler parity 套件（Stage 2 批次 I / Task 42-b + 42-c）。
 //!
-//! 验收门（plan §5a 42-b 行 + i1-incision-migration-design §4 S1 / §5
-//! 门 A 基础组）：
+//! 验收门（plan §5a 42-b/42-c 行 + i1-incision-migration-design §4 S1/S2
+//! / §5 门 A 基础组 + 扩展组）：
 //! - **结构 parity（门 A）**：自举 Compiler（compiler.krf，VM 上运行）
 //!   与种子 Compiler（kerf-compiler/compile.rs，Rust）在同一 CoreExpr
 //!   输入上——`BcProgram::bytecode_equal` 全结构一致（INC5：含
 //!   protos/consts/global_refs/debug_spans——逐字节无灰区）；
+//!   42-c 扩展组：糖九件 + module/require 两臂 + 宏语料 + prelude
+//!   注入序（preamble.krf 真实语料）+ examples 全六件双路径；
 //! - **错误 parity**：负例语料（函数体内 define 位置违规——D1 全局
 //!   泄漏防护）消息 + Span(start,end) 逐字一致（E1 同口径边界：
 //!   expansion_id 不参与错误判据——桥侧 ('err msg s e) 三字段契约，
 //!   bootstrap_expander 同型先例）；
 //! - **行为面**：自举编译段产物经 VM 执行 = 生产管线（自举前端 + 种子
-//!   编译段）运行结果——编译段可执行性的端到端证明（语料镜像
-//!   examples/usage 基础件 fib/closures/higher_order 核心语义——print/
-//!   require 属 42-c 与 I/O 边界外，qbe_backend_tests 同型先例）；
+//!   编译段）运行结果——编译段可执行性的端到端证明（42-c 扩展：糖
+//!   + module 语义）；
 //! - **确定性纪律**（§7/B8）：同输入两次自举编译字节一致；42-b 边界
-//!   = parity 影子路径（生产未切换——module/require 臂属 42-c，显式
-//!   边界断言）。
+//!   = parity 影子路径（生产未切换——CompilerKind 切换点属 42-d；
+//!   module/require 两臂 42-c 已迁——边界不对称消除，正例 parity
+//!   全綠）。
 //!
 //! 遵循条款：§9.4.3（正负例成对）、§7.1（集成验证 ≥3）、§2.3-11
 //! （先实测禁臆测——全部断言经双实现实跑比对）、§21.3（门 A 为
@@ -294,23 +296,146 @@ fn parity_err_define_position() {
 }
 
 #[test]
-fn parity_err_module_require_boundary() {
-    // 42-c 边界显式断言：module/require 臂未迁移——自举侧报边界错误
-    // （种子侧正常编译——边界不对称是 42-b 声明的影子路径边界，非缺陷）
-    let (core, mut table) = seed_front("(require io read)");
-    let seed_ok = seed_compile(&core).is_ok();
-    let boot = bootstrap_compile(&core, 0, &mut table);
-    assert!(seed_ok, "种子应正常编译 require（零字节码臂）");
+fn parity_module_require_arms() {
+    // 42-c 两臂迁移落地：边界不对称消除——module/require 双路径正例
+    // parity 全綠（42-b 边界断言改写为正例——生产切换点属 42-d）
+    parity("(require io read)");
+    parity("(require io read) (require io write)");
+    parity("(require io write) (define x 1) x");
+    parity("(module m (define x 1) x)");
+    // 多项体（中间值 Pop 携项自身 Span）+ 导入/导出面
+    parity("(module m (import) (export) 1 2 3)");
+    parity("(module m (import) (export x) (define x 1) (define y 2) (+ x y))");
+    // module 后随顶层形式 + 末项不继承尾位（module 项恒非尾位——
+    // 区别于 begin 末项 TCO 继承）
+    parity("(module m (define (f x) (+ x 1)) (f 2)) 42");
+    parity("(module m (define (c n) (if (= n 0) 0 (c (- n 1)))) (c 5))");
+    // 确定性：同输入两次自举编译字节一致（module/require 路径）
+    let (core, mut table) = seed_front("(module m (define x 1) x) (require io read) 42");
+    let a = bootstrap_compile(&core, 0, &mut table).expect("第一次自举编译失败");
+    let b = bootstrap_compile(&core, 0, &mut table).expect("第二次自举编译失败");
     assert!(
-        boot.is_err(),
-        "自举应报 42-c 边界错误（require 臂未迁移——显式失败不静默）"
+        a.bytecode_equal(&b),
+        "两次自举编译字节不一致（module/require 路径入口复位纪律破坏）"
     );
-    let (core_m, mut table_m) = seed_front("(module m (define x 1) x)");
-    let boot_m = bootstrap_compile(&core_m, 0, &mut table_m);
-    assert!(
-        boot_m.is_err(),
-        "自举应报 42-c 边界错误（module 臂未迁移——显式失败不静默）"
+}
+
+// ---- 扩展组：糖九件全管线 parity（expander 脱糖 → 双编译路径）----
+
+#[test]
+fn parity_sugar_let_family() {
+    // let → lambda 应用；嵌套 let；let* 链式遮蔽；letrec 互递归
+    parity("(let ((x 1)) x)");
+    parity("(let ((x 1) (y 2)) (+ x y))");
+    parity("(let ((x 1)) (let ((y 2)) (+ x y)))");
+    parity("(let ((x 1)) (let ((x 2)) x))"); // 跨层嵌套遮蔽（同层重名
+                                             // 是展开器错误——lambda 形参重名拒绝，非正例语料）
+    parity("(let* ((x 1) (y (+ x 1)) (z (+ y 1))) (+ x (+ y z)))");
+    parity(
+        "(letrec ((ev? (lambda (n) (if (= n 0) true (od? (- n 1)))))
+                  (od? (lambda (n) (if (= n 0) false (ev? (- n 1))))))
+           (ev? 6))",
     );
+    // let 体多形式（脱糖为 begin 语义）+ 尾位穿线
+    parity("(let ((n 0)) (set! n (+ n 1)) n)");
+    parity("(define (f n) (let ((m (+ n 1))) m)) (f 5)");
+}
+
+#[test]
+fn parity_sugar_cond_when_unless() {
+    // cond 子句链 → 嵌套 if；else 兼容子句；when/unless 单臂
+    parity("(cond (true 1) (true 2))");
+    parity("(cond ((= 1 2) 1) ((= 1 1) 2) (else 3))");
+    parity("(cond ((= 1 2) 1) (else (cond ((= 2 2) 2) (else 3))))");
+    parity("(define (g n) (cond ((< n 0) -1) ((= n 0) 0) (else 1))) (g 5)");
+    parity("(when true 1 2 3)");
+    parity("(when (= 1 2) 1 2)");
+    parity("(unless false 1 2)");
+    parity("(unless true 1 2)");
+    // 尾位穿线：cond 两臂 / when 体末项在尾位置
+    parity("(define (h n) (cond ((= n 0) 'zero) (else (h (- n 1))))) (h 3)");
+}
+
+#[test]
+fn parity_sugar_and_or_while() {
+    // and/or 短路链 → 嵌套 if；零元/一元/多元
+    parity("(and)");
+    parity("(and 1)");
+    parity("(and 1 2 3)");
+    parity("(and (= 1 1) (= 2 2) (= 3 3))");
+    parity("(or)");
+    parity("(or false nil)");
+    parity("(or false 2)");
+    parity("(or false false 42)");
+    // while → letrec loop 递归脱糖（编译期 parity，不执行）
+    parity("(define i 0) (while (< i 5) (set! i (+ i 1))) i");
+    parity(
+        "(define (count-up n)
+           (let ((i 0))
+             (while (< i n) (set! i (+ i 1)))
+             i))
+         (count-up 3)",
+    );
+}
+
+#[test]
+fn parity_macros_corpus() {
+    // 宏语料（宏产物 CoreExpr → 双路径编译 parity——macros.krf 同型）：
+    // swap!（let+set! 混合）/ my-or（递归宏 + 省略号）
+    parity(
+        "(define-syntax swap!
+           (syntax-rules ()
+             ((swap! x y)
+              (let ((tmp x))
+                (set! x y)
+                (set! y tmp)))))
+         (define p 1)
+         (define q 2)
+         (swap! p q)
+         (list p q)",
+    );
+    parity(
+        "(define-syntax my-or
+           (syntax-rules ()
+             ((my-or) false)
+             ((my-or a) a)
+             ((my-or a rest ...) (if a true (my-or rest ...)))))
+         (my-or false false 42)",
+    );
+    // 字面量模式 + 多模式宏
+    parity(
+        "(define-syntax def-twice
+           (syntax-rules ()
+             ((def-twice n v) (begin (define n v) (define n2 v)))))
+         (def-twice x 7) x",
+    );
+}
+
+#[test]
+fn parity_preamble_injection_order() {
+    // prelude 注入序（r8 路径真实语料）：preamble.krf 全文——module 面
+    // （导出表 + 四个高阶函数体）双路径 bytecode_equal；这是生产
+    // 前端（import kerf-prelude → forms 级合并）实际注入的编译对象
+    let preamble = include_str!("../../../../crates/kerf-driver/src/bootstrap/preamble.krf");
+    parity(preamble);
+    // 用户源 + module 头（import 面）同编语料
+    parity(
+        "(module user (import kerf-prelude) (export)
+           (define (sq x) (* x x))
+           (map sq (quote (1 2 3))))",
+    );
+}
+
+#[test]
+fn parity_examples_usage_all_six() {
+    // 集成验证（设计 §4 S2）：examples/usage 全六件双路径
+    // bytecode_equal（含 require/宏/GC 压力/高阶函数全谱系）
+    parity(include_str!("../../../../examples/usage/fib.krf"));
+    parity(include_str!("../../../../examples/usage/closures.krf"));
+    parity(include_str!("../../../../examples/usage/higher_order.krf"));
+    parity(include_str!("../../../../examples/usage/macros.krf"));
+    parity(include_str!("../../../../examples/usage/gc_stress.krf"));
+    parity(include_str!("../../../../examples/usage/io.krf"));
 }
 
 // ---- 行为面（examples/usage 基础件核心语义——设计 §4 S1 集成验证）----
@@ -361,4 +486,40 @@ fn behavior_deep_tail_recursion() {
     // 深尾递归端到端（TailCall 帧复用——自举编译段产物在 VM 上执行；
     // 100_000 层非 TCO 将触帧上限——B9 必含面的行为级证明）
     behavior("(define (c n) (if (= n 0) 'done (c (- n 1)))) (c 100000)");
+}
+
+#[test]
+fn behavior_sugar_42c() {
+    // 42-c 扩展行为面：糖九件语义经自举编译段产物 VM 执行 =
+    // 生产管线结果（let 家族 + cond/when/unless + and/or + while）
+    behavior("(let ((x 5)) (let* ((y (+ x 1))) (cond ((= y 6) 'six) (else 'other))))");
+    behavior(
+        "(letrec ((ev? (lambda (n) (if (= n 0) true (od? (- n 1)))))
+                  (od? (lambda (n) (if (= n 0) false (ev? (- n 1))))))
+           (ev? 10))",
+    );
+    behavior("(define i 0) (while (< i 10) (set! i (+ i 1))) i");
+    behavior("(and true true 3)"); // 条件位严格 bool（int 条件 E0004）
+    behavior("(or false false 7)");
+    behavior("(unless false 'yes)");
+    behavior("(when (= 1 1) 'ok)");
+}
+
+#[test]
+fn behavior_module_42c() {
+    // 42-c module 臂行为面：module 体 inline 编译产物执行 = 生产管线
+    //（含 registry declare/visit 前端面）结果
+    behavior("(module m (define x 1) x)");
+    behavior(
+        "(module m
+           (define (f n) (if (< n 2) n (+ (f (- n 1)) (f (- n 2)))))
+           (f 10))",
+    );
+    // module + 糖 + 闭包混合（preamble 形态同型语料）
+    behavior(
+        "(module shapes
+           (define (make-adder n) (lambda (x) (+ x n)))
+           (define add5 (make-adder 5))
+           (let ((r (add5 37))) r))",
+    );
 }

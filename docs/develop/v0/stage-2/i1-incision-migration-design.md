@@ -2,8 +2,8 @@
 
 > **Author**: Super Z（ARCH-A 主导 + DEV-A 实现盘点——L3 多角色会话）
 > **Date**: 2026-09-11（批次 I 执行启动 r20 / MUV 42-a）
-> **Version**: v1.1
-> **Status**: Active（切口裁定 + 段序 + parity 三门 + 切换点设计——42-b/c/d 执行蓝图；**r21/42-b 已执行 S1 段**：compiler.krf 八臂 + 桥 + 门 A parity 19 测试全绿（基础组 ≥8 超额）——INC4 实现期修订见 §2 注记；42-c/42-d 待续）
+> **Version**: v1.2
+> **Status**: Active（切口裁定 + 段序 + parity 三门 + 切换点设计——42-b/c/d 执行蓝图；r21/42-b 已执行 S1 段：compiler.krf 八臂 + 桥 + 门 A parity 全绿（基础组 ≥8 超额）——INC4 实现期修订见 §2 注记；**r22/42-c 已执行 S2 段**：module/require 两臂 + 糖全管线 + 宏 + prelude 注入序 + examples 六件双路径——门 A 扩展组 46 case 全绿（≥12 超额），边界不对称消除；S2 执行注记见 §2 INC4 后 v1.2 注——module 首原型名覆写值等价无操作（Rust pm.name = Symbol(u32::MAX-1) 与 proto 0 创建/回写值恒等）；42-d/42-e/42-f/42-g/42-h 待续）
 > **输入**: plan.md §5a（42-x 八 MUV）；[12-roadmap §2.5 演进矩阵](../../lang-design/12-roadmap.md)（行 299 元循环求值器「重写升级 + 被编译器替换（I1 范围）」/ 行 309 类型检查器「迁移评估」）；[07-bootstrap §3.2/§3.3](../../lang-design/07-bootstrap-strategy.md)（混合期构成 + 阶段切换信号）；[15-architecture-layers §5.3](../../lang-design/15-architecture-layers.md)（五正交轴）；sop.md §21.3（四条件——条件 1/2 为 I1 对象）；r6/r14/r15 三件套先例（reader/expander 自举）；r18 TCO（尾位穿线——parity 必含面）
 > **上游**: r19 批间插入轮（41-a~c——批次 I 细化 + 638:0:0 基线）
 
@@ -93,6 +93,19 @@ VM/运行时/桥/组合根/analyzing ≈ **~8600 行**。生产**编译器逻辑
 | **INC6** | **analyzing 段不迁**（I1 范围内）：typecheck/hm 不在自举关键路径（B6 代码实锚——生产 run/compile/check 三入口中仅 check 消费，而 check 不产字节码、不参与自举链）；迁移评估按 12 §2.5 行 309 绑定 **42-f 窗口**（HM 生产切换评估同轮——D8 演进轨道），Stage 2 内保持 Rust 实现 + oracle 角色 | B6 + 12 §2.5 行 309 + 15 §5.3（轴 2 独立推导不回流 CoreExpr——typecheck 迁移与否不影响自举命题） |
 | **INC7** | **eval 退役裁定排 42-d**：12 §2.5 行 299「重写升级（eval 自举迁移）+ 被编译器替换（I1 范围）」——终态 = 自举编译器（compile 段）+ VM 执行成为唯一生产路径，eval.rs 参考路径退役（删除或存档——终验 TD-017 口径）；42-d 回写 12 §2.4/§2.5 行 + T1 双路径测试面收口（eval 侧断言迁移为「编译器 parity 断言」） | B7 + 12 §2.5 行 299 + plan §5a 42-d 行 |
 | **INC8** | **~80% 口径精确化**：§21.3 条件 1「完整 kerf 编译器用 kerf 编写」= **读+展开+编译三段 100% kerf**（迁移后 source→bytecode 全链无 Rust 逻辑参与）；「Rust ~20%」= VM/运行时/GC/桥/组合根/后端 FFI/测试基建（07 §3.4 Stage 2 宿主角色） | §1.2 行数口径 + 07 §3.3/§3.4 |
+
+**v1.2 S2 执行注记（r22/42-c——实测发现，与 INC4 同型登记）**：
+① module 首原型名覆写为**值等价无操作**——Rust `pm.name = Symbol(u32::MAX-1)`（compile.rs:429）
+与 proto 0 创建（compile.rs:235 同值）恒等，krf 侧 proto 0 名形创建/回写均 `'(main)`
+（桥映射同值）——镜像实现不引入冗余突变，等价性经 bytecode_equal 全结构判据含
+name 字段实证（46 case 全绿）；② module 体编译**逐项恒非尾位**（krf
+`compile-module-seq` 无 tail 参数——区别于 begin 末项继承；Rust :422 `compile_expr
+(ctx, item, false)` 逐语义对应）；③ fvo 面 42-b 已预置（module → 体遍历 /
+require → 空——与 kerf-core expr.rs:358/365 一致），S2 零改动通过；
+④ prelude 注入序语料 = **preamble.krf 全文双路径编译**（生产前端实际注入对象——
+比「同形语料」更强的验收口径）；⑤ 语料语义边界实测两处：条件位严格 bool
+（行为面 (and 1 2 3) 触 E0004——parity 不受影响，编译段不类型检查）+ 同层 let
+重名是展开器错误（lambda 形参重名拒绝）。
 
 ## 3. 段切分与依赖图（DAG 无环证明）
 

@@ -3578,3 +3578,26 @@ Stage Summary:
 - 下一步：42-b I1 前段基础核心形式 kerf 化（S1 八臂——作用域机 +
   闭包捕获 + 回填；compiler.krf + bootstrap_compiler.rs 桥 + parity
   门 A 基础组 ≥8 case；跨 session 按段分批交付）
+
+---
+Task ID: 42-b
+Agent: Super Z (main) — DEV-A 主导 + QA-A（parity 套件）+ REC-A（收尾）（L3 多角色会话）
+Task: MUV 42-b：I1 前段基础核心形式 kerf 化——compiler.krf 八臂 + bootstrap_compiler.rs 桥 + parity 门 A 基础组 + R4 操作码三方冻结修正（r21）
+
+Work Log:
+- PHASE 1 路由：读 sop.md §1 + docs/worklog.md 最近 3 条（r20/r19/r18）——冲突检测：git 工作区 226 文件仅权限位差异（r20 打包解压遗留，0 行内容差异）→ 无实质冲突；基线 638:0:0 + i1-design §4 S1 六字段为验收合同
+- 实现盘点（代码实锚复核）：compile.rs 798 行全量语义提取——match_bindings 子集匹配（max-cardinality 严格大于——并列先注册优先）/ resolve_var 帧栈 .rev()（帧 0 仅局部）/ free_var_occurrences（**shadow-pop 口径逐位确认**：形参「新名才入栈 + 弹出恒为形参计数」——Vec 尾 LIFO ⟷ krf cons 头镜像）/ 尾位穿线（Lambda 体/If 两臂/Begin 末项）/ 常量池 HashMap Hash+Eq 去重语义（Float：±0.0 合一 + NaN 永不去重）/ intern_global 双簿（常量池索引 + global_refs 首插序）/ 魔法符号 Symbol(u32::MAX-1/2)（driver resolve "<main>"/"<lambda>" 先例）
+- **compiler.krf（~790 行）**：序章（map + 列表访问 first..eighth + 四头节点访问器）+ OP-* 41 操作码常量表（声明序 0..=40）+ CC-* 14 项编译状态（入口全量复位）+ 发射原语（emit!/here/emit-jump/patch-jump/patch-code 逆序码表定位 = len-1-pc）+ 常量池（const-eq? 结构相等——eq? 对 Pair 引用相等故逐字段递归；关联列表首插序）+ intern-global 双簿 + 作用域解析机（match-bindings + resolve-var 逆序帧栈）+ 自由变量遍历（CC-BOUND LIFO + CC-FREE 逆序累积消费时 reverse）+ compile-lambda（捕获解析 → 新原型 → 新帧 → 窗口切换（enc-cur/enc-code/enc-spans 保存还原）→ 体编译 tail=true → RET（体 Span）→ 回写 → 弹帧 → CLOSURE（lambda Span））+ compile-expr 八臂 + proto-finish + lexc-compile-program 入口（空程序 PushNil + Halt + 回填完备断言 + 组装 'prog）
+- **bootstrap_compiler.rs（~640 行）**：thread_local 状态 + load_compiler（种子管线编译 compiler.krf——compile_front_seed 无递归）+ core_to_node（四头协议 + 字面量标记化）+ prog_from_value（名形三态 / 码表映射 / span 三元组注入 file_id）+ as_compile_err（('err msg s e) 三字段——expander 桥同型契约）
+- **INC4 实现期修订（实测发现，登记于切口设计 v1.1 注记）**：①字面量值消歧标记形态——Str/Symbol/Float 在 VM 值面无区分谓词（谓词族仅 int?/bool?/null?/pair?/procedure?），桥侧定型传递；②span 三元组（s e exp）——bytecode_equal 判据含 expansion_id（INC4 原文「span对」修正）；③名形三态 'main/'anon/'name + 码表 0..=40
+- **实测驱动修复三轮（§2.3-11）**：①krf 括号失衡两处（mb-loop/rv-loop 尾部——逐行平衡脚本定位）②**语言陷阱**：'true/'false/'nil 在 kerf 是 bool/nil 字面量而非符号——(eq? tag 'true) 恒假，标签分派改 symbol->string 字符串比较（expander.krf tname 同款纪律）③错误消息末尾半角括号 → 全角（逐字 parity 红测暴露）
+- **parity 套件（19 测试，门 A 基础组 ≥8 超额）**：parity 13（bytecode_equal 全结构 + 失败时双反汇编对账输出）+ 负例 2（define 位置 D1 消息+Span 逐字；module/require 42-c 边界不对称断言——种子正常 + 自举显式边界错误）+ 行为面 4（fib 144 / closures 计数器 (4 2) / higher_order map 平方 / 10 万层深尾递归——编译段是唯一被测变量的隔离设计：expected = run_source（自举前端 + 种子编译）vs actual = 自举前端 + 自举编译）
+- **R4 发现项修复**：opcode_count_matches_spec 漏列 TailCall（r18 TCO 引入——enum 41 变体 vs 测试 40 断言：数组恰 40 项自洽但与 enum 漂移）→ 按 R4 代码为准：opcode.rs 枚举补齐 + 04-bytecode-vm.md 三处同步（冻结计数 40→41 + 函数操作表 3→4 + §3 组计数）；发现路径 = 42-b 全量对账（门 A parity 语料实跑）——三方冻结契约漏网只有全量对账可见
+- 验证：cargo test 657:0:0（638 零回归 + 19 新）；§3.2 六命令 clean 起步全绿（build --release 12.65s / check 0/0 / fmt 零 diff（格式化两处）/ clippy --all-targets -- -D warnings 0 / test --release --workspace 657:0:0）；CLI 冒烟（fib 75025/144 + check ok 38 指令 + io 门控 42）+ 双审计集 EXIT 0（stage0 41 + stage1 50）
+- 文档同步五面：plan.md Status（42-b 交付 r21）+ i1-incision-migration-design v1.1（INC4 修订注记 + S1 执行状态）+ matrix v0.1.0-r21（638→657；单元 202 + 集成 455）+ pipeline-test-coverage v0.4.0-r21（Tier 2 行 + 基线）+ RELEASE_NOTES r21 节（四交付）
+- r21 tar.gz（302 条目/1.62MB）+ 包内自举验证（/tmp 解包 → 全新 build 14.10s → 657:0:0 + CLI 一致）+ web 同步 + git 入账 + rec 树 05_r21 + l 路由更新
+
+Stage Summary:
+- **批次 I 执行 r21（42-b）交付闭环**：三件套第三实例就位——compiler.krf 八臂全量（作用域机 + 闭包捕获 + 回填 + 常量池 + TCO 尾位逐语义镜像）+ 桥 + 门 A parity 19 测试全绿（bytecode_equal 全结构判据——基础组 ≥8 超额）+ R4 三方冻结修正；657:0:0 零回归；42-b 边界 = parity 影子路径（生产未切换——module/require 显式边界错误）
+- 遵循：§12（最优>最小——shadow-pop 口径逐位镜像而非「修正」种子行为）、§2.3-11（先实测禁臆测——语言陷阱/括号/消息三处实跑暴露）、§9.4.3（正负成对）、R4（代码为准 + 本次修正文档）、§7/B8（入口复位确定性——双跑测试实证）、§19.4（打包 + 包内自举验证）
+- 下一步：42-c I1 中段——module/require 两臂迁移（inline/PushNil）+ 糖九件 + module 边界语料端到端 parity（门 A 扩展组 ≥12 + 全管线 parity）

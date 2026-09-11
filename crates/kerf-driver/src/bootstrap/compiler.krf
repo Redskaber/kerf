@@ -27,9 +27,12 @@
 ;     ('lambda s e x (名字str...) (作用域int列表...) 体)
 ;     ('set s e x 名字str 作用域 值) ('define s e x 名字str 值)
 ;     ('begin s e x 项...)
-;     ('module s e x 名 (导) (导) 体...) / ('require s e x 能力str...)
-;     —— module/require 两臂属 42-c 迁移面（本段显式边界错误——
-;     §2.3-4 显式失败，不静默）
+;     ('module s e x 名 (导入...) (导出...) 体...) / ('require s e x 能力str...)
+;     —— 两臂 42-c 已迁：module 体 inline（每项恒非尾位 + 中间值
+;     Pop——span = 项自身；空体 PushNil——span = module 自身；首原型
+;     名覆写 '<main>' 值等价（Rust pm.name = Symbol(u32::MAX-1) 与
+;     proto 0 创建/回写值恒等——无操作注记）；require = PushNil
+;     （r8 能力声明零字节码语义——R9 在 driver 前端完成）
 ; - 输出 proto 节点 = ('proto 名形 (参数名...) nlocals (捕获名...)
 ;     (捕获源...) (指令...) (span 三元组...) 自由变量)：
 ;     名形 = ('main)（Symbol(u32::MAX-1) 魔法标记）| ('anon)
@@ -626,11 +629,18 @@
        (if (null? fields)
            (emit! (list 'op OP-PUSH-NIL) s e x)
            (compile-begin-seq fields 0 (length fields) tail)))
-      ; ---- Module/Require：42-c 迁移面（显式边界——不静默）----
+      ; ---- Module（Stage 0 单模块语义：体 inline——逐项非尾位编译 +
+      ;        中间值 Pop（span = 项自身 Span）；空体 PushNil（span =
+      ;        module 自身 Span）；首原型名覆写 '<main>' 值等价无操作
+      ;        注记——镜像 compile.rs:416 逐语义）----
       ((eq? tag "module")
-       (cerr "module 臂属 42-c 迁移面（I1 前段编译器未实现）" s e))
+       (compile-module-body (cdr (cdr (cdr fields))) s e x))
+      ; ---- Require（r8 能力声明：求值恒 nil（零副作用）——PushNil
+      ;        保持顶层「每形式一值」栈不变式（与 eval 路径 Ok(Nil)
+      ;        一致，T1 双路径口径；权限验证已在 driver 前端 R9/E0006
+      ;        完成——编译段零感知，与种子同口径）----
       ((eq? tag "require")
-       (cerr "require 臂属 42-c 迁移面（I1 前段编译器未实现）" s e))
+       (emit! (list 'op OP-PUSH-NIL) s e x))
       (else
        (cerr (str-append "未知 core 节点种类：" tag) s e)))))
 
@@ -656,6 +666,28 @@
                          (node-exp (car items)))
                   (compile-begin-seq (cdr items) (+ idx 1) total tail))
                 (compile-begin-seq (cdr items) (+ idx 1) total tail))))))
+
+; module 体 inline（镜像 CoreExpr::Module 臂——逐项恒 tail=false 编译
+; （区别于 begin 末项继承尾位：module 项不构成尾位——TCO 不参与）+
+; 中间值 Pop（span = 项自身 Span）；空体 PushNil（span = module Span））
+(define (compile-module-body items s e x)
+  (if (null? items)
+      (emit! (list 'op OP-PUSH-NIL) s e x)
+      (compile-module-seq items 0 (length items))))
+
+(define (compile-module-seq items idx total)
+  (if (null? items)
+      nil
+      (let ((r (compile-expr (car items) false)))
+        (if (err? r)
+            r
+            (if (< (+ idx 1) total)
+                (begin
+                  (emit! (list 'op OP-POP)
+                         (node-s (car items)) (node-e (car items))
+                         (node-exp (car items)))
+                  (compile-module-seq (cdr items) (+ idx 1) total))
+                (compile-module-seq (cdr items) (+ idx 1) total))))))
 
 ; ---- 字面量（消歧标记形态分派；Bool/Nil 直发指令不进池）----
 ; 注：标记分派按名字字符串（'true/'false/'nil 在 kerf 中是 bool/nil

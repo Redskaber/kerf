@@ -2,14 +2,14 @@
 
 > **Author**: Super Z（QA-A 角色）
 > **Date**: 2026-09-11（r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
-> **Version**: v0.4.0-r21
-> **Status**: Active（r21 对账：657 基线（批次 I 执行 42-b +19——bootstrap_compiler_tests 门 A parity：bytecode_equal 全结构判据 13 + 42-c 边界负例 2 + 行为面 4；操作码冻结测试修正 40→41 零计数变更）；r20 对账：638 基线零增量（设计轮——批次 I 执行启动 42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](../develop/v0/stage-2/i1-incision-migration-design.md) §5 parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）；r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
+> **Version**: v0.4.0-r22
+> **Status**: Active（r22 对账：665 基线（批次 I 执行 42-c +8——bootstrap_compiler_tests 19→27：module/require 两臂正例 + 糖九件全管线 46 case + 宏 + prelude 注入序 + examples 六件双路径 + 行为面糖/module；Tier 2 表体 bootstrap_compiler_tests 行补齐——r21 头部有表体漏的 R4 同型修正；matrix 表体 Stage 2 五行 + cache 13 对账同步）；r21 对账：657 基线（批次 I 执行 42-b +19——bootstrap_compiler_tests 门 A parity：bytecode_equal 全结构判据 13 + 42-c 边界负例 2 + 行为面 4；操作码冻结测试修正 40→41 零计数变更）；r20 对账：638 基线零增量（设计轮——批次 I 执行启动 42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](../develop/v0/stage-2/i1-incision-migration-design.md) §5 parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）；r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
 
 ## 1. 测试目标
 
 记录编译流水线（read → expand → lower → compile → vm → runtime → driver）的**路径覆盖状态**，
-作为外循环投票（§6.3）的数据源。计数基线：**657 测试函数 / 657 通过 / 0 失败 / 0 忽略**
-（[matrix.md](./matrix.md) r21 口径——单元 202 + 集成 455）；负向 case 口径见 §2 统计行。
+作为外循环投票（§6.3）的数据源。计数基线：**665 测试函数 / 665 通过 / 0 失败 / 0 忽略**
+（[matrix.md](./matrix.md) r22 口径——单元 202 + 集成 463）；负向 case 口径见 §2 统计行。
 
 ## 2. 三层覆盖记录（§9.5.1 格式：Tier / 名称 / 覆盖阶段 / 预期输出 / 状态）
 
@@ -27,7 +27,7 @@
 | T1-vm | kerf-vm 单测 | 执行 | 帧协议/错误形状/**Value 十变体** | ✅ 18/18 |
 | T1-driver | kerf-driver 单测 | 管线编排/能力/效应/缓存/自举桥 | 全管线/**52 内置注册**/预留冻结（Probe——**r19 增 capability_model 骨架 + 族归属证明**）/effects 12/capability 13/**生产切换守护（活性探针 + 代次双信号）** | ✅ **64/64**（r8 +25 / r12 +8 Probe / r15 +1 切换守护 / r18 +2 拆分 / r19 +4 模型骨架） |
 
-### Tier 2 —— 阶段间（集成测试，455 函数，tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16；r18 +27：tco_tests 12 + hm_inference_tests 15；r19 零变更（骨架冻结零集成接触）；**r21 +19：bootstrap_compiler_tests 门 A parity（I1 前段自举 Compiler——三件套第三实例：bytecode_equal 全结构判据 + 42-c 边界负例 + 行为面端到端）**）
+### Tier 2 —— 阶段间（集成测试，463 函数，tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16；r18 +27：tco_tests 12 + hm_inference_tests 15；r19 零变更（骨架冻结零集成接触）；r21 +19：bootstrap_compiler_tests 门 A 基础组 parity（I1 前段自举 Compiler——三件套第三实例：bytecode_equal 全结构判据 + 行为面端到端）；**r22 +8：42-c 扩展组（module/require 两臂 + 糖九件全管线 + 宏 + prelude 注入序 + examples 六件双路径——边界负例改写正例）**）
 
 | ID | 名称 | 覆盖阶段 | 预期输出 | 状态 |
 |----|------|---------|---------|------|
@@ -58,6 +58,8 @@
 | Stage 2 批次 G | multi_error_recovery_tests（tests/v0/stage2/plan/） | 种子恢复 6（跳过/全报/位置序/上限截断/收集器单元/干净）+ driver 8（E0002+E0005 合并 / 部分产物 / 渲染 / read 短路 / E0006 短路 / 短路 API 不变 / 既有 typecheck 多错延续 / 截断尾注）+ 双路径同构 1 + 执行路径不变 1 | r17 | ✅ 16/16 |
 | Stage 2 批次 H | tco_tests（tests/v0/stage2/plan/） | TCO 正例 8（105_001 尾递归恒定帧 / 相互尾递归 30 万步 / if 两臂尾位传播 / begin 末项三层 / let 糖 / 内建隐式 RET / 闭包值尾位 / 自举 10_000 深度链端到端）+ **负例 4（指令预算护栏（预算注入）/ 尾调用 arity / 非可调用 / 非尾深递归仍帧上限）** | r18 | ✅ 12/12 |
 | Stage 2 批次 H | hm_inference_tests（tests/v0/stage2/plan/） | **双门**：超集门 29 程序（R1-R8 检出 → HM 亦检出——双检查器并行对照）+ 零误报门（examples 六件套 + 动态边界 15 case）；**四类缺口检出**（lambda 实参 / car 元素 / 分支分歧 / 递归元数域）+ occurs ≥3 + 值限制 ≥2 + let/letrec 泛化 + 多错误 Span 序 + Dynamic 逃生舱 + 512 预算 | r18 | ✅ 15/15 |
+| Stage 2 批次 I（r21 基础组） | bootstrap_compiler_tests（tests/v0/stage2/plan/） | **门 A parity**：bytecode_equal 全结构（含 debug_spans）13——字面量/常量池去重/引号点对/回填/begin 尾位/嵌套捕获三链/遮蔽/set! 三路径/尾位穿线/深嵌套 100 层/双跑确定性/空程序 + 负例 2（define 位置 D1 逐字）+ 行为面 4（fib/closures/higher_order/10 万层深尾递归） | r21 | ✅ 19/19 | 
+| Stage 2 批次 I（r22 扩展组） | bootstrap_compiler_tests 同文件 | **门 A 扩展组 46 case**：module/require 两臂正例（多项 Pop + 空体 + 尾位非继承 + 确定性双跑）/ 糖九件全管线（let 家族 8 + cond/when/unless 9 + and/or/while 10）/ 宏 3（swap!/my-or/def-twice）/ prelude 注入序 2（preamble.krf 真实语料）/ **examples 全六件双路径 bytecode_equal** + 行为面 2（糖九件 + module 臂——VM 执行 = 生产管线） | r22 | ✅ 27/27（19→27 合计） |
 
 ### Tier 3 —— 全流程（阶段门审计 + parity 双实现印证）
 
