@@ -1,3 +1,24 @@
+## v0.4.0-r26（2026-09-11）——批次 I 收口：I3 门审查 + 收尾交付（门审计集 53 case APPROVED + 深审五角色全票 GO，706 全绿）
+
+### 交付一：I3 门审查（42-g / 47-a——plan §5a 合同逐项兑现）
+
+- **门审计集第 3 件 stage2_gate_audit_r1（53 case，examples/audit/——§7.3.1 规则 3 可重运行口径）**：A12 单语句负向（基础类型系统——含效应类型面）+ B12 多语句负向（糖九件/module/require/宏/**能力门控 E0006 编译期静态拒绝**（read-line 未授权 → Compile 阶段「能力权限不足」——比 Run 未绑定更强的 fail-closed 形态，实测如实升级断言））+ C10 复杂负向（⑥循环依赖 + ⑦宏深度 + E0007 逃逸深链 + E0008 逃逸续恢 + E0009 元数 + GC 压力 × 类型错 + module 体 inline 运行错）+ D6 错误恢复（含 E0007/E0008 后效应金路径恢复——VM 效应状态无泄漏实证）+ **E7 上轮修复边界（§7.3.2）**：门 B fixpoint 活性（B₁ install 后编译执行 = 种子）/ 缓存 CompilerKind 分桶（生产命中 + 种子不查不存条目数不变）/ E0008 首次恢复位置追踪 / TD-014 专门归因（无失真兜底回退）/ TD-011 全序正负双面 / TD-018 消息单源（if 直用 = cond 脱糖同文）/ recover 多错误收集（46-z 死代码清偿边界）+ **P6 正向含 §21.3 四条件锚定探针**（fib 144 双路径 / prelude 管道 50 / 门 B 轻量终验 B₁/B₂ bytecode_equal + SHA-256 / QBE native fib exit 144 / FFI 模型冻结文档锚 / TCO × 效应 10 万深 ⇒ 100）；run_negative 显式 E 码字段扩展（E0007/E0008/E0009 结构化族）+ 双路径同 Err 机械校验；实测 **53/53 PASS EXIT 0 —— APPROVED 零新发现**（七类覆盖 1/4/2/3/12/1/2 + §7.3.1 配比全过 + §7.3.2 边界 7 ≥ 5）
+- **§14.5 深审报告（docs/develop/v0/stage-2/deep-review-round1.md——Stage 2 首篇）**：D1-D8 八维度三段式（§0 如实定位：批次 I 末门审深审，非大阶段末——Stage 2 终批另做 §14.6）+ §14.8 B1-B4 偏差清单（闭环 8 行对照记录 + B1 残留 3 行如实：HM 生产切换（D8 旗标期）/ FFI 实现（模型冻结）/ net 门控行（裁定维持——Stage 2 末窗口）——均纳后续批次计划）+ §6.3 五角色投票 **5.5/5.5 = 100% ≥ 95% GO** + 行动计划 W1-W5
+- **§14.9 C1-C6 代码整理（发现即修 4 处）**：clippy --all-targets --workspace 超集口径抓出审计器 2 处 result_large_err（闭包 Result 大 Err 链 → for 循环收集重写）+ hm.rs 2 处 `_ => {}` catch-all 无注释（§14.6.1.1「无注释视为违规」→ 补「_ 臂理由」：free_vars 封闭类型臂 + 内置签名 fall-through 臂）；C2 glob re-export 0 / C3 TODO 0；全链复跑 fmt 0 diff + clippy 0 + **706:0:0 零回归**
+
+### 交付二：42-h 收尾（47-z）
+
+- §3.2 六命令 clean 起步全绿：build --release --workspace 13.56s 零告警 / check 0 errors 0 warnings / fmt 0 diff / clippy --all-targets --workspace 超集口径 0 / test --release --workspace **706:0:0** / 三审计集 EXIT 0（stage0 + stage1 + stage2 新）+ CLI 四路径冒烟（fib ⇒ 144 / macros ⇒ 42 / effect_stress ⇒ 120 / prelude foldl ⇒ 21 + check ok）
+- 对账六面：matrix.md r26 增量行（零 cargo 计数 + 审计集 144 case 三件注记）/ pipeline-test-coverage v0.4.0-r26（**滞后两轮补账**——r24 +14 / r25 +22 表体行 + catch-all 小节 r26 实测）/ plan.md Status r26 / RELEASE_NOTES r26 / TD 登记册零事件 / worklog 双层 + rec 树 10_r26
+- r26 tar.gz（§19.3 commit-then-package 正序）+ 包内自举验证 + web 同步 + E2E
+
+### 质量口径
+
+- cargo test --release --workspace：**706:0:0**（单元 207 + 集成 499——r25 基线零回归；门审计集三件合计 144 case 另计）
+- cargo clippy --all-targets --workspace -- -D warnings：**0 警告**（超集口径）
+- cargo fmt --check：0 diff
+- 门审计：stage2_gate_audit_r1 53/53 PASS **EXIT 0（APPROVED）** + 深审五角色 100% GO
+
 ## v0.4.0-r25（2026-09-11）——批次 I 执行：I 后段双主题（Effect M1-M5 语言级效应全落地 + 能力管线泛化 M2，706 全绿）
 
 ### 交付一：Effect M1-M5（42-f 主体——effect-language-design v1.1 全裁定兑现）

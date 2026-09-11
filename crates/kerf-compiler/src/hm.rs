@@ -317,6 +317,7 @@ fn free_vars(st: &SolveState, t: &Rc<Ty>, out: &mut Vec<u32>) {
             }
             free_vars(st, ret, out);
         }
+        // _ 臂理由：封闭类型（Con/Int/Bool/Str/Nil 等）不含变元——无自由变元可收集
         _ => {}
     }
 }
@@ -872,6 +873,8 @@ impl<'a> Gen<'a> {
                     }
                 }
             }
+            // _ 臂理由：其余内置名/元数不匹配——非专项推断面，落入
+            // 下方参数规则（sig.params）统一处理（快路径诊断不适用于此）
             _ => {}
         }
         // 参数规则（具体快路径即时诊断——R2/R3/R4/R5/R8 消息面复用；

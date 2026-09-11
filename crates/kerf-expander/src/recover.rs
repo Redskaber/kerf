@@ -130,12 +130,6 @@ mod tests {
     use super::*;
     use crate::expander::ExpandCtxt;
 
-    /// 构造测试 Stx（原子符号形式——经 SymbolTable intern）。
-    fn atom_form(name: &str, table: &mut kerf_syntax::SymbolTable) -> Stx {
-        let sym = table.intern(name);
-        Stx::symbol(sym, kerf_span::Span::dummy(), kerf_syntax::ScopeSet::new())
-    }
-
     #[test]
     fn recover_skips_failing_forms_and_continues() {
         // 好形式（define）/坏形式（空列表——展开错误）/好形式：

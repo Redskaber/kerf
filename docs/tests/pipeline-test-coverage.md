@@ -1,9 +1,9 @@
 # 流水线路径覆盖（sop.md §9.5.1 三层覆盖记录 + §14.6.1.1 完整性审查）
 
 > **Author**: Super Z（QA-A 角色）
-> **Date**: 2026-09-11（r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
-> **Version**: v0.4.0-r23
-> **Status**: Active（r23 对账：670 基线（批次 I 执行 42-d +5——bootstrap_compiler_tests 27→29：门 B fixpoint（B₁/B₂ 四程序 bytecode_equal + SHA-256——§21.3 条件 2 终验）+ B₁ 产物可执行面；单元 +3：driver 64→67 生产编译守护 + 缓存 CompilerKind 分桶 ×2（B11/P4）；T1 双路径面全量迁移（eval → 种子链对拍——十测试文件 + common + 双审计集；表体 driver 单元行 58→67 实测修正）；r22 对账：665 基线（批次 I 执行 42-c +8——bootstrap_compiler_tests 19→27：module/require 两臂正例 + 糖九件全管线 46 case + 宏 + prelude 注入序 + examples 六件双路径 + 行为面糖/module；Tier 2 表体 bootstrap_compiler_tests 行补齐——r21 头部有表体漏的 R4 同型修正；matrix 表体 Stage 2 五行 + cache 13 对账同步）；r21 对账：657 基线（批次 I 执行 42-b +19——bootstrap_compiler_tests 门 A parity：bytecode_equal 全结构判据 13 + 42-c 边界负例 2 + 行为面 4；操作码冻结测试修正 40→41 零计数变更）；r20 对账：638 基线零增量（设计轮——批次 I 执行启动 42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](../develop/v0/stage-2/i1-incision-migration-design.md) §5 parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）；r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
+> **Date**: 2026-09-11（r26 对账：706 基线（批次 I 收口——门审环零 cargo 计数增量 + 滞后两轮补账 r24 +14 / r25 +22 + 新审计集第 3 件 stage2_gate_audit_r1 53 case）；r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
+> **Version**: v0.4.0-r26
+> **Status**: Active（**r26 对账（滞后两轮补账——深审 D7/W1 项）：706 基线**——①r24 增量（+14 集成：stdlib_tests 17→24（字符串全序 12/负 3 + 装箱往返正 10/负 2 + 谓词 17/环安全 2/负 3）+ gc_tests 6→9（TD-023 GcCell 写路径）+ prelude_tests 7→10（foldr）+ scope_set_tests 9→10（TD-018 双路径同文对拍））；②r25 增量（+20 集成：**effect_tests 17 新建**（设计锚正 6 + M3 双路径 8 + eval 域 3 + 负例 7 + GC 存活 2）+ bootstrap_compiler_tests 29→32（门 A 效应组 3）+ 单元 +2（capability M2 两锚））；③**r26 门审环（零 cargo 计数增量）**：stage2_gate_audit_r1 新审计集 53 case（examples/audit/ 可重运行口径）EXIT 0 + hm.rs 2 处 catch-all 注释补齐（§4 小节同步）+ 深审报告 deep-review-round1.md（D1-D8 + 偏差清单 + 五角色全票 GO）；r23 对账：670 基线（批次 I 执行 42-d +5——bootstrap_compiler_tests 27→29：门 B fixpoint（B₁/B₂ 四程序 bytecode_equal + SHA-256——§21.3 条件 2 终验）+ B₁ 产物可执行面；单元 +3：driver 64→67 生产编译守护 + 缓存 CompilerKind 分桶 ×2（B11/P4）；T1 双路径面全量迁移（eval → 种子链对拍——十测试文件 + common + 双审计集；表体 driver 单元行 58→67 实测修正）；r22 对账：665 基线（批次 I 执行 42-c +8）；r21 对账：657 基线（42-b +19）；r20 对账：638 零增量（设计轮）；r19 对账：638（+4 Probe））
 
 ## 1. 测试目标
 
@@ -39,11 +39,11 @@
 | T2-vm | vm_tests | compile→vm | 执行语义 + 双路径互查（App 顺序回归） | ✅ 20/20 |
 | T2-neg-vm | negative_vm_tests | vm（负） | 52 内置 × 类型/元数系统表 + E0004 断言 + 符号值误用 | ✅ 30 函数（237 case） |
 | T2-neg-sem | negative_semantics_tests | 全阶段语义（负） | E1-E6 矩阵 + T1 回归 + 消息形状 + 错误恢复 | ✅ 23 函数（98 case） |
-| T2-gc | gc_tests | runtime | 10^6 有界分配/环/深链/foreign | ✅ 6/6 |
+| T2-gc | gc_tests | runtime | 10^6 有界分配/环/深链/foreign + **r24 +3（装箱闭包捕获存活/捕获链传递/GcCell 写路径 sound——TD-023）** | ✅ 9/9（r24） |
 | T2-pipeline | pipeline_tests | read→vm 全链 | E2E/双路径/确定性/Span 传播 | ✅ 11/11 |
 | T2-arch（r10） | architecture_audit_tests | 架构形态 | 十变体穷尽 match 证明/Span 独立/Reader-Stx 隔离/Expander 唯一桥/同源同核 | ✅ 4/4 |
 | T2-gate0 | gate_review_r1 | Stage 0 §22.3 十二里程碑 | 12 项可执行审计 | ✅ 8/8 |
-| T2-stdlib（r5-r8） | stdlib_tests | driver→内置 | 52 内置行为 + TD-016 链式比较 + 门控前缀 | ✅ 17/17 |
+| T2-stdlib（r5-r8，r24 扩） | stdlib_tests | driver→内置 | 52 内置行为 + TD-016 链式比较 + 门控前缀 + **r24 +7（TD-011 全序正 12/负 3 + TD-010 装箱往返正 10/负 2 + 谓词 17/环安全 2/负 3）** | ✅ 24/24（r24） |
 | T2-boot-reader（r6） | bootstrap_reader_tests | read（自举） | reader.krf 与种子逐字节 parity | ✅ **28/28** |
 | T2-worklist（r4） | expansion_worklist_tests | expand（迭代） | trampoline 500 层/兄弟不累计 | ✅ 4/4 |
 | T2-typecheck（r7） | typecheck_tests | compile→静态检查 | R1-R8 + E0005 多错误 + Span 次序 | ✅ 24/24 |
@@ -51,15 +51,18 @@
 | T2-capability（r8） | capability_tests | driver→能力门控 | require 声明面 + E0006 三路径 + 令牌 + EOF 探针 | ✅ 24/24 |
 | T2-testrunner（r8） | test_runner_tests | driver→用例运行器 | 前置切分/PASS 判定/短路恢复隔离 | ✅ 18/18 |
 | T2-reserved-ext（r12） | reserved_ext_tests | reserved 14 项 | P0 位置断言 + API 可达 + 负向形状 | ✅ 12/12 |
-| T2-scope-set（r13） | scope_set_tests | expand→compile/eval（作用域） | (name, scopes ⊆) 双路径 + 不匹配负例 | ✅ 9/9 |
+| T2-scope-set（r13，r24 扩） | scope_set_tests | expand→compile/eval（作用域） | (name, scopes ⊆) 双路径 + 不匹配负例 + **r24 +1（TD-018 if 消息双路径同文对拍回归）** | ✅ 10/10（r24） |
 | T2-boot-exp（r14/r15） | bootstrap_expander_tests | expand（自举） | **expander.krf 与种子逐字节 parity：结构/Span/作用域集/param_scopes/错误消息逐字 + 宏 17（E1-β 全模式面）** | ✅ **36/36** |
-| T2-prelude（r15） | prelude_tests | 模块/导入 | hofs 用户面/组合管道/双路径/opt-in/显式失败 | ✅ 7/7 |
+| T2-prelude（r15，r24 扩） | prelude_tests | 模块/导入 | hofs 用户面/组合管道/双路径/opt-in/显式失败 + **r24 +3（foldr 用户面/对偶语义/双路径）** | ✅ 10/10（r24） |
 | Stage 2 批次 G | qbe_backend_tests（tests/v0/stage2/plan/） | 端到端 6（fib 144 本地码 = VM 一致 / 算术 / phi 合并 / begin / not·eq / 嵌套 if）+ 结构 4（IL 断言 / 契约门 / require 跳过 / 空程序）+ 一致性 6 + **负例 10（PoC 边界：lambda 值位 / define 非 lambda / Str / Float / set! / module / 未定义 / arity / 自由变量 / IO / 函数值）** + 契约 2 | r17 | ✅ 24/24 |
 | Stage 2 批次 G | multi_error_recovery_tests（tests/v0/stage2/plan/） | 种子恢复 6（跳过/全报/位置序/上限截断/收集器单元/干净）+ driver 8（E0002+E0005 合并 / 部分产物 / 渲染 / read 短路 / E0006 短路 / 短路 API 不变 / 既有 typecheck 多错延续 / 截断尾注）+ 双路径同构 1 + 执行路径不变 1 | r17 | ✅ 16/16 |
 | Stage 2 批次 H | tco_tests（tests/v0/stage2/plan/） | TCO 正例 8（105_001 尾递归恒定帧 / 相互尾递归 30 万步 / if 两臂尾位传播 / begin 末项三层 / let 糖 / 内建隐式 RET / 闭包值尾位 / 自举 10_000 深度链端到端）+ **负例 4（指令预算护栏（预算注入）/ 尾调用 arity / 非可调用 / 非尾深递归仍帧上限）** | r18 | ✅ 12/12 |
 | Stage 2 批次 H | hm_inference_tests（tests/v0/stage2/plan/） | **双门**：超集门 29 程序（R1-R8 检出 → HM 亦检出——双检查器并行对照）+ 零误报门（examples 六件套 + 动态边界 15 case）；**四类缺口检出**（lambda 实参 / car 元素 / 分支分歧 / 递归元数域）+ occurs ≥3 + 值限制 ≥2 + let/letrec 泛化 + 多错误 Span 序 + Dynamic 逃生舱 + 512 预算 | r18 | ✅ 15/15 |
 | Stage 2 批次 I（r21 基础组） | bootstrap_compiler_tests（tests/v0/stage2/plan/） | **门 A parity**：bytecode_equal 全结构（含 debug_spans）13——字面量/常量池去重/引号点对/回填/begin 尾位/嵌套捕获三链/遮蔽/set! 三路径/尾位穿线/深嵌套 100 层/双跑确定性/空程序 + 负例 2（define 位置 D1 逐字）+ 行为面 4（fib/closures/higher_order/10 万层深尾递归） | r21 | ✅ 19/19 | 
 | Stage 2 批次 I（r22 扩展组） | bootstrap_compiler_tests 同文件 | **门 A 扩展组 46 case**：module/require 两臂正例（多项 Pop + 空体 + 尾位非继承 + 确定性双跑）/ 糖九件全管线（let 家族 8 + cond/when/unless 9 + and/or/while 10）/ 宏 3（swap!/my-or/def-twice）/ prelude 注入序 2（preamble.krf 真实语料）/ **examples 全六件双路径 bytecode_equal** + 行为面 2（糖九件 + module 臂——VM 执行 = 生产管线） | r22 | ✅ 27/27（19→27 合计） |
+| Stage 2 批次 I（r23 收口组） | bootstrap_compiler_tests 同文件 | **门 B fixpoint（§21.3 条件 2 终验）**：B₁/B₂ 四程序 bytecode_equal + SHA-256 摘要 + B₁ 产物可执行面（install 后自举链运转 = 种子链结果） | r23 | ✅ 29/29（27→29 合计） |
+| Stage 2 批次 I（r25 效应组） | bootstrap_compiler_tests 同文件 | **门 A 效应组 3 case**：perform/handle 基础 parity + trampoline 共享/捕获面 parity + resume 往返行为面 | r25 | ✅ 32/32（29→32 合计） |
+| Stage 2 批次 I（r25 效应面） | **effect_tests（tests/v0/stage2/plan/，新建）** | **效应语言面验收 17 函数**：设计锚正 6（单 handler 单恢复/嵌套逃逸/纯体零效应/恢复后环境一致性/效应值先求值序/TCO 10 万深穿透 handler 帧）+ M3 双路径 8 + eval 域 dispatch 一致 3 + 负例 7（E0007/E0008 含首恢位置/E0009/非 continuation 值/handler 形态×2/perform 非点对/非符号 tag）+ GC 存活 2（M5 第六来源——5 万分配压力 + 装箱解箱） | r25 | ✅ 17/17 |
 
 ### Tier 3 —— 全流程（阶段门审计 + parity 双实现印证）
 
@@ -107,13 +110,11 @@
 > 数据实测于 2026-09-11（r16 批次 F——36-c 整理轮），方法：全库 grep `_ => {}` /
 > `=> {}`（区分通配臂与显式空臂）+ 逐处上下文核对 + cfg(test) 分区计数。
 
-- **catch-all（`_ => {}` 通配臂）总数：1 处**——vm.rs:779 `collect_value_roots` 即时值臂，
-  前置行臂级注释在案（「即时值无堆子引用，无需入根集」）。**较 Stage 0 r3 的 42 处
-  降至 1 处**——批次 B 前端重写（expander 六文件化）的结构性收益。
+- **catch-all（`_ => {}` 通配臂）总数：r16 基线 1 处（vm.rs `collect_value_roots` 即时值臂——前置行臂级注释在案）→ r26 实测 4 处全部注释合规**：vm.rs ×2（r25 效应 GC 六来源引入的第二收集函数同型臂 + 原即时值臂——均有「_ 臂理由」）/ hm.rs ×2（r18 HM PoC 引入——free_vars 封闭类型臂 + 内置签名 fall-through 臂；**r26/47-a 补齐注释（§14.6.1.1 无注释视为违规 → 当场修复）**）。**静默无注释臂：0 处。**
 - **显式变体空臂：14 处**（`BcConst::Nil => {}`（hash 无贡献）/ `TcType::Unknown => {}`
   （无约束）等）——语义自明 no-op，非 §14.6.1.1 意义上的 catch-all（通配才有静默吞
   新变体风险；显式臂在新变体加入时由穷尽性检查强制人工触达）。
-- **静默空臂：0 处**（唯一的 `_` 通配有注释）。
+- **静默空臂：0 处**（4 处 `_` 通配臂全有注释——见首条 r26 实测）。
 - **生产区 `expect`：4 处**（expander.rs:247「调用方已校验变换器存在」/ phase.rs:110/116/133
   「上方已检查」）——全部不变式说明型，零裸 expect；测试区 unwrap 不在约束口径。
 - **TODO / FIXME / HACK / XXX：0**（全库复核）。

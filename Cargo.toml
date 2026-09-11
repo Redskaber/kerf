@@ -56,3 +56,7 @@ path = "examples/audit/stage0_gate_audit_r1.rs"
 [[example]]
 name = "stage1_gate_audit_r1"
 path = "examples/audit/stage1_gate_audit_r1.rs"
+
+[[example]]
+name = "stage2_gate_audit_r1"
+path = "examples/audit/stage2_gate_audit_r1.rs"

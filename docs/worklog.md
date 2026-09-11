@@ -3989,3 +3989,172 @@ Stage Summary:
   v1.1 执行注记九条）
 - 下一步：46-z r25 收尾（W1/W3/W4/W5 文档回写已完成 → tar.gz 包内
   自举 + web 同步 + git + rec 树）
+
+---
+Task ID: 46-z
+Agent: Super Z (main) — QA-A/REC-A（L2 收尾环，批次 I 执行 r25 收尾交付）
+Task: MUV 46-z：r25 收尾交付（§3.2 六命令复验 + clippy 超集口径清偿 + r25 tar.gz 重打包与包内自举验证 + web 同步核验 + git + rec 树压实）
+
+Work Log:
+- 会话恢复（PHASE 4 上下文纪律）：接续摘要基线过期（r21/657）→
+  磁盘实况复核为准（git log 实证 r22-r24 全交付 + r25 主体 46-a
+  已入账 cf3692a；web 6a633b9 为 UUID 环境自动提交——内容逐项核验
+  = r25 web 数据同步；46-a「下一步」清单 = 本环合同）；冲突检测无
+- **§3.2 六命令全绿（clean 起步终验——清偿后代码）**：cargo clean
+  （165.0MiB）→ build --release --workspace 13.87s 零告警 → check
+  0 errors 0 warnings → fmt --check 零 diff → clippy --all-targets
+  **--workspace** -- -D warnings 0（5.06s）→ test --release
+  --workspace **706:0:0**（单元 207 + 集成 499——runner 26.38s，
+  与 matrix v0.1.0-r25 表体逐位对账）
+- **clippy 超集口径发现与清偿（本环实质修复）**：历史轮验收命令
+  「cargo clippy --all-targets -- -D warnings」（SOP §3.2 Stage 0-1
+  字面口径）无 --workspace——根包 + [workspace] 结构下仅覆盖根
+  crate，成员 crates/* 的 cfg(test) 死代码从未被检查；本环以
+  --workspace 超集口径复验即中：kerf-expander/src/recover.rs:134
+  atom_form 测试助手（r21/ee56668 引入后零调用者——rg 全仓实证）
+  → 移除（§2.2 最小面）→ 全链复跑全绿；46-a 轮按字面口径实跑为真
+  （该命令对成员 crate 无效——非虚报，是命令覆盖缺口）；SOP §3.2
+  演进提案走 §3.3 另议，本环起交付门 = 超集口径
+- **r25 tar.gz 重打包 + 包内自举验证两轮**：初验（收尾条目并入前
+  包体——代码与终包一致）：/tmp 解包 → 全新 cargo build --release
+  14.17s → 全量测试 **706:0:0 复跑** + CLI 四路径一致（VM fib ⇒
+  75025/144 + macros ⇒ (2 1)⇒42 + effect_stress ⇒120 + 基础恢复
+  冒烟 ⇒16——handle/perform/resume 端到端）；终包（**§19.3 复位：
+  git commit 先行 → 09_r25 rec + l 首行 + 本 46-z 条目并包 → 311
+  条目/1.71MB**）：docs-only 增量 → 构建/测试/冒烟复跑一致（终包
+  实测数字见 root 46-web 与 download/README——避免条目自引用数字
+  漂移）；注：r23/r24 包体工作记录滞后一轮系当时会话中断产物，
+  非设计惯例——本环起以 §19.3「commit 已完成 → 打包」为正序
+- web 同步核验（详录 root worklog 46-web 条目）：download/README.md
+  r25 节实测数字更新 + kerf-data.ts 包内自举数字同步 + /api/stats
+  mtime 自动选取 r25 终包 + bun run lint + agent-browser E2E
+- git 入账（kerf 仓库：recover.rs 清偿 + rec 树 09_r25/l + 本条目；
+  web 仓库：README/kerf-data + r25 终包 + root worklog + kerf 指针）
+  + rec 树压实（02 层 09_r25 rec + l 首行新行 + 头部覆盖区间
+  r17-r25）
+
+Stage Summary:
+- **批次 I 执行 r25（46-a + 46-z）交付闭环——I 后段双主题完成**：
+  Effect M1-M5 + 能力 M2（46-a 主体）+ 收尾（706:0:0 复验零回归 +
+  clippy --workspace 超集口径死代码清偿 + r25 终包 311 条目包内
+  自举两轮 + web E2E + git + 树压实）
+- 遵循：GATE 1（实测口径——超集复验抓出命令覆盖缺口；两轮包内
+  自举）、§19.3/§19.4（commit-then-package 正序复位 + 包内验证）、
+  R4（代码为准——死代码清偿 + 流程缺口如实入册）、§8.6（rec 树 l
+  索引首行新行）、§8.4.5（测试计数与 matrix 逐位对账）
+- 下一步：42-g I3 门审查（§7.3 ≥30 新 case + §21.3 四条锚定 +
+  §14 阶段末环）→ 42-h 收尾交付（批次 I 终收口）
+
+---
+Task ID: 47-a
+Agent: Super Z (main) — QA-A/REV-A/ARCH-A/PM-A/ALG-C（I3 门审查——批次 I 阶段末环）
+Task: MUV 42-g：I3 门审查（stage2_gate_audit_r1 审计集 ≥30 case + §21.3 四条锚定 + §14.5 D1-D8 深审 + §14.8 B1-B4 回写 + §14.9 C1-C6 整理 + §6.3 投票）
+
+Work Log:
+- 会话恢复（PHASE 4 上下文纪律）：接续摘要基线严重过期（r21/657 声称
+  42-c 为下一 MUV）→ 磁盘实况复核（git log 实证 r22-r25 全交付、
+  HEAD f37782d = r25 46-z 终态、706:0:0 实测复跑）→ 冲突检测无 →
+  按 worklog 46-z「下一步」清单 = 本环合同（42-g → 42-h）；环境恢复
+  （~/.cargo 重入 PATH——沙箱重置后 shell 丢失）
+- 基线复核（GATE 1 前置）：cargo build 0 告警 + test --release
+  --workspace **706:0:0** 实测 + git clean——与 r25 终态逐位一致
+- **stage2_gate_audit_r1.rs（新审计集——examples/audit/ 第 4 件）**：
+  53 case（A12 单语句 + B12 多语句糖/module/require/宏/门控 + C10
+  复杂含 ⑥循环 ⑦深度 E0008/E0009 深链 + D6 恢复 + **E7 上轮修复边界
+  （§7.3.2——r23/r24/r25 修复面：门 B 活性 / 缓存 CompilerKind 分桶
+  / E0008 首次恢复位置 / TD-014 归因 / TD-011 全序双面 / TD-018 单源
+  / recover 多错误（46-z 清偿边界））** + P6 正向含 §21.3 四条件锚
+  定探针（门 B 轻量 fixpoint B₁/B₂ bytecode_equal+SHA-256 / QBE
+  native fib exit 144 / FFI 模型冻结 / prelude 管道 + TCO×效应 10
+  万深））；run_negative 扩展显式 E 码字段（E0007/E0008/E0009 结构
+  化族断言）+ 双路径（生产/种子）同 Err 同消息机械校验；Cargo.toml
+  [[example]] 注册
+- 实测迭代一轮（首轮 50/53）：三 FAIL 均为审计器语料期望错误非产品
+  缺陷——B09 消息子串修正（「define-syntax 第二参数必须是」）/
+  B11 期望修正（read-line 未授权 = **编译期 E0006 能力权限不足**——
+  比预想 Run 未绑定更强的 fail-closed 门控，如实升级断言）/ D06 恢复
+  语料换 my-when 宏（my-or 的非 bool if 条件不符 kerf 严格 bool 语
+  义）→ 复跑 **53/53 PASS EXIT 0 APPROVED（零新发现）**：七类覆盖
+  1=1 2=4 3=2 4=3 5=12 6=1 7=2 + 配比全过 + §21.3 四条件锚定输出
+- **§14.5 深审报告（docs/develop/v0/stage-2/deep-review-round1.md
+  新建）**：D1-D8 八维度三段式（批次 I 面裁剪——§0 如实定位「批次
+  末门审非大阶段末」）+ §14.8 偏差清单（闭环 8 行 + B1 残留 3 行：
+  HM 生产切换 / FFI 实现 / net 门控行——均纳后续批次计划）+ §6.3
+  五角色投票 **5.5/5.5 = 100% ≥ 95% GO** + 行动计划 W1-W5（42-h
+  收尾合同）
+- **§14.9 C1-C6 代码整理（发现即修 4 处）**：C1 clippy
+  --all-targets --workspace 超集口径抓出审计器 example 2 处
+  result_large_err（闭包 Result 大 Err 链 → for 循环收集重写）；
+  C3/§14.6.1.1 catch-all 注释合规检查——hm.rs 2 处 `_ => {}` 无理由
+  注释（free_vars 封闭类型臂 / 内置签名 fall-through 至参数规则臂）
+  补齐「_ 臂理由」注释；C2 glob re-export 零匹配；全链复跑 fmt 0
+  diff + clippy 0 + **706:0:0 零回归**
+- 遵循：§7.3.1/§7.3.2/§7.3（门审三节——机械校验配比 + 独立 EXIT
+  码判定）、§14.5/§14.8/§14.9（阶段末三协议——深审/回写/整理）、
+  §14.6.1.1（catch-all 注释规则——无注释视为违规）、§6.3（加权投
+  票）、GATE 1（实测口径——706 复验 + EXIT 0）、§2.3-11（实测禁臆
+  测）、R4（代码为准——C 层修复 + 报告如实登记）、PHASE 4（过期
+  摘要纠偏——以文档/磁盘实况为准）
+
+Stage Summary:
+- 42-g I3 门审查交付闭环：**审计集 53 case APPROVED EXIT 0（七类全
+  覆盖 + 边界 7 ≥ 5 + §21.3 四条件锚定）+ 深审报告 D1-D8 + 偏差清
+  单（B1 残留 3 项如实 + 闭环 8 项对照记录）+ C1-C6 整理 4 处修复
+  + 五角色全票 GO（100%）**；706:0:0 零回归；批次 I 判定 APPROVED
+  → 42-h 收尾（47-z）
+- 产出：examples/audit/stage2_gate_audit_r1.rs（53 case 第 4 审计
+  集）+ Cargo.toml example 注册 + deep-review-round1.md（Stage 2
+  首篇）+ hm.rs 2 注释 + 审计器 2 clippy 修复
+- 下一步：47-z（42-h 收尾）——§3.2 六命令 clean 起步 + 对账六面
+  （pipeline-test-coverage r23→706 滞后一轮补账 W1）+ r26 tar.gz
+  包内自举 + web 同步 + git + rec 树 10_r26
+
+---
+Task ID: 47-z
+Agent: Super Z (main) — QA-A/REC-A（L2 收尾环，批次 I 收口 r26 终收口）
+Task: MUV 42-h：r26 收尾交付（§3.2 六命令 clean 全绿 + 对账六面含 pipeline 滞后两轮补账 + r26 tar.gz 包内自举 + web 同步核验 + git + rec 树压实）
+
+Work Log:
+- §3.2 六命令 clean 起步全绿（GATE 1 实测口径）：cargo clean
+  （161.9MiB）→ build --release --workspace **13.56s 零告警** →
+  check 0 errors 0 warnings → fmt --check 0 diff → clippy
+  --all-targets **--workspace** -- -D warnings 0（超集口径维持
+  46-z 起）→ test --release --workspace **706:0:0**（零回归——
+  门审环零 cargo 计数增量）→ **三审计集全过**（stage0 + stage1 +
+  stage2_gate_audit_r1 新增——APPROVED EXIT 0）+ CLI 四路径冒烟
+  （fib ⇒ 144 / macros ⇒ 42 / effect_stress ⇒ 120 / prelude
+  foldl ⇒ 21 + check ok：2 原型/9 常量/5 全局/38 指令）
+- 对账六面（W1 兑现——含深审 D7 发现的 pipeline 滞后两轮补账）：
+  ①matrix.md r26 增量行（零 cargo 计数 + 门审计集三件 144 case
+  注记 + r26 汇总链尾追加）；②pipeline-test-coverage v0.4.0-r26
+  ——**滞后两轮补账**（r24 +14：stdlib 17→24 + gc 6→9 + prelude
+  7→10 + scope_set 9→10；r25 +22：effect_tests 17 新建行 +
+  bootstrap_compiler 29→32 行 + Tier 2 头 463→499 + catch-all
+  小节 r26 实测（4 处全注释合规——hm.rs 2 处本轮补齐））；③
+  plan.md Status r26 收口行（I3 门审 + 42-h 收尾 + 批次 J 指针）；
+  ④RELEASE_NOTES r26 节（交付一 I3 门审 + 交付二收尾 + 质量口
+  径）；⑤TD 登记册零事件（注释级修复不登记）；⑥worklog 双层 +
+  rec 树 10_r26 + l 两层（02 层新行 + 根 l 未压实区间与 02 行）
+- r26 tar.gz（§19.3 commit-then-package 正序：本条目 + 10_r26
+  rec + l 两层并包）+ 包内自举验证（全新构建 + 706 复跑 + CLI
+  一致）——详录见 root worklog 47-web 条目（避免条目自引用数字
+  漂移，r25 46-z 惯例）
+- web 同步核验（kerf-data r26 节点 + footer v6.6 + download
+  README r26 节 + agent-browser E2E 双端）——详录 root 47-web
+- git 入账：kerf 仓库（审计集 + 深审报告 + hm.rs 注释 + 四对账
+  文档 + rec 树 + 本两条目）+ web 仓库（README + kerf-data +
+  r26 包 + root worklog + kerf 指针）
+
+Stage Summary:
+- **批次 I 收口 r26（47-a + 47-z）交付闭环——批次 I 终收口**：
+  I3 门审（审计集 53 APPROVED + 深审五角色 100% GO + C1-C6 修复
+  4 处）+ 收尾（§3.2 六命令 706:0:0 + 对账六面 + r26 包内自举 +
+  web E2E + git + 树压实）
+- 遵循：GATE 1（实测口径——clean 起步六命令 + 三审计集 EXIT 0）、
+  §19.3/§19.4（commit-then-package 正序 + 包内验证）、§8.6（rec
+  树 10_r26 + l 两层新行 + 头部覆盖区间 r17-r26）、§8.4.5（对账
+  六面——matrix/pipeline/plan/RELEASE_NOTES/TD/worklog 逐面）、
+  深审 W1（pipeline 滞后补账兑现）
+- 下一步：批次 J 规划轮（§13.1 设计对齐 + plan §5b 细化——效应
+  typecheck 收敛 + HM 生产切换评估 + FFI 实现排期 + net 门控窗
+  口核对——12-roadmap §2.5 演进矩阵）
