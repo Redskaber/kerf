@@ -1,7 +1,7 @@
 # 综合技术债登记册
 
 > **Author**: kerf-dev-agent（ARCH-A 角色）
-> **Date**: 2026-09-11（r17：TD-013 resolved（双路径恢复 + 合并报告 + CLI 切换）+ TD-024 新增（本地码 PoC 边界 B1）；r16：批次 F 深审全量对账——索引表补全（r3 后新增 TD-015+ 此前无索引行）+ TD-012 标记 resolved / TD-013 与 TD-009/010/014/017/018 目标时机改判 Stage 2（附 Stage 1 门放行裁定）/ TD-019/020 断档登记 / TD-023 新增（P2）；r3：TD-001/006 断档记录 + TD-005/008/011 详情补齐 + TD-012/013/014 新增 + TD-009 注记更新）
+> **Date**: 2026-09-11（r27/48-a 批次 J 规划轮：TD-003/TD-005/TD-015 目标时机改判 Stage 3（零消费缺口 + R6/R7 收敛纪律——依据 stage-2/plan §5d 处置表；等级/状态不动）；r17：TD-013 resolved（双路径恢复 + 合并报告 + CLI 切换）+ TD-024 新增（本地码 PoC 边界 B1）；r16：批次 F 深审全量对账——索引表补全（r3 后新增 TD-015+ 此前无索引行）+ TD-012 标记 resolved / TD-013 与 TD-009/010/014/017/018 目标时机改判 Stage 2（附 Stage 1 门放行裁定）/ TD-019/020 断档登记 / TD-023 新增（P2）；r3：TD-001/006 断档记录 + TD-005/008/011 详情补齐 + TD-012/013/014 新增 + TD-009 注记更新）
 > **Version**: v0.3.0-r24
 > **Status**: Active（**r24 批次 I 执行 42-e：TD 五项 resolved（TD-010 Foreign 装箱 + TD-011 字符串全序 + TD-014 嵌套 define 归因 + TD-018 消息单源统一 + TD-023 根扫描对症——GcCell 摘要 + 缓冲复用，非尾形基准 -27%）+ TD-008 裁定 DEFER（实测依据三面——见详情）**；r23 批次 I 执行 42-d：TD-017 + TD-009 联动 resolved（INC7 清单兑现——eval 参考路径退役，两域随路径注销）；r21/r22 批次 I 执行 42-b/42-c：无新增/无 resolved（段迁移零债务面——module 名覆写值等价注记入 i1-design v1.2）；r20 批次 I 执行启动：无新增/无 resolved——设计轮（42-a I1 切口设计）零债务面；eval 退役裁定已设计锁定排 42-d（INC7）——兑现于 r23；r19 批间插入轮：无新增/无 resolved——设计轮 + 骨架冻结零债务面；口径注记：矩阵 r18 版集成计数 438 勘误为 436（198+438=636≠634 内部矛盾——实测 436 与 r17 增量链 409+27 吻合））
 > **规则**: sop.md §6.2.1——新增已解决项/调整剩余项优先级（每子阶段必检）
@@ -12,9 +12,9 @@
 |-------|------|------|------|---------|
 | TD-001 | （编号断档——不可考） | — | 断档存档 | — |
 | TD-002 | quote 符号/向量值类型缺失 | P3 | **已解决（符号 r5；向量开放→Stage 2）** | Stage 1 |
-| TD-003 | 图 IR 复合节点 CSE 共享 | P3 | 开放 | Stage 2 |
+| TD-003 | 图 IR 复合节点 CSE 共享 | P3 | 开放 | ~~Stage 2~~ → Stage 3 优化窗口（v6.3/r27 改判） |
 | TD-004 | 作用域集解析（Racket 式）替换名称基解析 | P2 | **已解决（r13——编译器/eval 双路径 (name, scopes ⊆) + max-cardinality；锚点 9 测试）** | Stage 1 |
-| TD-005 | syntax-parse 级宏组合 | P3 | 开放 | Stage 2 |
+| TD-005 | syntax-parse 级宏组合 | P3 | 开放 | ~~Stage 2~~ → Stage 3 宏增强窗口（v6.3/r27 改判） |
 | TD-006 | （编号断档——不可考） | — | 断档存档 | — |
 | TD-007 | 迭代式展开工作表（深度上限解除：128→500→**10_000**） | P2 | **已解决（r18 / 40-c——完整口径）**：Stx Rc 共享化（List/Vector → `Rc<Vec<Stx>>` clone O(1)）+ retag 迭代式重建（显式工作表后序——栈深恒定）+ 均匀标记 O(1) 共享（链 N 步总工作量 O(N)，旧 O(N²)）+ 扁平 Drop（唯一持有脊柱工作表拆除）；上限 500→10_000（种子 + 自举 expander.krf 同步）；10_000 链测试 0.02s 通过 + 10_001 边界报错 | ~~Stage 2 批次 H2~~ 已交付 |
 | TD-008 | 分代 GC / 堆压缩 | P3 | **裁定 DEFER（r24 / 42-e——实测依据三面）** | Stage 3+（条件触发重评估） |
@@ -24,7 +24,7 @@
 | TD-012 | expander.rs 单文件拆分候选 | P3 | **已解决（批次 B 前端重写落地六文件）** | ~~Stage 1（切换期）~~ |
 | TD-013 | 多错误收集 / Expander 恢复展开（单错误短路） | — | **resolved（r17 / 38-e）**：种子+自举桥双路径形式级恢复 + DiagCollector（128 上限/截断/位置序）+ check_source_recover 合并报告（E0002+E0005）+ CLI check 切换恢复模式；16 集成测试全过 | ~~Stage 2 批次 G2~~ 已交付 |
 | TD-014 | 展开期错误消息归因失真（嵌套 define） | P3 | **resolved（r24 / 42-e）**：专门消息「嵌套 define 重复绑定」+ Span 指向第二次出现处（seed expand_body + 自举 expand-body-hoist 镜像 + parity 2 case 逐字一致） | ~~Stage 2~~ 已交付 |
-| TD-015 | IrGraph 无条件计算旁路丢弃 | P3 | 开放 | Stage 2（切换期重构） |
+| TD-015 | IrGraph 无条件计算旁路丢弃 | P3 | 开放 | ~~Stage 2（切换期重构）~~ → Stage 3 优化窗口（v6.3/r27 改判） |
 | TD-016 | 链式比较短路语义静态收紧 | P3 | **已解决（r7）** | ~~Stage 1~~ |
 | TD-017 | eval 参考路径深度上限不对称 | P3 | **resolved（r23 / 42-d）**：eval 参考路径自 driver 生产面退役（P5/INC7——CLI eval 子命令移除 + eval_source 删除）——**256 深度上限域随路径注销**；生产 VM 路径经 TCO 帧复用无深度上限（105_000 层尾递归正确终止——`deep_tail_recursion_production_path_tco` 重写口径实测）；kerf-vm eval.rs 存档为 Rust 参考实现（scope_set_tests 语义 oracle 消费面保留） | ~~Stage 2（I1 eval 重写时随迁评估）~~ 已交付（INC7 联动注销） |
 | TD-018 | 双路径错误消息文本分裂 | P3 | **resolved（r24 / 42-e）**：kerf-vm messages.rs 单源构造器（if 条件/not/car/cdr/set! 五族）；Value::truthy 复活为单一实现（VM JumpIfFalse + eval if 臂同源）；未绑定族裁定为保留的阶段信息差异（VM 携全局兜底完成度） | ~~Stage 2~~ 已交付 |

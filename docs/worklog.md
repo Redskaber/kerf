@@ -4158,3 +4158,118 @@ Stage Summary:
 - 下一步：批次 J 规划轮（§13.1 设计对齐 + plan §5b 细化——效应
   typecheck 收敛 + HM 生产切换评估 + FFI 实现排期 + net 门控窗
   口核对——12-roadmap §2.5 演进矩阵）
+---
+Task ID: 48-a
+Agent: Super Z (main) — PM-A/PL-A/ARCH-A（批次 J 规划轮——Stage 2 收官批细化）
+Task: MUV 48-a：批次 J 规划轮（plan §5b 批次 J 细化四 MUV + §5c 批次 K 概排 + §5d Stage 2 余下面处置表 + net 门控窗口核对闭环 + TD 三行改判）
+
+Work Log:
+- 会话恢复（PHASE 4 纪律）：续接摘要基线严重过期（声称 r21/657 + 42-c 为下一
+  MUV）→ 磁盘实况复核（git log 实证 r22-r26 全交付、HEAD de93044 = r26 47-z
+  终态、706:0:0 实测复跑 22 套件逐二进制汇总、双仓库 clean）→ 冲突检测无 →
+  按 worklog 47-z「下一步」= 批次 J 规划轮四主题（效应 typecheck 收敛 + HM
+  切换评估 + FFI 实现排期 + net 门控窗口核对）；PHASE 1 定位声明 v2 一次通过
+  （L3 全量——规划轮文档产出 + §3.2 复验验收）；环境恢复（~/.cargo 重入 PATH）
+- 输入读取（设计锚五件 + 矩阵）：deep-review-round1（D4 就绪表「早期决策点
+  防 PoC 长期化」+ B1 残留三项 + W1-W5）+ hm-inference-design D8 演进轨道
+  三阶段（PoC→旗标→默认——旗标期 = kerf check 切换 HM 判定面 + R1-R8 退为
+  回归基线断言 + P0-2 契约重定义义务）+ ffi-ownership-model §8 实现路线
+  （write_stdout 窗口规程步 2-4 + Alloc/FreeExternal 开放 + E9-E11 诊断族
+  + 回写义务四处）+ effect-language-design（D10 能力-效应正交 + 行多态
+  Stage 3 边界 + 风险表「HM 效应行交互 P3/Stage 3」）+ capability-model-
+  design §4.1/§7（M3 net 增行 + D11 手术面三点加法）+ 12-roadmap §2.5.1
+  演进矩阵 Stage 2 列余下行
+- 代码实锚核对（§8.4.5 代码为准）：typecheck.rs L353-357（Perform/Handle
+  => Unknown 且 {..} 早退**不递归子表达式**——效应体内 R1-R8 违例当前不诊断
+  = 收敛面真实缺口形态，修正文档面「静态面不收紧」的理解为「不遍历」缺口）
+  + hm.rs L261-275/L608（hm_check_program 离线 PoC——D8 不接 driver + 效应
+  臂同型 P3 注记）+ driver.rs L558-626（check_program 触面 = check_source
+  L563 + check_source_recover L626 两入口——**run 路径不触静态面** = HM
+  旗标爆炸半径有界）+ capability.rs L48（net 增行 r25 评估注记）+ reserved/
+  ffi.rs（P1 冻结契约——实现推迟注记）+ heap.rs L16-52（ForeignBox r24
+  已落地——FFI 前置半就位）
+- plan.md §5b 批次 J 细化（六字段表四 MUV + 排程注五条）：48-b J1 效应
+  typecheck 收敛（子表达式遍历 + 结果类型维持 Unknown + 静态负例 ≥3——补
+  深审 D3/D8 覆盖缺口）/ 48-c J2 HM 旗标期切换（**D8 阶段 2 GO 裁定落定**
+  + 契约重定义 P0-2 兑现 + 断言重锚 + 类型检查器行「迁移评估」结论）/
+  48-d J3 FFI VM 面做实（write_stdout pin 窗口规程 + Alloc/FreeExternal +
+  E0010-E0012 + 13 边界 case + 回写四处——§21.3 条件 4 完整版兑现）/
+  48-e J4 收尾
+- plan.md §5c 批次 K 概排（Stage 2 终批 49-x 三 MUV）：K1 终门审
+  （stage2_gate_audit_r2 ≥30 新 case + 批次 J 三修复边界 + §21.3 四条件
+  终验 + **§21.5 九信号全核对**）+ K2 大阶段末深审环（§14.5 D1-D8 全量 +
+  §14.8/§14.9 + §14.6 阶段间深验证四项 + final-assessment Stage 2 版 +
+  **Stage 3 切换 GO/NO-GO**）+ K3 收尾（12 §2.5.1 终态回写 + v0.5-roadmap
+  Stage 2 行）
+- plan.md §5d Stage 2 余下面处置表：12 §2.5.1 十一行逐行落位——已兑并行五
+  （Token 流+图 IR / CodeValue 实际增量 / 元循环终态 / 闭包 / VM+GC PoC）
+  + Effect（r25 M1-M5 + 48-b 补静态面）+ **多阶段与缓存增量两行 DEFER
+  Stage 3**（§21.3 四条件不含 + 成熟度研究前沿/收益边际——矩阵自述「可
+  依据当时成熟度重新评估」结构启用）+ **net/process 触发式** + 宏完整化
+  改判 Stage 3 + 类型检查器行 48-c 兑现位
+- **net 门控窗口核对结论（规划轮内闭环——r26 指针第四主题）**：四依据
+  （依赖①效应系统就位 ✅ r25 / 消费面 Stage 2 全程零 net 语料（审计集 53
+  case + examples 七件 + 测试矩阵实测）/ 沙箱环境网络受限无真实 socket 可
+  验证面 / D11 手术面三点加法已收敛——延迟引入无结构惩罚）→ **裁定 net
+  增行随 Stage 3 首个网络内置需求触发式引入；Stage 2 交付面 = 模型层完整**
+  （「预留长期不做实是允许的」矩阵解读要点条款启用；§12 最优 > 最小：可
+  验证的模型层 > 不可验证的门控行）；process 族同口径
+- 回写三件（§8.4.5 规则 3——决策与文档同步）：12-roadmap v6.3（Date 行 +
+  §2.5.1 九行处置注记 + Version v6.2→v6.3）/ TD 登记册（Date 行 + TD-003/
+  TD-005/TD-015 三行目标时机改判 Stage 3——等级/状态不动，R6/R7 收敛纪律，
+  批次 J 发现消费面则回判）/ plan Status 行 r27 交付段
+- GATE 1 实测（零代码轮全量复验）：cargo clean → build --release
+  --workspace **14.41s 零告警** → check 0 errors 0 warnings → fmt --check
+  0 diff → clippy --all-targets --workspace -D warnings **0** → test
+  --release --workspace **706:0:0**（22 套件逐二进制汇总实测）→ 三审计集
+  EXIT 0（stage0/stage1/stage2_gate_audit_r1 复验）+ CLI 四路径（fib ⇒144
+  / macros ⇒42 / effect_stress ⇒120 / io ⇒42）+ check ok（2 原型/9 常量/
+  5 全局/38 指令）
+- 遵循：§21（阶段规划裁剪至批次粒度）/§13.1（设计对齐五文档）/§17（排版
+  图六字段）/§4.1（MUV 拆分 + Task ID 48-b~e/49-x 唯一性核对无冲突）/§12
+  （最优 > 最小——net 裁定依据）/§8.4.5（决策附条款号 + 代码实锚六件）/
+  GATE 1（clean 起步六命令实测全绿）/PHASE 4（过期摘要纠偏——以文档磁盘
+  为准）/R4（代码为准——typecheck 早退形态修正文档理解）
+
+Stage Summary:
+- 批次 J 规划轮（48-a）交付闭环：§5b 四 MUV（效应收敛/HM 旗标 GO/FFI VM
+  面/收尾）+ §5c 终批三 MUV + §5d 处置表十一行 + net 窗口核对闭环（Stage 3
+  触发式）+ TD 三行改判 Stage 3——深审 B1 残留三项全部收编入批
+- 706:0:0 零回归（零代码轮）；产出全为文档面（plan 三节 + 12-roadmap v6.3
+  + TD 登记册 + matrix/RELEASE 对账行）
+- 下一步：48-z 收尾（r27 tar.gz + web 同步 + E2E + git + rec 树）→ 批次 J
+  执行启动 48-b J1 效应 typecheck 收敛
+
+---
+Task ID: 48-z
+Agent: Super Z (main) — QA-A/REC-A（L2 收尾环——批次 J 规划轮 r27 收尾）
+Task: MUV 48-z：r27 收尾交付（对账六面 + r27 tar.gz §19.3 正序 + 包内自举验证 + web 同步 + git + rec 树 11_r27）
+
+Work Log:
+- 对账六面：①matrix.md r27 增量行（706 → 706 零 cargo 计数——零代码规划
+  轮）②pipeline-test-coverage **零增量**（无代码变化——r26 v0.4.0-r26
+  口径维持，如实注记非漏账）③plan.md Status r27 交付段（48-a 已落）④
+  RELEASE_NOTES r27 节（交付一规划三节 + 交付二收尾 + 质量口径）⑤TD 登记
+  册 r27 事件（TD-003/TD-005/TD-015 三行目标时机改判）⑥worklog 双层（48-a
+  + 48-z）+ rec 树 11_r27 + l 两层新行
+- §3.2 六命令 clean 起步全绿（GATE 1——详录 48-a 条目）+ 三审计集 EXIT 0
+  复验（stage0 41 / stage1 50 / stage2 53——合计 144 case）
+- r27 tar.gz（§19.3 commit-then-package 正序：git commit 先行含本两条目 +
+  11_r27 rec + l 两层 → 打包）+ 包内自举验证（全新解包构建 + 706 复跑 +
+  CLI 一致 + 包内三审计集）——数字详录见 root worklog 48-web 条目（r25/r26
+  惯例——避免条目自引用数字漂移）
+- web 同步核验（kerf-data.ts r27 节点三枚 + site-footer v6.7 + download
+  README r27 节 + agent-browser E2E 双端截图）——详录 root 48-web
+- git 入账：kerf 仓库（plan §5b/c/d + 12-roadmap v6.3 + TD 登记册 + matrix
+  + RELEASE_NOTES + rec 树 11_r27 + l 两层 + 本两条目）+ web 仓库（README +
+  kerf-data + footer + r27 包 + root worklog + kerf 指针）
+
+Stage Summary:
+- **r27 批次 J 规划轮（48-a + 48-z）交付闭环**：Stage 2 收官批细化（§5b
+  四 MUV + §5c 终批三 MUV）+ 余下面处置十一行 + net 窗口核对闭环 + TD 三行
+  改判；706:0:0 零回归；r27 包在线可下载（/api/download mtime 自动选取）
+- 遵循：GATE 1（clean 起步六命令 + 三审计集 EXIT 0 实测）/§19.3/§19.4
+  （commit-then-package 正序 + 包内验证）/§8.6（rec 树 11_r27 + l 两层新行
+  + 头部覆盖区间 r17-r27）/§8.4.5（对账六面逐面——pipeline 零增量如实注记）
+- 下一步：批次 J 执行启动——48-b J1 效应 typecheck 收敛（typecheck.rs +
+  hm.rs Perform/Handle 子表达式遍历 + 静态负例 ≥3 → 48-c HM 旗标期切换）

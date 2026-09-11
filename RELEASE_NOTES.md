@@ -1,3 +1,27 @@
+## v0.4.0-r27（2026-09-11）——批次 J 规划轮：Stage 2 收官批细化 + 余下面处置（§5b/§5c/§5d，零代码轮 706 全绿）
+
+### 交付一：批次 J 细化（48-a——plan §5b/§5c/§5d 三节）
+
+- **§5b 批次 J 四 MUV（Stage 2 收官主体批）**：48-b J1 效应 typecheck 收敛（typecheck.rs/hm.rs Perform/Handle 臂**子表达式遍历**——补深审 D3/D8「Unknown 放宽面」覆盖缺口：效应体内 R1-R8 违例当前不诊断（typecheck.rs L353-357 实锚——`{ .. }` 早退不递归）；结果类型维持 Unknown——行多态 Stage 3 边界如实；负例组 ≥3）+ 48-c J2 HM 旗标期切换（**D8 阶段 2 GO 裁定落定**——深审 D4「早期决策点 / 防 PoC 长期化」兑现；切换面 = check_source L563 + check_source_recover L626 两入口（run 路径不触静态面——爆炸半径有界）；契约重定义显式登记（P0-2 兑现：保守性断言更新 + occurs/自应用误报面文档化 + 双向锚重锚）；类型检查器行「迁移评估」结论随轮登记）+ 48-d J3 FFI VM 面做实（write_stdout char* 按 ffi-ownership-model §8 窗口规程（Str 堆槽 pin + 借用出界 + 返回后 unpin）+ AllocExternal/FreeExternal 开放 + E9/E10/E11 落位 E0010-E0012 + 13 边界 case 对齐 + 回写四处——§21.3 条件 4 完整版兑现）+ 48-e J4 收尾
+- **§5c 批次 K 概排（Stage 2 终批，49-x）**：49-a 终门审（stage2_gate_audit_r2 ≥30 新 case + 批次 J 三修复边界 + §21.3 四条件终验 + **§21.5 九信号全核对**）+ 49-b 大阶段末深审环（§14.5 D1-D8 全量 + §14.8/§14.9 + §14.6 阶段间深验证四项 + final-assessment Stage 2 版 + **Stage 3 切换 GO/NO-GO**）+ 49-z 收尾（12 §2.5.1 终态回写 + v0.5-roadmap Stage 2 行）
+- **§5d Stage 2 余下面处置表（12-roadmap §2.5.1 十一行逐行落位——规划轮内闭环）**：已兑并行五（Token/CodeValue 增量/元循环/闭包/VM+GC PoC）+ Effect（r25 + 48-b 补静态面）+ **多阶段与缓存增量两行 DEFER Stage 3**（§21.3 不含 + 成熟度研究前沿/收益边际——矩阵自述「可依据当时成熟度重新评估」结构启用）+ **net/process 触发式**（net 窗口核对四依据：效应依赖 ✅ + 零消费 + 沙箱网络受限 + D11 手术面收敛——「预留长期不做实是允许的」条款）+ 宏完整化改判 Stage 3（在用宏面零缺口）+ 类型检查器行 48-c 兑现位
+- **TD 登记册排期改判三行**（等级/状态不动）：TD-003/TD-015 → Stage 3 优化窗口 + TD-005 → Stage 3 宏增强窗口（R6/R7 收敛纪律；批次 J 实施发现消费面则回判）
+
+### 交付二：48-z 收尾
+
+- §3.2 六命令 clean 起步全绿（build 14.41s 零告警 / check 0/0 / fmt 0 / clippy --all-targets --workspace 超集 0 / test **706:0:0** / 三审计集 EXIT 0 + CLI 四路径 + check ok）
+- 对账六面：matrix r27 行（零计数增量）/ pipeline 零增量（无代码变化——r26 口径维持）/ plan Status r27 / RELEASE_NOTES r27 / TD 登记册 r27 事件（三行改判）/ worklog 双层 + rec 树 11_r27
+- 12-roadmap v6.3（九行处置注记回写）+ r27 tar.gz（§19.3 commit-then-package 正序）+ 包内自举验证 + web 同步 + E2E
+
+### 质量口径
+
+- cargo test --release --workspace：**706:0:0**（零代码规划轮——r26 基线零回归；门审计集三件 144 case 另计全过）
+- cargo clippy --all-targets --workspace -- -D warnings：**0 警告**（超集口径）
+- cargo fmt --check：0 diff
+- 三审计集：stage0/stage1/stage2_gate_audit_r1 全 **EXIT 0**（复验）
+
+---
+
 ## v0.4.0-r26（2026-09-11）——批次 I 收口：I3 门审查 + 收尾交付（门审计集 53 case APPROVED + 深审五角色全票 GO，706 全绿）
 
 ### 交付一：I3 门审查（42-g / 47-a——plan §5a 合同逐项兑现）
