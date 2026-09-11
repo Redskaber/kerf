@@ -1,4 +1,0 @@
-; io.krf —— 最小 I/O（§8.8：print / read-line）
-(print "第一行输出")
-(print (str-append "拼接" "字符串"))
-42
