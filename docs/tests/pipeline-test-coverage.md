@@ -13,7 +13,7 @@
 
 ## 2. 三层覆盖记录（§9.5.1 格式：Tier / 名称 / 覆盖阶段 / 预期输出 / 状态）
 
-### Tier 1 —— 阶段内（单元测试，184 函数，crates 内联——r9 起 runner 化仅集成侧）
+### Tier 1 —— 阶段内（单元测试，196 函数，crates 内联——r9 起 runner 化仅集成侧；r17 +13：backend 9 + expander recover 4）
 
 | ID | 名称 | 覆盖阶段 | 预期输出 | 状态 |
 |----|------|---------|---------|------|
@@ -27,7 +27,7 @@
 | T1-vm | kerf-vm 单测 | 执行 | 帧协议/错误形状/**Value 十变体** | ✅ 18/18 |
 | T1-driver | kerf-driver 单测 | 管线编排/能力/效应/缓存/自举桥 | 全管线/**52 内置注册**/预留冻结（Probe）/effects 12/capability 13/**生产切换守护（活性探针 + 代次双信号）** | ✅ **58/58**（r8 +25 / r12 +8 Probe / r15 +1 切换守护） |
 
-### Tier 2 —— 阶段间（集成测试，369 函数，tests/runner.rs 单一总入口 mod 树）
+### Tier 2 —— 阶段间（集成测试，409 函数，tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16）
 
 | ID | 名称 | 覆盖阶段 | 预期输出 | 状态 |
 |----|------|---------|---------|------|
@@ -54,6 +54,8 @@
 | T2-scope-set（r13） | scope_set_tests | expand→compile/eval（作用域） | (name, scopes ⊆) 双路径 + 不匹配负例 | ✅ 9/9 |
 | T2-boot-exp（r14/r15） | bootstrap_expander_tests | expand（自举） | **expander.krf 与种子逐字节 parity：结构/Span/作用域集/param_scopes/错误消息逐字 + 宏 17（E1-β 全模式面）** | ✅ **36/36** |
 | T2-prelude（r15） | prelude_tests | 模块/导入 | hofs 用户面/组合管道/双路径/opt-in/显式失败 | ✅ 7/7 |
+| Stage 2 批次 G | qbe_backend_tests（tests/v0/stage2/plan/） | 端到端 6（fib 144 本地码 = VM 一致 / 算术 / phi 合并 / begin / not·eq / 嵌套 if）+ 结构 4（IL 断言 / 契约门 / require 跳过 / 空程序）+ 一致性 6 + **负例 10（PoC 边界：lambda 值位 / define 非 lambda / Str / Float / set! / module / 未定义 / arity / 自由变量 / IO / 函数值）** + 契约 2 | r17 | ✅ 24/24 |
+| Stage 2 批次 G | multi_error_recovery_tests（tests/v0/stage2/plan/） | 种子恢复 6（跳过/全报/位置序/上限截断/收集器单元/干净）+ driver 8（E0002+E0005 合并 / 部分产物 / 渲染 / read 短路 / E0006 短路 / 短路 API 不变 / 既有 typecheck 多错延续 / 截断尾注）+ 双路径同构 1 + 执行路径不变 1 | r17 | ✅ 16/16 |
 
 ### Tier 3 —— 全流程（阶段门审计 + parity 双实现印证）
 

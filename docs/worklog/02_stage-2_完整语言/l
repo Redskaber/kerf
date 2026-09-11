@@ -1,0 +1,7 @@
+# l — Stage 2 完整语言 里程碑路由
+
+覆盖：2026-09-11 ~ · r17- · Task 38-x 起 · 记忆类分布：e+s+p（r17 含规程勘误实录）
+
+| 编号 | 概述（检索关键词） | 类型 | 覆盖 | 记忆类 | 状态 |
+|------|-------------------|------|------|--------|------|
+| 01 | r17 批次 G·后端/FFI/类型三主线·G3 FFI 所有权模型（pin/unpin 形式化 + 线性令牌 + 13 边界 case，§21.3 阻塞解除）·G1 QBE 后端 PoC（QBE 1.3 落位 tools/qbe + kerf-backend 第 10 crate 契约迁移（原则 27）+ AnnotatedANF 实化 + phi/跳转回填 + **fib(12)=144 本地码端到端与 VM 一致**，§21.3 条件 3）·G2 HM 设计轮（约束三段式裁定 + GO 有条件——H4 新增 MUV）·TD-013 resolved（双路径恢复 + check_source_recover 合并报告 + CLI check 恢复模式）·TD-024 PoC 边界 B1·605:0:0·CLI 13 子命令·v0.4.0·r17 包（含 qbe 工具链 + 包内自举 605） | file | r17 · Task 38-a~f | e+s+p | active |

@@ -6,6 +6,7 @@ version = 4
 name = "kerf"
 version = "0.1.0"
 dependencies = [
+ "kerf-backend",
  "kerf-compiler",
  "kerf-core",
  "kerf-driver",
@@ -15,6 +16,15 @@ dependencies = [
  "kerf-span",
  "kerf-syntax",
  "kerf-vm",
+]
+
+[[package]]
+name = "kerf-backend"
+version = "0.1.0"
+dependencies = [
+ "kerf-core",
+ "kerf-span",
+ "kerf-syntax",
 ]
 
 [[package]]
@@ -38,6 +48,7 @@ dependencies = [
 name = "kerf-driver"
 version = "0.1.0"
 dependencies = [
+ "kerf-backend",
  "kerf-compiler",
  "kerf-core",
  "kerf-expander",

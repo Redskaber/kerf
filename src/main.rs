@@ -6,14 +6,17 @@
 //! - `check <file>`：干编译（仅诊断）；
 //! - `tokens / stx / core / ir / bc / code <file>`：管线各级 dump
 //!   （§16 人类可感知输出 + §14.9 编译器自调试工具）；
-//! - `bench <file> [N]`：性能基准（§14.8——fib 等基准的基线采集）。
+//! - `bench <file> [N]`：性能基准（§14.8——fib 等基准的基线采集）；
+//! - `anf <file>`：AnnotatedANF IR 摘要 dump（批次 G——后端 lowering 面）；
+//! - `native <file>`：QBE AOT 编译 + 运行（首个非 VM 后端——§21.3 条件 3）。
 
 use std::rc::Rc;
 
+use kerf_backend::{build_native, find_qbe, gen_il, lower_program, run_native};
 use kerf_core::CodeValue;
 use kerf_driver::{
-    cache_stats, check_source, compile_source, dump_stx, dump_tokens, eval_source, run_source,
-    test_source,
+    cache_stats, check_source_recover, compile_source, dump_stx, dump_tokens, eval_source,
+    run_source, test_source,
 };
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -35,6 +38,8 @@ fn main() {
         ("bc", Some(f)) => cmd_bc(f),
         ("code", Some(f)) => cmd_code(f),
         ("bench", Some(f)) => cmd_bench(f, args.get(3).and_then(|n| n.parse::<u32>().ok())),
+        ("anf", Some(f)) => cmd_anf(f),
+        ("native", Some(f)) => cmd_native(f),
         ("run", None) | ("eval", None) | ("check", None) | ("test", None) => {
             eprintln!("错误：{} 需要文件参数", cmd);
             2
@@ -68,6 +73,8 @@ fn print_usage() {
     eprintln!("  bc <file>            字节码反汇编（含调试信息）");
     eprintln!("  code <file>          CodeValue 检查（良构性/自由变量）");
     eprintln!("  bench <file> [N]     性能基准（N 轮，默认 10）");
+    eprintln!("  anf <file>           AnnotatedANF IR 摘要（后端 lowering 面）");
+    eprintln!("  native <file>        QBE AOT 编译 + 运行（本地码后端，PoC）");
 }
 
 fn read_file(path: &str) -> Result<String, i32> {
@@ -153,8 +160,10 @@ fn cmd_check(path: &str) -> i32 {
         Ok(s) => s,
         Err(c) => return c,
     };
-    // 批次 C：编译（缓存路径）+ 保守静态类型检查（多错误全量收集）
-    match check_source(&src, path) {
+    // TD-013 恢复模式（38-e）：expand 形式级恢复——E0002（展开）+
+    // E0005（类型）全量报告（单错误短路保留在库 API check_source；
+    // run/eval 执行路径不变——r7 设计 §5 消费面表格）
+    match check_source_recover(&src, path) {
         Ok(report) => {
             let cache_note = if report.cache_hit {
                 "缓存命中"
@@ -179,7 +188,7 @@ fn cmd_check(path: &str) -> i32 {
                     eprintln!("{}", line);
                 }
                 println!(
-                    "发现 {} 个静态问题（E0005；{} 原型 / {} 指令；{}）",
+                    "发现 {} 个静态问题（E0002 展开 + E0005 类型；{} 原型 / {} 指令；{}）",
                     report.diagnostics.len(),
                     report.proto_count,
                     report.instruction_count,
@@ -359,4 +368,100 @@ fn cmd_bench(path: &str, rounds: Option<u32>) -> i32 {
         per_round * 1000.0
     );
     0
+}
+
+/// `anf <file>`：AnnotatedANF IR 摘要 dump（函数/块/指令统计 + 指纹）。
+fn cmd_anf(path: &str) -> i32 {
+    let src = match read_file(path) {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    let out = match compile_source(&src, path) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("{}", e);
+            return 1;
+        }
+    };
+    let ir = match lower_program(&out.core, &out.table) {
+        Ok(ir) => ir,
+        Err(e) => {
+            eprintln!("lowering 错误：{}", e.message);
+            return 1;
+        }
+    };
+    println!("函数数：{}", ir.funcs.len());
+    println!("指纹：#{:016x}", ir.fingerprint);
+    for f in &ir.funcs {
+        let stmts: usize = f.body.blocks.iter().map(|b| b.stmts.len()).sum();
+        println!(
+            "  ${:<24} 形参 {} 块 {} 指令 {}",
+            f.name,
+            f.params.len(),
+            f.body.blocks.len(),
+            stmts
+        );
+    }
+    0
+}
+
+/// `native <file>`：QBE AOT 编译 + 运行（§21.3 条件 3——首个非 VM 后端）。
+///
+/// 产物落盘于临时目录（打印路径）；运行结果以进程退出码呈现（POSIX
+/// 低 8 位口径——`fib 12 ⇒ 144` 完整可见）。
+fn cmd_native(path: &str) -> i32 {
+    let src = match read_file(path) {
+        Ok(s) => s,
+        Err(c) => return c,
+    };
+    let out = match compile_source(&src, path) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("{}", e);
+            return 1;
+        }
+    };
+    let ir = match lower_program(&out.core, &out.table) {
+        Ok(ir) => ir,
+        Err(e) => {
+            eprintln!("lowering 错误：{}", e.message);
+            return 1;
+        }
+    };
+    let il = gen_il(&ir);
+    let qbe = match find_qbe() {
+        Ok(q) => q,
+        Err(e) => {
+            eprintln!("QBE 工具链错误：{}", e.reason);
+            return 1;
+        }
+    };
+    let stem = format!(
+        "kerf-native-{}",
+        std::path::Path::new(path)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("prog")
+    );
+    let out_dir = std::env::temp_dir();
+    let arts = match build_native(&il, &out_dir, &stem, &qbe) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("AOT 错误：{}", e.reason);
+            return 1;
+        }
+    };
+    println!("IL：{}", arts.il_path.display());
+    println!("汇编：{}", arts.asm_path.display());
+    println!("可执行：{}", arts.exe_path.display());
+    match run_native(&arts.exe_path) {
+        Ok(code) => {
+            println!("运行：exit {}", code);
+            0
+        }
+        Err(e) => {
+            eprintln!("运行错误：{}", e.reason);
+            1
+        }
+    }
 }

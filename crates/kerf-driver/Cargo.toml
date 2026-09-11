@@ -14,6 +14,7 @@ kerf-expander = { path = "../kerf-expander" }
 kerf-compiler = { path = "../kerf-compiler" }
 kerf-runtime = { path = "../kerf-runtime" }
 kerf-vm = { path = "../kerf-vm" }
+kerf-backend = { path = "../kerf-backend" }
 
 [lints]
 workspace = true

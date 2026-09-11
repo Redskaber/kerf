@@ -843,6 +843,8 @@ pub trait Serializable {
 
 #### 3.3.7 多目标后端接口（P1）
 
+> **r17 做实迁移注记（批次 G / 38-b）**：本节冻结的契约类型（`CodegenBackend`/`WasmBackend`/`AnnotatedANF` 等）已自预留层（kerf-driver/reserved/codegen）迁入正式家 `kerf-backend/src/codegen.rs`——**签名零变化**（§2.2 原则 27），`AnnotatedANF` 从指纹占位**实化**为携带函数定义集的块式 ANF IR（fingerprint 字段保留——内容寻址口径不变）；预留层改薄 re-export（历史引用路径继续可用）。**首个做实实现**：`QbeBackend`（G1 PoC——fib 端到端本地码；详见 [10-toolchain §CLI](./10-toolchain.md) 与 RELEASE_NOTES r17）。
+
 **为什么必须预留**：后端可插拔（IR 层级缺失需求之一）——目标中立性原则（[17-设计原则 §1](./17-principles.md) 第 13 条）的接口化落地；WebAssembly 是 2026 年的关键目标。
 
 **预留接口（不实现）**：

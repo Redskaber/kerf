@@ -1,7 +1,7 @@
 # 综合技术债登记册
 
 > **Author**: kerf-dev-agent（ARCH-A 角色）
-> **Date**: 2026-09-11（r16：批次 F 深审全量对账——索引表补全（r3 后新增 TD-015+ 此前无索引行）+ TD-012 标记 resolved / TD-013 与 TD-009/010/014/017/018 目标时机改判 Stage 2（附 Stage 1 门放行裁定）/ TD-019/020 断档登记 / TD-023 新增（P2）；r3：TD-001/006 断档记录 + TD-005/008/011 详情补齐 + TD-012/013/014 新增 + TD-009 注记更新）
+> **Date**: 2026-09-11（r17：TD-013 resolved（双路径恢复 + 合并报告 + CLI 切换）+ TD-024 新增（本地码 PoC 边界 B1）；r16：批次 F 深审全量对账——索引表补全（r3 后新增 TD-015+ 此前无索引行）+ TD-012 标记 resolved / TD-013 与 TD-009/010/014/017/018 目标时机改判 Stage 2（附 Stage 1 门放行裁定）/ TD-019/020 断档登记 / TD-023 新增（P2）；r3：TD-001/006 断档记录 + TD-005/008/011 详情补齐 + TD-012/013/014 新增 + TD-009 注记更新）
 > **Version**: v0.3.0-r16
 > **Status**: Active
 > **规则**: sop.md §6.2.1——新增已解决项/调整剩余项优先级（每子阶段必检）
@@ -22,7 +22,7 @@
 | TD-010 | 闭包/内置函数装箱（pair 元素） | P3 | 开放 | **Stage 2**（r16 改判：原「Stage 1」未落地；HeapObj::Foreign 承载） |
 | TD-011 | 字符串全序比较 | P3 | 开放 | Stage 2 |
 | TD-012 | expander.rs 单文件拆分候选 | P3 | **已解决（批次 B 前端重写落地六文件）** | ~~Stage 1（切换期）~~ |
-| TD-013 | 多错误收集 / Expander 恢复展开（单错误短路） | P2 | 设计完成（实现未交付） | **Stage 2 批次 G2**（r16 改判：批次 E 收口未纳入；Stage 1 门按 P2 非阻塞放行） |
+| TD-013 | 多错误收集 / Expander 恢复展开（单错误短路） | — | **resolved（r17 / 38-e）**：种子+自举桥双路径形式级恢复 + DiagCollector（128 上限/截断/位置序）+ check_source_recover 合并报告（E0002+E0005）+ CLI check 切换恢复模式；16 集成测试全过 | ~~Stage 2 批次 G2~~ 已交付 |
 | TD-014 | 展开期错误消息归因失真（嵌套 define） | P3 | 开放 | **Stage 2**（r16 改判：消息质量批与 TD-018 同批） |
 | TD-015 | IrGraph 无条件计算旁路丢弃 | P3 | 开放 | Stage 2（切换期重构） |
 | TD-016 | 链式比较短路语义静态收紧 | P3 | **已解决（r7）** | ~~Stage 1~~ |
@@ -33,6 +33,7 @@
 | TD-021 | 高阶函数用户面注入缺载体 | P3 | **已解决（r15——kerf-prelude 模块/import 承载）** | ~~Stage 1 批次 E~~ |
 | TD-022 | 自举 Reader 帧消耗 O(源字符数) | P3 | 开放 | Stage 2（TCO 决策点——批次 H2） |
 | TD-023 | gc_stress 深递归 GC 根扫描回归（超线性） | **P2** | 开放（r16 新增） | **Stage 2 批次 I2**（与 TD-008 同轮） |
+| TD-024 | 本地码后端 PoC 边界（整数域十二原语 + 直接调用；闭包/Float/Str/Pair/set!/module/IO/函数值一等边界外） | P3 | **登记（r17 / 38-b·38-c）**：显式错误非静默降级（B1 类）；FFI 面（print/write_stdout）按 ffi-ownership-model 批次 I 做实；闭包/GC 协同批次 H/I | Stage 2 批次 H-I（GC-后端协同轮） |
 
 ## 详情
 
@@ -148,7 +149,20 @@
   拆分前禁止向该文件继续新增职责（防 1500+ 失控）
 - **关联**：worklog Task 14-a（D1 架构审查）；TD-007（迭代式展开重写时自然触碰）
 
-### TD-013 多错误收集 / Expander 恢复展开未实现（r3 新增；r7 设计完成；r16 改判）
+### TD-013 多错误收集 / Expander 恢复展开（r3 新增；r7 设计完成；r16 改判；**r17 resolved / 38-e**）
+
+- **r17 交付注记（批次 G / Task 38-e）**：双路径实现全落地——种子
+  `kerf-expander/src/recover.rs`（DiagCollector：push / is_full(128) /
+  mark_truncated / into_sorted 位置序 + expand_program_recover 形式级
+  恢复）+ 自举桥 `bootstrap_expander::expand_program_recover`（逐形式
+  单元素列表调用——expander.krf 协议零改动）+ driver
+  `check_source_recover`（front_from_core 抽段共享——E0002/E0005
+  全量合并 + 截断尾注）+ CLI `kerf check` 切换恢复模式（单错误短路
+  保留库 API check_source；run/eval 执行路径不变——r7 设计 §5）。
+  **r7 验收 5 条全过**：恢复跳过（产物含后续 define，指令数 = 无错
+  对照一致）/ 上限 128 + 截断提示 / 位置序 / 既有零破坏 / 16 case。
+  实测勘误 2 项如实记录：截断标记 break 路径须显式置位（mark_truncated）；
+  并行测试 env 竞态（find_qbe 纯函数注入式重构）。
 
 - **r16 改判注记（批次 F 深审 D2 发现）**：原「实现绑定批次 E」未纳入
   E1-α（自举 Expander 核心形式）/E1-β（宏收口 + 生产切换）范围——批次 E
@@ -275,6 +289,21 @@ lang-design 全部对账面）。推断与 TD-001/006 同型：跳号笔误而�
 （TD-015~018 登记于深审修复内循环，TD-021 首现于 r12——两编号在其间跳过）。
 **处置**：沿用 TD-001/006 先例——永久保留为断档占位（禁复用），后续新增债
 从 TD-024 起编。
+
+### TD-024 本地码后端 PoC 边界（P3，r17 新增——38-b/38-c B1 类登记）
+
+- **描述**：QBE 后端 PoC（G1）支持面 = 整数域原语十二项（+ - * / mod =
+  < > <= >= not eq?）+ 顶层 define 函数直接调用（静态 arity 校验）+ If
+  （值/尾上下文——phi 合并）+ Begin；**边界外**（显式错误非静默降级）：
+  lambda 值位置（闭包捕获）/ Float/Str/Symbol/Pair/Bool/Nil 字面量 /
+  set! / module / print·IO 内置 / 未定义调用 / 自由变量 / 函数值一等传递
+- **等级**：P3（PoC 范围裁定的显式声明——§21.3 条件 3 以 fib 端到端
+  满足；边界扩张属既定路线非缺陷）
+- **承接路线**：FFI 面（print/write_stdout）按 stage-2/ffi-ownership-
+  model.md 批次 I 做实（38-a 交付）；闭包/GC-后端协同（根扫描本地码
+  化 + pin 根集）批次 H/I；Float 域 QBE d 类型扩展随后
+- **代码锚**：kerf-backend/src/anf.rs（lower 边界错误族）；tests/v0/
+  stage2/plan/qbe_backend_tests.rs（负例 10 项锚定）
 
 ### TD-023 gc_stress 深递归 GC 根扫描回归（P2，r16 新增——批次 F 深审 D6 实测发现）
 

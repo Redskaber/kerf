@@ -1,0 +1,14 @@
+[package]
+name = "kerf-backend"
+version = "0.1.0"
+edition = "2021"
+description = "本地码后端（Layer 3）：AnnotatedANF IR 实化 + CodegenBackend 契约正式家（自 kerf-driver/reserved 迁入）+ QBE IL 生成 + AOT 编排——宿主侧基建，永不进入自举链（§21.2）"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+kerf-span = { path = "../kerf-span" }
+kerf-syntax = { path = "../kerf-syntax" }
+kerf-core = { path = "../kerf-core" }

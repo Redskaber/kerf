@@ -10,6 +10,7 @@ members = [
     "crates/kerf-runtime",
     "crates/kerf-vm",
     "crates/kerf-driver",
+    "crates/kerf-backend",
 ]
 
 # 根 crate（kerf）：承载跨 crate 集成测试（tests/v0/stage-N 树，sop.md §8.4.6 规则 3）
@@ -32,9 +33,12 @@ kerf-compiler = { path = "crates/kerf-compiler" }
 kerf-runtime = { path = "crates/kerf-runtime" }
 kerf-vm = { path = "crates/kerf-vm" }
 kerf-driver = { path = "crates/kerf-driver" }
+kerf-backend = { path = "crates/kerf-backend" }
 
-# 零外部依赖（自举信任根显式化，§2.2 原则 11）：全部 9 个成员 crate 与根 crate
+# 零外部依赖（自举信任根显式化，§2.2 原则 11）：全部 10 个成员 crate 与根 crate
 # 仅使用 Rust 标准库——构建可复现性优先于开发便利性（Stage 0 语义验证目标）。
+# 注：kerf-backend 的 AOT 编排调用外部 qbe/cc 子进程（宿主工具链，
+# 非 crate 依赖——§21.2 永不进入自举链的口径保持）。
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }

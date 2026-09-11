@@ -2820,3 +2820,201 @@ Stage Summary:
   为准）
 - 下一步：Stage 2 批次 G 启动（G3 FFI 所有权模型先行——QBE 二进制按
   §3.1 链位安装于 G1 前落位；新会话第一动作 = 读 worklog + 树 l 恢复状态）
+
+---
+Task ID: 38-a
+Agent: 子代理 ARCH-A/ALG-A（联合——主代理并行分派）
+Task: MUV 38-a（G3）：FFI 所有权模型定义（§21.3 阻塞项先行裁定——13 §3.3.4 冻结契约的行为补全）
+
+Work Log:
+- 前置阅读按序：sop §2.3/§8.4.5、13 §3.3.4、05 §3/§4、06 §1.2/§3/§4、
+  ffi.rs P1 冻结注记、gc.rs 根集契约、stage-2/plan §1/§5
+- 三原语责任矩阵 3/3：CallExternal 借用窗口 + CInt/CPointer/Opaque
+  归属三分法；AllocExternal 外部 malloc 域线性所有权；FreeExternal
+  消费释放
+- pin/unpin 形式化：Φ 计数簿扩展 σ=(H,R,Φ)、P1/P2/U1/U2 归约规则、
+  引理 F-PIN、mark_all 起点快照并入（主循环零改动）、L-GC 保持
+- 线性令牌主裁定：可重复借用传递 + 一次性消费（消费全局生效）；
+  失效 E9 诊断而非 UB；防复制性留类型级线性性 Stage 3 锚
+- ExternalPointer 状态机 + 非法迁移 7 条（E9/E10/E11 诊断码族）
+- 边界 case 13 个全判定；实现路线锚定 G1 PoC（整数路径不触及 pin）
+  与批次 I（write_stdout 借用路径做实）
+
+Stage Summary:
+- §21.3 阻塞项「FFI 所有权模型未定义」解除：stage-2/ffi-ownership-
+  model.md 交付（216 行；三原语矩阵 3/3、迁移 7/7、case 13/13、
+  决策 19/19 条款化——新裁定 12 项显式标注）
+- 遵循：§8.4.5（决策附条款号）、13 §3.3.4（契约零改动——只裁行为）、
+  §2.3-1/2（最优与显式失败口径）
+- 回写义务 4 处登记（批次 I 落地轮执行）；Stage 3 锚点 6 项
+
+---
+Task ID: 38-d
+Agent: 子代理 ALG-A/ARCH-A（联合——主代理并行分派）
+Task: MUV 38-d（G2）：HM 推断设计轮（R1-R8 保守 → HM 升级评估 + 16 参照复核）
+
+Work Log:
+- 通读 typecheck.rs 669 行 + BUILTIN_SIGS 49 项 + driver check_source
+  ——R1-R8 逐条行号锚盘点（8 规则 + 8 架构事实 A1-A8 + 保守性契约
+  「误报 = P1」）
+- 复核 16-reference-analysis v5.0：HM 覆盖仅 §2.2 一行——无系统推断
+  章节；对照表六语言公开事实自足 + 诚实登记缺口
+- 识别 P0 语义冲突：letrec nil 预绑定（Nil~(α→β) 合一失败）+ 顶层
+  递归自引用 Unknown 回退（typecheck.rs L548-562 实锚）
+- 11 项核心裁定（D1-D11）：约束三段式（否决 W/J）+ 值限制 OCaml 式
+  + set! join + letrec fresh 预置双形状特判 + occurs check + TcType
+  →HM 十一构造子 + 双点泛化 + E0005/Span 诊断集成 + 三阶段演进轨道
+- 冲突清单 7 项 + 风险 P0×3/P1×3/P2×3/P3×1（全附缓解）
+
+Stage Summary:
+- stage-2/hm-inference-design.md 交付（303 行；裁定 11 项 ≥7 要求、
+  参照表 6 行 + 复核结论、行号锚实况引用零猜测）
+- **裁定：GO（有条件）**——约束三段式算法；PoC 排批次 H 新增 MUV
+  （H4），默认期早于 I1 自举迁移
+- 遵循：§2.3-4（缺口显式不静默）、§8.4.5、§21.5（批次逐批细化）
+
+---
+Task ID: 38-b
+Agent: Super Z (main) — SKL-A/DEV-A（L3 多角色会话，批次 G 工具链 + IR 实化轮）
+Task: MUV 38-b：QBE 工具链 §3.1 链落位 + AnnotatedANF 实化（kerf-backend 新 crate + 契约迁移）
+
+Work Log:
+- §3.1 查找链实操：which qbe 无 → scripts/ 无 qbe → tools/ 无 →
+  docs/tools/ 无 → 安装：c9x.me releases 页探测（首页/compile 目录
+  枚举）→ qbe-1.3.tar.xz（281,332B）下载 → make -j4 零告警（670,544B
+  amd64_sysv + arm64/rv64 六目标）→ 落位 tools/qbe/bin + 源码归档 +
+  scripts/qbe/setup.sh（重建路径）+ docs/tools/qbe/setup.md（记录）
+- 三段冒烟：fib 递归 IL → qbe -o → cc → 运行 fib(20) exit 109 =
+  6765 mod 256（数值正确——exit 8 位截断口径；完整值验证走
+  fib(12)=144）——**语法勘误两条实测**：函数签名必须带返回类型
+  （function l $fib(...) 而非 function $fib）；整数比较带宽度后缀
+  （csltl 非 cslt）——勘误入 setup.md（诚实记录）
+- kerf-backend 新 crate（第 10 成员——§11 后端层独立）：codegen.rs
+  契约**迁移**（CodegenBackend/WasmBackend/AnnotatedANF 自
+  kerf-driver/reserved 迁入——签名零变化原则 27；AnnotatedANF 占位
+  →实化：funcs 函数定义集 + fingerprint 保留；reserved/codegen 改薄
+  re-export + 兼容锁存测试）+ anf.rs（块式 ANF：ABlock{phis,stmts,
+  ctrl} + APhi 块首值合并 + LowerCtxt 两遍扫描 + arity 静态校验 +
+  卫生基名渲染 + fingerprint 内容寻址）
+- workspace 9→10 成员 + 根 crate 依赖 + driver 依赖（组合根组装）
+
+Stage Summary:
+- QBE 1.3 工具链闭环（安装记录 + 重建脚本 + 冒烟实录）；契约迁移
+  原则 27 兑现（旧路径 reserved_ext_tests 零改动继续过——迁移兼容
+  实证）
+- 遵循：§3.1（查找链全程 + 安装记录归档）、§2.2 原则 27/32（签名
+  兼容 + 预留本质是兼容性）、§11（后端层独立 crate）
+- 下一步：38-c QbeBackend + IL 生成 + AOT 端到端
+
+---
+Task ID: 38-c
+Agent: Super Z (main) — DEV-A/QA-A（L3 多角色会话，QBE 后端 PoC 实现轮）
+Task: MUV 38-c：QbeBackend 做实 + QBE IL 生成 + AOT 编排 + fib 端到端本地码（§21.3 条件 3）
+
+Work Log:
+- qbe.rs IL 生成（全 l 64 位与 Int(i64) 对齐；比较产 w；phi 块首
+  渲染；QbeBackend 三契约方法——目标门 + IL 信封 + QBE 内建 pass
+  四项声明）+ aot.rs 编排（qbe 子进程 → .s → cc → 可执行 → 运行；
+  查找链 KERF_QBE → 安装布局 → 编译期锚）
+- CLI +2 子命令：anf（IR 摘要）/ native（AOT 全链 + exit code 口径）
+  ——11→13 子命令（10-toolchain v6.3 回写）
+- **实现勘误实录（GATE 1 诚实记录，全部实测发现）**：① jmp 带参/
+  块参数语法 QBE 1.3 不存在——值合并改 phi 指令（%r =l phi @l1 %v1,
+  @l2 %v2，块首约束）；② Br 的 else/merge 目标 seal 时预测在 then
+  分支内嵌 if 分裂多块时错位——**跳转回填机制**（§19.3 不变式 2 同型：
+  占位 u32::MAX + 分支落定后回填三处；phi 来源 = 实际跳转块索引）；
+  ③ not 翻译 ceqw 非 ceql（w 操作数）；④ fingerprint 仅长度 hash 使
+  (+ 1 2)/(+ 1 3) 同指纹——操作数全量入 hash；⑤ 测试并行竞态两处：
+  KERF_QBE env 全局污染（find_qbe 重构纯函数注入式）+ 共享目录
+  remove_dir_all 互删（原子计数器唯一目录）
+- **端到端实测**：fib(12) ⇒ **本地码 exit 144** = VM 路径 ⇒ 144
+  （双路径一致）；IL 结构断言全命中；值上下文 if phi 合并
+  （(- (if (< 1 2) 10 20) 5) ⇒ 5）；嵌套 if（classify -25/44 ⇒
+  111/144）；算术/begin/not·eq?/mod 等价采样
+- 测试 +24 集成（端到端 6 + 结构 4 + 一致性 6 + 负例 10 + 契约 2）
+  + 9 单元（backend crate）
+
+Stage Summary:
+- **§21.3 条件 3 兑现：首个非 VM 后端工作（fib 端到端本地码）**；
+  中间基线 585:0:0 全绿（553 + 32）
+- PoC 边界 B1 登记（TD-024）：整数域十二原语 + 直接调用；闭包/
+  Float/Str/Pair/set!/module/IO/函数值一等显式边界外错误
+- 遵循：§9.4.3（正负比 1:3+——正 16 负 10 外加结构/契约）、
+  §21.3（条件 3 锚定）、§19.3 不变式 2 同型回填、GATE 1（勘误
+  实录如实入档）
+- 下一步：38-e TD-013 恢复实现
+
+---
+Task ID: 38-e
+Agent: Super Z (main) — DEV-A/QA-A（L3 多角色会话，TD-013 清偿轮）
+Task: MUV 38-e：TD-013 多错误收集与恢复展开实现（r7 设计验收 5 条全过——P2 清偿）
+
+Work Log:
+- 种子路径（kerf-expander/recover.rs）：DiagCollector（push/is_full
+  (128)/mark_truncated/into_sorted——(file_id,start,end) 稳定排序）+
+  expand_program_recover（形式级：错形式收集跳过继续；满即截断+终止）
+- 自举桥路径（bootstrap_expander::expand_program_recover）：逐形式
+  **单元素列表**调用（expander.krf 协议零改动——调用粒度桥侧切换；
+  全局状态跨调用持续）；双路径同构测试（诊断数/产物数/错误消息族）
+- driver 消费面：check_source_recover（front_from_core 抽段重构——
+  R9 fail-closed + 相位簿记 + 字节码共享段单一实现 §12）——E0002+
+  E0005 全量合并 + 位置序 + 截断尾注；**CLI check 切换恢复模式**
+  （单错误短路保留库 API check_source；run/eval 不变——r7 §5）
+- 实现勘误：截断标记 break 路径须显式置位（mark_truncated——38-e
+  实测发现，push 分支够不到）；Python 脚本语法错回滚重放（勘误入
+  档）
+- **r7 验收 5 条全过**：①恢复跳过 + 产物含后续 define（指令数 =
+  无错对照一致）②上限 128+截断提示 ③位置序 ④既有零破坏（短路
+  API 不变锚）⑤16 case 全绿
+- 测试 +16 集成（种子 6 + driver 8 + 同构 1 + 执行路径 1）+ 4 单元
+
+Stage Summary:
+- TD-013 **resolved**（登记册 v0.3.0-r17 更新 + 详情节交付注记）；
+  605:0:0 全绿（553 + 52 净增）
+- 遵循：r7 设计 §2/§3/§5（形式级/收集器契约/消费面表格逐条兑现）、
+  §11（编译期控制流非 effect）、§12（front_from_core 单一实现）
+- 下一步：38-f 收尾交付（§3.2 六命令 + 对账 + tar.gz + web + git）
+
+---
+Task ID: 38-f
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，批次 G 收尾交付轮）
+Task: MUV 38-f：收尾交付（§3.2 六命令 + 对账五面 + r17 tar.gz 包内自举验证 + web 同步 + E2E + git + 树压实）
+
+Work Log:
+- **§3.2 六命令实跑全绿**（clean 起步）：clean → build --release
+  11.52s 零告警 → check 0/0 → fmt --check 零 diff → clippy
+  --all-targets -D warnings 0 → **test --release --workspace
+  605:0:0**（28s；集成 409 = 369+24 qbe+16 恢复，单元 196——逐二进制
+  实测：span 11 + syntax 11 + core 10 + reader 23 + expander 32 +
+  compiler 15 + runtime 9 + vm 18 + driver 58 + backend 9）
+- 双审计集 EXIT 0（stage0 41 + stage1 50 case）；CLI 冒烟：VM run
+  fib ⇒ 144 / **native fib exit 144**（双路径一致）/ test 2/2
+- 对账面更新（六面清单）：RELEASE_NOTES **v0.4.0-r17**（Stage 2 minor
+  bump——批次 G 五交付节）/ matrix v0.1.0-r17（605 总量 + r17 增量
+  行 + 表体：backend 单元行 + expander 32 + 单元 196 标题）/ 登记册
+  v0.3.0-r17（TD-013 **resolved** 详情注记 + TD-024 新增 B1 边界 +
+  索引行）/ pipeline-test-coverage（Tier 1 196 / Tier 2 409 + Stage 2
+  两套件行）/ v0.5-roadmap 批次 G 行 + stage-2/plan Status 与执行注记
+  / lang-design 13 §3.3.7 迁移注记 + 10-toolchain v6.3（CLI 13 子命令）
+- **r17 tar.gz 打包**（§19.4 命令扩展 +tools/ +scripts/——批次 G
+  工具链入包）：282 条目 / 1,504,494 B（qbe 二进制 670KB + 源码
+  281KB 入包）
+- **包内自举验证（§19 复验，实跑）**：解压 → build --release 11.27s
+  零告警 → **605:0:0** → CLI 四冒烟：native fib exit 144 / run ⇒ 144 /
+  check ok / 恢复模式 E0002 合并报告 ✓
+- web 同步（kerf-data + footer + docs 浏览器 + stats 实时）+
+  agent-browser E2E——见 38-g 终验条目
+- 终态重打包（36-e 先例）：38-f/38-g 条目入 flat 后重跑打包命令
+  （含完整 worklog）+ 复验
+
+Stage Summary:
+- **批次 G（后端/FFI/类型三主线）全六 MUV 交付闭环**：G3 FFI 所有权
+  模型（阻塞项解除）→ G1 QBE 后端 PoC（**§21.3 条件 3 兑现——fib
+  本地码端到端 + VM 一致**）→ G2 HM 设计轮（GO 有条件——H4 新增
+  MUV）→ TD-013 resolved（P2 清偿）→ 收尾（605:0:0 + 包内验证 +
+  web 对账三层一致）
+- 遵循：§3.2（六命令逐条实测——clean 全量重编）、§19（打包 + 包内
+  验证 + 命名约定——命令扩展 tools/ 如实注记）、§8.4.5（六面对账——
+  文档随代码 R4）、GATE 1-5（全程实测口径）
+- 下一步：批次 H（H1 原语评估 ∥ H2 TCO+TD-007 ∥ H3 Effect 设计 ∥
+  **H4 HM PoC（38-d 裁定新增）**）

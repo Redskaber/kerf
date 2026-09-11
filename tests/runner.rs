@@ -125,3 +125,19 @@ mod bootstrap_expander_tests;
 
 #[path = "v0/stage1/plan/prelude_tests.rs"]
 mod prelude_tests;
+
+// ---------------------------------------------------------------------------
+// Stage 2（完整语言）：plan 套件（批次 G 起）
+// ---------------------------------------------------------------------------
+
+// 批次 G（r17：QBE 后端 PoC——AnnotatedANF 实化 + IL 生成 + AOT 端到端
+// + PoC 边界负例；38-b/38-c 承载）
+
+#[path = "v0/stage2/plan/qbe_backend_tests.rs"]
+mod qbe_backend_tests;
+
+// 批次 G（r17：TD-013 多错误收集与恢复展开——种子/桥双路径 +
+// driver check_source_recover 消费面；38-e 承载）
+
+#[path = "v0/stage2/plan/multi_error_recovery_tests.rs"]
+mod multi_error_recovery_tests;

@@ -38,6 +38,7 @@ mod core_forms;
 pub mod expander;
 pub mod macro_sys;
 pub mod phase;
+pub mod recover;
 mod sugar;
 
 // 显式 re-export（§10.1 规则 4：禁止 glob re-export）。
@@ -46,3 +47,4 @@ mod sugar;
 pub use expander::{expand_form, expand_program, ExpandCtxt, ExpandError};
 pub use macro_sys::{SyntaxRules, Transformer, TransformerKind};
 pub use phase::{ModuleEntry, ModuleRegistry, PhaseLevel};
+pub use recover::{expand_program_recover, DiagCollector, RecoveredExpansion, MAX_DIAGNOSTICS};

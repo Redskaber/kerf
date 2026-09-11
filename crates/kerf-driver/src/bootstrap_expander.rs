@@ -520,3 +520,59 @@ fn expand_internal(msg: &str) -> ExpandError {
         span: Span::dummy(),
     }
 }
+
+/// 形式级恢复展开（自举桥路径——TD-013 实现，批次 G / 38-e）。
+///
+/// 逐形式以单元素列表调用 `lexp-expand-program`（expander.krf 协议
+/// 零改动——调用粒度在桥侧切换）；单形式错误（展开错误值或 VM 内部
+/// 路径）→ 收集 + 跳过 + 继续；收集器满（128）提前终止。
+///
+/// 与 `kerf_expander::expand_program_recover`（种子路径）同构——
+/// 双 expander 恢复行为对齐（parity 纪律，r6/r14 同型先例）。
+pub fn expand_program_recover(
+    forms: &[Stx],
+    file_id: FileId,
+    table: &mut SymbolTable,
+) -> Result<kerf_expander::RecoveredExpansion, ExpandError> {
+    with_expander(|st| {
+        let mut out = kerf_expander::RecoveredExpansion::default();
+        for form in forms {
+            if out.diags.is_full() {
+                // 诊断风暴防护（r7 设计 §2）——剩余形式被丢弃即截断
+                out.diags.mark_truncated();
+                break;
+            }
+            // 阶段 1：单形式 → VM datum 节点 + 单元素输入列表
+            let node = stx_to_node(form, table, &mut st.heap);
+            let input = heap_list(&mut st.heap, vec![node]);
+            // 阶段 2：单元素列表调用（每次一个形式——展开器全局状态
+            // （KEYWORDS/SCOPE-NEXT/TRANSFORMERS）在调用间持续，与
+            // 整列表单次调用语义等价）
+            match call_entry(st, input) {
+                Ok(output) => {
+                    // 阶段 3：错误值检查（展开错误经 ('err ...) 值返回）
+                    if let Some(e) = as_expand_err(&output, &st.heap, file_id) {
+                        out.diags.push(e);
+                        continue;
+                    }
+                    // 成功：core 节点桥（单元素结果列表）
+                    let mut cur = output;
+                    while let Value::Pair(r) = cur {
+                        let (node_ref, rest) = st.heap.get_pair(r).ok_or_else(internal_heap_x)?;
+                        let node_val = unbox_slot(node_ref, &st.heap);
+                        out.core
+                            .push(core_from_value(&node_val, &st.heap, file_id, table)?);
+                        cur = unbox_slot(rest, &st.heap);
+                    }
+                }
+                Err(e) => {
+                    // VM 内部路径错误（expander.krf 缺陷/帧上限）——
+                    // 收集后继续（恢复语义）；内部错误重复出现属
+                    // expander.krf 级缺陷，由上限防护兜底
+                    out.diags.push(e);
+                }
+            }
+        }
+        Ok(out)
+    })
+}

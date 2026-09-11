@@ -342,6 +342,20 @@ fn front_from_forms(
         }
     };
 
+    front_from_core(core, table, sm, main_sym)
+}
+
+/// 前段核心段（expand 之后：R9 验证 → 相位簿记 → 字节码——
+/// [`check_source_recover`]（TD-013 恢复路径）与 [`front_from_forms`]
+/// 共享：部分产物（恢复跳过错误形式后的 core）与完整产物走同一
+/// 后续管线，行为单一实现（§12 最优>最小）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+fn front_from_core(
+    core: Vec<Rc<CoreExpr>>,
+    table: SymbolTable,
+    sm: SourceMap,
+    main_sym: Symbol,
+) -> Result<FrontOutput, DriverError> {
     // 2.5 R9 能力权限验证（r8——13 §3.1.3 条款 3「编译期错误」：
     // front 管线全路径生效 run/eval/check/compile；首个违规即阻断
     // fail-closed；E0006 家族与 E0005 静态检查分离）
@@ -502,6 +516,90 @@ pub fn check_source(source: &str, filename: &str) -> Result<CheckReport, DriverE
         cache_hit,
     })
 }
+
+/// 静态检查源文本（**恢复模式**——TD-013 实现，批次 G / 38-e）。
+///
+/// 与 [`check_source`]（单错误短路）并列：expand 阶段形式级恢复——
+/// 单形式展开失败 → 诊断收集 + 跳过 + 继续后续形式（r7 设计 §2）；
+/// 部分产物照常走 R9 验证 / 相位簿记 / 字节码 / 类型检查。诊断合并
+/// 面 = 展开诊断（E0002）+ 类型诊断（E0005），按 `(file_id, start,
+/// end)` 排序——输出次序与源码位置对齐（与 `check_program` 同口径）。
+///
+/// **短路边界**：read 错误（词法级）与 R9 能力违规（E0006 fail-closed，
+/// r8 裁定「首个违规即阻断」）仍以 `DriverError` 返回——恢复面仅覆盖
+/// expand 阶段错误（r7 设计 §5 消费面表格的 Read/Expand/Compile 中
+/// Expand 段；compile 错误在部分产物上属全程序性，短路）。
+///
+/// **缓存裁定**：不走 [`compile_front_cached`]——部分产物入缓存会污染
+/// 正常路径的完整产物命中（缓存键 = 源内容寻址，无法区分恢复模式）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport, DriverError> {
+    // 1. Reader（自举——错误短路：词法级不可形式级恢复）
+    let mut sm = SourceMap::new();
+    let file_id = sm.add_file(filename, source);
+    let mut table = SymbolTable::new();
+    let main_sym = table.intern("main");
+    let forms = crate::bootstrap::read_source(source, file_id, &mut table)
+        .map_err(|e| DriverError::from_read(&e, &sm))?;
+    // 1.5 prelude 注入（与 front_from_forms 同序：read 后、expand 前）
+    let forms = resolve_prelude_imports(forms, &mut table, &mut sm)?;
+    // 2. 恢复展开（自举桥——逐形式；with_expander 加载失败仍致命 Err）
+    let recovered = crate::bootstrap_expander::expand_program_recover(&forms, file_id, &mut table)
+        .map_err(|e| DriverError::from_expand(&e, &sm))?;
+    let expand_count = recovered.diags.len();
+    let core = recovered.core;
+    // 3. 部分产物 → 后续管线（R9 fail-closed + 簿记 + 字节码——共享
+    // front_from_core：短路边界如上文档）
+    let front = front_from_core(core, table, sm, main_sym)?;
+    // 4. 类型检查（部分产物）+ 诊断合并 + 排序
+    let io_req = IoRequirements::from_core(&front.core);
+    let mut table = front.table;
+    let sigs = builtin_sigs(&mut table);
+    let mut diagnostics: Vec<Diagnostic> = recovered
+        .diags
+        .into_sorted()
+        .into_iter()
+        .map(|e| Diagnostic::error(Some(DiagnosticCode(2)), e.message, e.span))
+        .collect();
+    let mut type_diags = kerf_compiler::check_program(&front.core, &sigs, &table);
+    diagnostics.append(&mut type_diags);
+    diagnostics.sort_by(|a, b| {
+        a.primary_span
+            .file_id
+            .cmp(&b.primary_span.file_id)
+            .then(a.primary_span.start.cmp(&b.primary_span.start))
+            .then(a.primary_span.end.cmp(&b.primary_span.end))
+    });
+    let rendered = diagnostics
+        .iter()
+        .map(|d| render_diagnostic(d, &front.source_map))
+        .collect();
+    Ok(CheckReport {
+        proto_count: front.program.proto_count(),
+        const_count: front.program.consts.len(),
+        global_ref_count: front.program.global_refs.len(),
+        instruction_count: front.program.total_instructions(),
+        io_read: io_req.read,
+        io_write: io_req.write,
+        diagnostics,
+        rendered,
+        cache_hit: false, // 恢复路径不缓存（裁定见函数文档）
+    })
+    .map(|mut r| {
+        // 截断提示（r7 设计 §2：上限后附 warning 级汇总行——复用
+        // rendered 尾注，diagnostics 数量以收集器为准不重复入列）
+        if expand_count >= EXPAND_DIAG_CAP {
+            r.rendered.push(format!(
+                "note: 展开诊断达到上限 {}（截断——诊断风暴防护）",
+                EXPAND_DIAG_CAP
+            ));
+        }
+        r
+    })
+}
+
+/// 展开诊断上限（kerf-expander 常量直引——driver 侧零魔数）。
+const EXPAND_DIAG_CAP: usize = kerf_expander::MAX_DIAGNOSTICS;
 
 /// 编译源文本（全管线，不执行）。
 ///

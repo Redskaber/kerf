@@ -43,9 +43,9 @@ pub use cache::{
 };
 pub use capability::{IoGrant, IoRequirements, StdCapabilityIO};
 pub use driver::{
-    check_source, compile_source, dump_stx, dump_tokens, eval_source, run_source,
-    run_source_rendered, test_source, CheckReport, CompileOutput, DriverError, RunOutcome, Stage,
-    TestCaseOutcome, TestReport,
+    check_source, check_source_recover, compile_source, dump_stx, dump_tokens, eval_source,
+    run_source, run_source_rendered, test_source, CheckReport, CompileOutput, DriverError,
+    RunOutcome, Stage, TestCaseOutcome, TestReport,
 };
 pub use effects::{
     handle_escape, perform_escape, InternalEffectSystem, ValueEffect, ValueEffectFamily,

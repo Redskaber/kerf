@@ -1,3 +1,43 @@
+## v0.4.0-r17（2026-09-11）——批次 G：后端 / FFI / 类型三主线（QBE 后端 PoC fib 本地码端到端 + FFI 所有权模型 + HM 设计轮 + TD-013 恢复实现，605 全绿）
+
+### 交付一：G1 QBE 后端 PoC（首个非 VM 后端——§21.3 条件 3 兑现）
+
+- **QBE 1.3 工具链落位**（§3.1 链：scripts/ → tools/ → docs/tools/ → 安装 → 记录）：`tools/qbe/bin/qbe`（670,544 B，amd64_sysv 六目标）+ 源码归档（可重建）+ `scripts/qbe/setup.sh` + `docs/tools/qbe/setup.md`（含三段冒烟实录 + 语法勘误两条：函数签名必带返回类型 / 比较指令宽度后缀 csltl）
+- **kerf-backend 新 crate**（第 10 成员——后端层独立，§11）：`codegen.rs`（**契约迁移**：CodegenBackend/AnnotatedANF 自 kerf-driver/reserved 迁入正式家——签名零变化（原则 27），AnnotatedANF 从指纹占位**实化**为函数定义集 IR，fingerprint 字段保留；reserved/codegen 改薄 re-export，旧路径继续可用——迁移兼容锁存测试实证）+ `anf.rs`（块式 ANF IR + CoreExpr lowering：phi 值合并 / 跳转回填（§19.3 不变式 2 同型）/ 形式级两遍扫描 / arity 静态校验）+ `qbe.rs`（IL 生成 + QbeBackend 首个做实实现——QBE 内建 pass 声明 ssa/gvn/gcm/rega）+ `aot.rs`（外部进程编排：qbe → 汇编 → cc → 可执行 → 运行；查找链 KERF_QBE → 安装布局 → 编译期锚；纯函数注入式 env——并行测试零竞态）
+- **CLI 13 子命令**（11 → +2）：`kerf anf <file>`（IR 摘要 dump）/ `kerf native <file>`（AOT 编译 + 运行——产物三路径打印 + exit code 口径）
+- **端到端实测**：`(fib 12)` ⇒ **本地码 exit 144**（= VM 路径 ⇒ 144 双路径一致）；IL 结构断言（csltl/call $fib/sub/add/jnz/export main 全命中）；值上下文 if 经 phi 合并（`(- (if (< 1 2) 10 20) 5)` ⇒ 5）；嵌套 if 组合（classify ± / 111/144）——**PoC 边界 B1 登记（TD-024）**：整数域原语十二项 + 递归调用；闭包/Float/Str/Pair/set!/module/print·IO/函数值一等均显式边界外错误（非静默降级）
+- **测试 +40 集成**（qbe_backend_tests：端到端 6 + 结构 4 + 一致性采样 6 + 负例 10 + 契约 2）+ **+9 单元**（backend crate）——585 中间基线全绿
+
+### 交付二：G3 FFI 所有权模型定义（§21.3 阻塞项解除——子代理 ARCH-A/ALG-A 交付）
+
+- `stage-2/ffi-ownership-model.md`（216 行）：三原语责任矩阵 3/3（CallExternal 借用窗口 + CInt/CPointer/Opaque 归属三分法 / AllocExternal 线性所有权 / FreeExternal 消费释放）+ **pin/unpin 形式化**（Φ 计数簿扩展 σ=(H,R,Φ) + P1/P2/U1/U2 归约 + 引理 F-PIN + mark_all 起点快照并入——主循环零改动）+ **线性令牌语义**（可重复借用传递 + 一次性消费全局生效；失效 E9 诊断而非 UB）+ ExternalPointer 状态机（非法迁移 7 条 E9-E11）+ 边界 case 13 个全判定 + 决策记录 19 条（新裁定 12 项显式标注）+ 实现路线（G1 PoC 整数路径不触及 pin；批次 I write_stdout 借用路径做实）+ Stage 3 锚点 6 项
+- 回写义务 4 处登记（06 §3 E9-E11 / 05 §3.1 Foreign / 13 §3.3.4 行为规格引用 / TD-010）——落地轮执行
+
+### 交付三：G2 HM 推断设计轮（子代理 ALG-A/ARCH-A 交付——GO 有条件）
+
+- `stage-2/hm-inference-design.md`（303 行）：R1-R8 逐条行号锚盘点（8 规则 + 8 架构事实）+ 11 项核心裁定（**约束三段式算法**（否决 W/J——TD-013 多错误协同 + TD-022 栈安全）/ 值限制 OCaml 式 / set! join / letrec fresh 预置双形状特判 / occurs check / TcType→HM 十一构造子映射 / 双点泛化 / 诊断集成 / 三阶段演进轨道）+ 16 参照对照 6 行 + 冲突 7 项（P0×3：letrec nil 预绑定 / 保守契约重定义 / 数值塔格合一偏差）+ 风险 P0×3/P1×3/P2×3/P3×1 全附缓解
+- **裁定**：GO（有条件）——PoC 排批次 H 新增 MUV（H4），默认期早于 I1 自举迁移（推断器本体 kerf 化前置）
+
+### 交付四：TD-013 多错误收集与恢复展开实现（P2 清偿——r7 设计验收 5 条全过）
+
+- **种子路径**（kerf-expander `recover.rs`）：DiagCollector（push / is_full(128) / mark_truncated / into_sorted——(file_id,start,end) 稳定排序）+ expand_program_recover（形式级恢复：错形式收集跳过继续；满即显式截断 + 提前终止——38-e 勘误：break 路径须显式置位）
+- **自举桥路径**（bootstrap_expander `expand_program_recover`）：逐形式单元素列表调用（expander.krf 协议零改动——调用粒度桥侧切换）；双路径同构测试（诊断数/产物数/错误消息族一致——parity 纪律）
+- **driver 消费面**：`check_source_recover`（front_from_core 抽段重构——R9 fail-closed + 簿记 + 字节码共享段单一实现）——E0002（展开）+ E0005（类型）**全量合并报告** + 位置序 + 截断尾注；**CLI `kerf check` 切换恢复模式**（单错误短路保留库 API check_source——run/eval 执行路径不变，r7 设计 §5）
+- **实测**：`(define x 1) () (define y 2) y` → 1×E0002 + **y 完整进编译产物**（指令数 = 无错对照一致——r7 验收 1 兑现）+ 混合诊断 E0002/E0005 同报位置序 + >128 截断提示 + read/E0006 短路边界维持 + **16 集成测试全过**
+
+### 交付五：质量口径与收尾
+
+- **§3.2 六命令实跑全绿**（clean 起步：build --release 11.52s 零告警 / check 0/0 / fmt 0 diff / clippy -D 0 / **test --release --workspace 605:0:0**（28s））；双审计集 EXIT 0；CLI 冒烟：VM run fib ⇒ 144 / **native fib exit 144** / test 2/2
+- 测试增量对账（553 → **605**，净 +52）：集成 +40（qbe 24 + 恢复 16）+ 单元 +12（backend 9 新 crate + expander +4 recover - reserved codegen 2 迁移 + 兼容锚 1）
+- 文档同步：matrix r17 对账 + 登记册（TD-013 **resolved** + TD-024 新增 B1 边界）+ pipeline-test-coverage Stage 2 节 + v0.5-roadmap 批次 G 行 + stage-2/plan Status 更新 + lang-design 13 §3.3.7 迁移注记 + 10-toolchain CLI 13 子命令
+- r17 tar.gz（§19.4 整目录含 tools/qbe + 包内自举验证 605:0:0 + CLI 一致）+ web 同步 + E2E + git commit
+
+### 下一步（批次 H：语义演进评估轮）
+
+H1 8 原语迁移五项评估（§13.2 + 委员会投票）∥ H2 TCO 决策 + TD-007 Rc 化（10_000 口径）+ TD-017/TD-022 裁定 ∥ H3 Effect 语言级设计 ∥ **H4 HM 推断 PoC（38-d 裁定新增——三阶段轨道第一段）**；I 批次（编译器本体 kerf ~80% 迁移 + 两次一致 + stdlib 完整化 + TD-008/023）。
+
+---
+
 ## v0.3.0-r16（2026-09-11）——批次 F：Stage 1 深审收尾环（§14 阶段末全协议 + §14.6 阶段间验证 GO + TD-023 登记 + lang-design v6.2）
 
 ### 交付一：§14.5 D1-D8 深度审查（deep-review-round1.md + 委员会投票 GO-WITH-CONDITIONS）
