@@ -108,6 +108,10 @@ pub struct CompileCtxt {
     global_index: HashMap<Symbol, u32>,
     /// 跳转回填占位队列（§19.3 不变式 2：完成时必须清空）。
     pending_patches: Vec<(usize, usize)>, // (proto_idx, pc)
+    /// trampoline 哨兵原型索引（r25/42-f——程序级惰性单例；None = 未
+    /// 生成。首个 Handle 时创建：code=[Ret]，与 krf 侧 CC-TRAMPOLINE
+    /// 同序镜像——parity 确定性）。
+    trampoline: Option<u32>,
 }
 
 impl CompileCtxt {
@@ -120,6 +124,7 @@ impl CompileCtxt {
             global_refs: Vec::new(),
             global_index: HashMap::new(),
             pending_patches: Vec::new(),
+            trampoline: None,
         }
     }
 
@@ -437,6 +442,36 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), C
             ctx.emit(Op::PushNil, *span);
             Ok(())
         }
+        CoreExpr::Perform { effect, span } => {
+            // r25/42-f（R10-perform）：效应值先求值（求值顺序契约 App
+            // 序不变——效应值表达式求值后入栈）→ PERFORM（解构 (tag .
+            // payload) + 扫描分派 + continuation 快照 + 栈截回水位）。
+            // 恒非尾位：控制转移后未恢复则本表达式永不完成（body 剩余
+            // 部分被 dispatch 丢弃——resume 后值由恢复点注入）
+            compile_expr(ctx, effect, false)?;
+            ctx.emit(Op::Perform, *span);
+            Ok(())
+        }
+        CoreExpr::Handle {
+            tag,
+            payload_var,
+            payload_scopes,
+            resume_var,
+            resume_scopes,
+            handler_body,
+            body,
+            span,
+        } => compile_handle(
+            ctx,
+            tag,
+            payload_var,
+            payload_scopes,
+            resume_var,
+            resume_scopes,
+            handler_body,
+            body,
+            *span,
+        ),
     }
 }
 
@@ -575,6 +610,162 @@ fn compile_lambda(
         span,
     );
     Ok(())
+}
+
+/// Handle 表达式编译（r25/42-f——effect-language-design D6 帧编排，
+/// 三原型方案）。
+///
+/// 原型（确定性序：T 惰性 → H → B）：
+/// - **T**（trampoline，程序级惰性单例）：`code = [Ret]` 哨兵原型——
+///   handler 帧的执行原型，body RET 经它弹 handler 帧回到 handle
+///   后续（R11-return）；
+/// - **H**（handler 原型）：params = [payload_var, resume_var]，体 =
+///   handler_body（尾部 Ret）——dispatch 变形时挂入 H 执行帧；
+/// - **B**（body thunk 原型）：params = []，体 = handle body（尾部
+///   Ret；体尾位穿线 = lambda 体语义——body 内尾调用拆 thunk 帧
+///   穿透 handler 帧，D8）。
+///
+/// 发射：`InstallHandler { handler: H, body: B, tag: k, trampoline: T }`
+/// （VM 从当前帧取两原型捕获 → 压 handler 帧 + thunk 帧 → 转移执行
+/// body——编译器不发射 Closure/Call：帧编排由指令原子完成）。捕获
+/// 源描述符随原型冻结（与 Lambda 同机制）。 tag 入常量池（SymLit——
+/// 符号字面量同型）。
+#[allow(clippy::too_many_arguments)]
+fn compile_handle(
+    ctx: &mut CompileCtxt,
+    tag: &Rc<str>,
+    payload_var: &Symbol,
+    payload_scopes: &ScopeSet,
+    resume_var: &Symbol,
+    resume_scopes: &ScopeSet,
+    handler_body: &Rc<CoreExpr>,
+    body: &Rc<CoreExpr>,
+    span: Span,
+) -> Result<(), CompileError> {
+    // ① trampoline 原型（程序级惰性单例——code=[Ret]；span 恒 dummy
+    //    与 krf 侧 (0 0 0) 三元组对齐——parity 判据含 debug_spans）
+    let tp = ensure_trampoline(ctx);
+    // ② H 原型（handler：params = [payload_var, resume_var]）
+    let hp = compile_inner_proto(
+        ctx,
+        &[*payload_var, *resume_var],
+        &[payload_scopes.clone(), resume_scopes.clone()],
+        handler_body,
+    )?;
+    // ③ B 原型（body thunk：params = []）
+    let bp = compile_inner_proto(ctx, &[], &[], body)?;
+    // ④ tag 常量（SymLit——符号字面量同型，按内容 intern）
+    let tk = ctx.intern_const(BcConst::SymLit(tag.clone()));
+    // ⑤ 原子帧编排指令（捕获由 VM 从当前帧按两原型描述符取）
+    ctx.emit(
+        Op::InstallHandler {
+            handler: hp,
+            body: bp,
+            tag: tk,
+            trampoline: tp,
+        },
+        span,
+    );
+    Ok(())
+}
+
+/// trampoline 惰性生成（程序级单例——首个 Handle 时创建；确定性：
+/// 同源程序原型序恒一致）。`debug_spans` 恒 `[dummy]`（哨兵帧的
+/// RET 无源位置——与 krf 侧 (0 0 0) 对齐）。
+fn ensure_trampoline(ctx: &mut CompileCtxt) -> u32 {
+    if let Some(idx) = ctx.trampoline {
+        return idx;
+    }
+    let idx = ctx.protos.len() as u32;
+    ctx.protos.push(BcProto {
+        name: Symbol(u32::MAX - 2),
+        params: Vec::new(),
+        n_locals: 0,
+        capture_names: Vec::new(),
+        capture_sources: Vec::new(),
+        code: vec![Op::Ret],
+        debug_spans: vec![Span::dummy()],
+        free_vars: Vec::new(),
+    });
+    ctx.trampoline = Some(idx);
+    idx
+}
+
+/// 内层原型构造（`compile_lambda` 的原型段——无 CLOSURE 发射；
+/// r25/42-f 供 Handle 的 H/B 原型复用：自由变量分析 + 捕获解析 +
+/// 新原型 + 作用域帧 + 体编译（尾位 = true——lambda 体语义）+ 尾部
+/// RET + 弹帧还原窗口）。
+fn compile_inner_proto(
+    ctx: &mut CompileCtxt,
+    params: &[Symbol],
+    param_scopes: &[ScopeSet],
+    body: &Rc<CoreExpr>,
+) -> Result<u32, CompileError> {
+    let mut bound: Vec<Symbol> = params.to_vec();
+    let mut free: Vec<(Symbol, ScopeSet)> = Vec::new();
+    body.free_var_occurrences(&mut bound, &mut free);
+
+    let mut capture_names: Vec<Symbol> = Vec::new();
+    let mut capture_bindings: Vec<Binding> = Vec::new();
+    let mut capture_srcs: Vec<CaptureSource> = Vec::new();
+    let mut free_vars_all: Vec<Symbol> = Vec::new();
+    for (f, f_scopes) in &free {
+        free_vars_all.push(*f);
+        let r = ctx.resolve_var(*f, f_scopes);
+        match r.source {
+            VarSource::Local(i) => {
+                capture_names.push(*f);
+                capture_bindings.push(Binding {
+                    name: *f,
+                    scopes: r.binder_scopes,
+                });
+                capture_srcs.push(CaptureSource::Local(i));
+            }
+            VarSource::Captured(i) => {
+                capture_names.push(*f);
+                capture_bindings.push(Binding {
+                    name: *f,
+                    scopes: r.binder_scopes,
+                });
+                capture_srcs.push(CaptureSource::Captured(i));
+            }
+            VarSource::Global => {} // 原型内按全局引用
+        }
+    }
+
+    let proto_idx = ctx.protos.len() as u32;
+    let proto_name = params.first().copied().unwrap_or(Symbol(u32::MAX - 2));
+    ctx.protos.push(BcProto {
+        name: proto_name,
+        params: params.to_vec(),
+        n_locals: params.len() as u32,
+        capture_names: capture_names.clone(),
+        capture_sources: capture_srcs,
+        code: vec![],
+        debug_spans: vec![],
+        free_vars: free_vars_all,
+    });
+
+    let local_bindings: Vec<Binding> = params
+        .iter()
+        .enumerate()
+        .map(|(i, n)| Binding {
+            name: *n,
+            scopes: param_scopes.get(i).cloned().unwrap_or_default(),
+        })
+        .collect();
+    ctx.scopes.push(ScopeFrame {
+        locals: local_bindings,
+        captures: capture_bindings,
+    });
+
+    let enclosing = ctx.current;
+    ctx.current = proto_idx as usize;
+    compile_expr(ctx, body, true)?;
+    ctx.emit(Op::Ret, body.span());
+    ctx.scopes.pop();
+    ctx.current = enclosing;
+    Ok(proto_idx)
 }
 
 #[cfg(test)]

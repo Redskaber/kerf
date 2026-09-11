@@ -71,11 +71,14 @@
 
 ; ===== 列表与节点访问 =====
 
+(define (first x) (car x))
 (define (second x) (car (cdr x)))
 (define (third x) (car (cdr (cdr x))))
 (define (fourth x) (car (cdr (cdr (cdr x)))))
 (define (fifth x) (car (cdr (cdr (cdr (cdr x))))))
 (define (sixth x) (car (cdr (cdr (cdr (cdr (cdr x)))))))
+; r25/42-f：handle 节点第 7 字段（body）
+(define (seventh x) (car (cdr (cdr (cdr (cdr (cdr (cdr x))))))))
 
 ; 节点固定字段：tag s e exp scopes；fields = 其后内容（exp = 展开代次，
 ; 镜像 Span.expansion_id——仅参与 instantiate 的 Span 并集守卫：代次
@@ -193,7 +196,8 @@
 (define KEYWORDS
   (list "lambda" "if" "set!" "define" "begin" "module" "import" "export"
         "quote" "let" "letrec" "let*" "cond" "else" "and" "or" "when"
-        "while" "unless" "define-syntax" "syntax-rules" "require"))
+        "while" "unless" "define-syntax" "syntax-rules" "require"
+        "perform" "handle" "resume"))
 
 (define SUGAR-HEADS
   (list "let" "letrec" "let*" "cond" "and" "or" "when" "unless" "while"))
@@ -1032,6 +1036,11 @@
            (let ((v (datum->value (second items))))
              (if (err? v) v (list 'lit s e x v)))))
       ((eq? kw-name "require") (expand-require node))
+      ((eq? kw-name "perform") (expand-perform node))
+      ((eq? kw-name "handle") (expand-handle node))
+      ; D4（effect-language-design）：resume 非独立原语——展开期脱糖
+      ; 为 (κ v) App（continuation 值的调用形态，复用调用机制）
+      ((eq? kw-name "resume") (expand-resume node))
       ((or (eq? kw-name "import") (eq? kw-name "export"))
        (xperr "import/export 只能出现在 module 形式内部" s e))
       ((or (eq? kw-name "let") (eq? kw-name "letrec") (eq? kw-name "let*")
@@ -1385,6 +1394,87 @@
                       (require-caps (cdr cap-nodes) acc)
                       (require-caps (cdr cap-nodes)
                                     (append acc (list name))))))))))
+
+; ===== 效应三形式（r25/42-f——镜像 expand_perform/handle/resume）=====
+
+; (perform 效应值)——R10：效应值先求值（运行时须为 (tag . payload) 点对）
+(define (expand-perform node)
+  (let ((items (node-fields node))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
+    (if (not (= (length items) 2))
+        (xperr "perform 形式：(perform 效应值)——效应值须求值为 (tag . payload) 点对" s e)
+        (let ((f (expand-form (second items))))
+          (if (err? f)
+              f
+              (list 'perform s e x f))))))
+
+; (handle 标签 ((载荷变量 恢复变量) 结果表达式) 体)——R11 浅处理单子句；
+; fresh scope 深注入子句（绑定器 + handler 体——body 不注入：载荷/恢复
+; 变量作用域仅覆盖处理子句；TD-004 口径与 lambda 同型）
+(define (expand-handle node)
+  (let ((items (node-fields node))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
+    (if (not (= (length items) 4))
+        (xperr "handle 形式：(handle 标签 ((载荷变量 恢复变量) 结果表达式) 体)" s e)
+        (let ((tag-node (second items)))
+          (if (not (eq? (node-tag tag-node) 'sym))
+              (xperr "handle 效应标签必须是符号" (node-s tag-node) (node-e tag-node))
+              (let ((fresh (fresh-scope)))
+                (let ((clause (inject-scope (third items) fresh)))
+                  (let ((clause-fields (node-fields clause)))
+                    (if (not (and (= (length clause-fields) 2)
+                                  (pair? clause-fields)))
+                        (xperr "handle 处理子句必须是 ((载荷变量 恢复变量) 结果表达式) 形态"
+                               (node-s (third items)) (node-e (third items)))
+                        (let ((binders (first clause-fields)))
+                          (if (not (eq? (node-tag binders) 'list))
+                              (xperr "handle 处理子句变量表必须是 (载荷变量 恢复变量) 双符号列表"
+                                     (node-s binders) (node-e binders))
+                              (let ((bfields (node-fields binders)))
+                                (if (not (= (length bfields) 2))
+                                    (xperr "handle 处理子句变量表必须是 (载荷变量 恢复变量) 双符号列表"
+                                           (node-s binders) (node-e binders))
+                                    (let ((p (first bfields))
+                                          (r (second bfields)))
+                                      (if (or (not (eq? (node-tag p) 'sym))
+                                              (not (eq? (node-tag r) 'sym)))
+                                          (xperr "handle 载荷/恢复变量必须是符号"
+                                                 (node-s (if (eq? (node-tag p) 'sym) r p))
+                                                 (node-e (if (eq? (node-tag p) 'sym) r p)))
+                                          (if (eq? (sym-name p) (sym-name r))
+                                              (xperr "handle 载荷变量与恢复变量重名（须为不同名）"
+                                                     (node-s r) (node-e r))
+                                              (let ((h (expand-form (second clause-fields))))
+                                                (if (err? h)
+                                                    h
+                                                    (let ((b (expand-form (fourth items))))
+                                                      (if (err? b)
+                                                          b
+                                                          (list 'handle s e x
+                                                                (sym-name tag-node)
+                                                                (sym-name p)
+                                                                (node-scopes p)
+                                                                (sym-name r)
+                                                                (node-scopes r)
+                                                                h b)))))))))))))))))))))
+
+; (resume κ v) → (κ v) App 节点（D4 脱糖——continuation 值的调用形态，
+; 与普通调用同一路径分派；编译/运行时零特设路径）
+(define (expand-resume node)
+  (let ((items (node-fields node))
+        (s (node-s node)) (e (node-e node))
+        (x (node-exp node)))
+    (if (not (= (length items) 3))
+        (xperr "resume 形式：(resume 续体 值)——续体恢复恰一实参" s e)
+        (let ((f (expand-form (second items))))
+          (if (err? f)
+              f
+              (let ((a (expand-form (third items))))
+                (if (err? a)
+                    a
+                    (cons 'app (cons s (cons e (cons x (cons f (list a)))))))))))))
 
 ; ===== 展开主控（trampoline + 分派——镜像 expand_form/expand_list）=====
 

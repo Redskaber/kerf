@@ -348,6 +348,41 @@ fn core_to_node(e: &CoreExpr, table: &SymbolTable, heap: &mut Heap) -> Value {
             v.extend(caps.iter().map(|c| Value::Str(Rc::from(c.as_str()))));
             v
         }
+        // r25/42-f 效应两臂（节点协议镜像 Rust 编译臂消费序）：
+        // ('perform s e x 效应节点)——效应值子树先求值序由编译臂处理
+        CoreExpr::Perform { effect, .. } => {
+            let f = core_to_node(effect, table, heap);
+            vec![tag("perform"), s, en, exp, f]
+        }
+        // ('handle s e x tagstr 载荷名 载荷作用域 恢复名 恢复作用域
+        //   handler节点 body节点)——两绑定器作用域集与 Lambda.param_scopes
+        // 同型（int 列表）
+        CoreExpr::Handle {
+            tag: htag,
+            payload_var,
+            payload_scopes,
+            resume_var,
+            resume_scopes,
+            handler_body,
+            body,
+            ..
+        } => {
+            let h = core_to_node(handler_body, table, heap);
+            let b = core_to_node(body, table, heap);
+            vec![
+                tag("handle"),
+                s,
+                en,
+                exp,
+                Value::Str(htag.clone()),
+                Value::Str(Rc::from(table.name(*payload_var))),
+                scope_list_value(payload_scopes, heap),
+                Value::Str(Rc::from(table.name(*resume_var))),
+                scope_list_value(resume_scopes, heap),
+                h,
+                b,
+            ]
+        }
     };
     heap_list(heap, items)
 }
@@ -744,6 +779,21 @@ fn op_from_value(v: &Value, heap: &Heap) -> Result<Op, CompileError> {
         40 => {
             need(0)?;
             Op::Halt
+        }
+        // r25/42-f 效应两码（opcode.rs 声明序 41/42——compiler.krf
+        // OP-* 常量同表）
+        41 => {
+            need(4)?;
+            Op::InstallHandler {
+                handler: operands[0] as u32,
+                body: operands[1] as u32,
+                tag: operands[2] as u32,
+                trampoline: operands[3] as u32,
+            }
+        }
+        42 => {
+            need(0)?;
+            Op::Perform
         }
         other => {
             return Err(internal_x(&format!("未知操作码 {}", other)));

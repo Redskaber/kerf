@@ -1,3 +1,28 @@
+## v0.4.0-r25（2026-09-11）——批次 I 执行：I 后段双主题（Effect M1-M5 语言级效应全落地 + 能力管线泛化 M2，706 全绿）
+
+### 交付一：Effect M1-M5（42-f 主体——effect-language-design v1.1 全裁定兑现）
+
+- **原语集 9→11**：`perform`/`handle` 两核心形式入 CoreExpr（`resume` 非原语——展开期脱糖为 `(κ v)` App，D4）；Keyword +3；fresh scope 深注入 handle 子句（绑定器 + handler 体——TD-004 口径）；核心形式冻结证明 12 实例（architecture_audit）；自举 expander.krf 三展开臂 + 桥两向（parity 全链）
+- **VM ext1 具体化（D6）**：`FrameExt.ext1 = Option<Rc<HandlerFrame>>`（分派键 tag/handler 原型/捕获单元/数据栈水位——原则 27 预留槽位兑现）；`INSTALL_HANDLER{handler, body, tag, trampoline}`（41）+ `PERFORM`（42）两指令（43 项三方冻结——opcode/测试/04 文档）；**三原型帧编排**（T trampoline 惰性单例 code=[Ret] / H handler 原型 params=[payload, resume] / B body thunk 体= lambda 体语义尾位穿线）——编译器零 CLOSURE/CALL 发射（帧编排原子化）
+- **continuation 四要素**：捕获帧链（**含 handler 帧本身**——快照 ext1 清除保 D2 浅处理）+ 数据栈快照（VM flat 栈整栈还原——设计三要素之外的实现必要补充）+ 恢复点 + 线性唯一性（consumed Cell 跨帧共享——E0008 含首恢位置追踪）；resume 控制转移语义（Call/TailCall 的 Continuation 臂——当前 H 执行帧拆除）
+- **诊断族 E0007-E0009（D9/M4）**：messages.rs 单源（TD-018 纪律）——E0007 逃逸（tag 名经符号值文本直渲染）/ E0008 二次恢复（首恢位置）/ E0009 元数（非 continuation 值面归 E0004 通用族——v1.1 执行注记口径）；driver `from_vm` 码映射（None→E0004）
+- **GC 六来源（M5）**：`Value::Continuation` 根集递归（帧链 locals/captures + 数据栈快照——visited 防嵌套环）+ `GcCell` has_heap 判据扩展 + ForeignBox 装箱/解箱（往返恒等——TD-010 协议复用 + 专用追踪器）
+- **M3 双路径新口径**：resume 一致性 T1 承载面 = 种子/生产双编译链（42-d eval 退役终态）——双路径 8 case；eval 域（树走）经 `EvalError.effect` 逃逸通道承载 dispatch（D7）+ resume 哨兵域限（显式报错——`call_closure` 拒绝 Eval 闭包同型先例）
+- **native 显式拒绝（B1 同型）**：anf/qbe 路径 perform/handle 报 PoC 边界错（效应语义由 VM 承载——Stage 3 后端演进评估项）
+- **回写 W1/W3/W4/W5**：01-core-forms §7.3（原语集 9→11 状态翻转 + §8.3 映射行）/ 18-terminology §6（诊断码位登记表 E0001-E0012 全族总账）/ 06-operational-semantics（R10/R11 归约规则 + continuation 值域 + 根集六来源）/ 04-bytecode-vm（43 项九组 + ext1 具体化 + INSTALL_HANDLER/PERFORM 语义）+ effect-language-design v1.1（九条执行注记——数据栈快照/三原型/快照含 handler 帧/E0009 口径/M3 新口径等）
+- **测试**：effect_tests 17（设计锚正 6 + M3 双路径 8 + eval 域 3 + 负例 7 + GC 存活 2）+ bootstrap_compiler_tests 门 A 效应组 3（parity 基础/trampoline 共享/行为面）——**706:0:0 零回归 + 净 22**；效应 GC 压力语料 `examples/usage/effect_stress.krf`（万级分配下挂起链存活 ⇒ 120）
+
+### 交付二：能力管线泛化 M2（capability-model-design §7 M2 别名兼容路径）
+
+- **`IoFamily` 形状标记**：`IoGrant` = `Grant<io 族>` 的 trait 形态承载（`CapabilityModelFamily` 关联类型别名兼容语义——冻结路径零删改，原则 27）；归位证明测试（族形状 + Token 关联类型等式 + 授权面回读）
+- **门控表 net 增行评估**：依赖条件①效应系统成熟（12 §2.4.5）已就位（本批 Effect M1-M5）+ ②手术面三点加法（D11）；评估结论**维持不增行**——net 语音面属 Stage 2 末窗口（I3 门审后；零破坏纪律：既有门控表/授权管线/require 语法零改动）；`net_gate_rows_unchanged_in_42f` 机器锚
+- **D12 同轮协调**：driver 组合根双接触面（Effect ext1 激活 + M2 族形状归位）经 worklog 交叉引用锚定（capability-model-design v1.1）
+
+### 交付三：对账与收尾（46-z）
+
+- 文档同步：matrix v0.1.0-r25（684→706；effect_tests 17 行 + bootstrap 29→32 + 集成 header 499）+ plan.md Status（42-f 交付——I 后段闭环）+ 18 §6 码位登记 + 04/06/01 lang-design 回写 + 两设计文档 v1.1 + compiler.krf 头部契约（节点协议 + OP 表 0..=42）+ examples/README（effect_stress 行）+ TD 登记册（TD-024 效应边界注记）
+- **§3.2 六命令全绿**（clean 起步终验）+ r25 tar.gz（§19.4）包内自举验证 + web 同步（kerf-data r25）+ git 入账 + rec 树压实
+
 ## v0.4.0-r24（2026-09-11）——批次 I 执行：I2 stdlib/GC/TD 批（五债清偿 + 谓词/foldr 补齐 + TD-023 根扫描对症，684 全绿）
 
 ### 交付一：TD 五项清偿（42-e 主体）

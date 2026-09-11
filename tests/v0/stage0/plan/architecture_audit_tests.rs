@@ -20,6 +20,7 @@ use kerf_core::{Capability, CoreExpr, LiteralValue};
 use kerf_driver::compile_source;
 use kerf_expander::{expand_program, ExpandCtxt};
 use kerf_reader::read_source;
+use kerf_syntax::ScopeSet;
 use kerf_syntax::{Stx, Symbol, SymbolTable};
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,31 @@ fn core_expr_variant_set_frozen_exhaustive() {
             caps: vec![Capability::IoRead],
             span: sp,
         },
+        // r25/42-f：效应两原语（原语集 9→11——effect-language-design
+        // §2.1/W1 回写；与 Perform/Handle 两变体同步冻结）
+        CoreExpr::Perform {
+            effect: Rc::new(CoreExpr::Literal {
+                value: LiteralValue::Int(1),
+                span: sp,
+            }),
+            span: sp,
+        },
+        CoreExpr::Handle {
+            tag: Rc::from("tag"),
+            payload_var: Symbol(1),
+            payload_scopes: ScopeSet::new(),
+            resume_var: Symbol(2),
+            resume_scopes: ScopeSet::new(),
+            handler_body: Rc::new(CoreExpr::Literal {
+                value: LiteralValue::Nil,
+                span: sp,
+            }),
+            body: Rc::new(CoreExpr::Literal {
+                value: LiteralValue::Nil,
+                span: sp,
+            }),
+            span: sp,
+        },
     ];
 
     // 穷尽 match（编译期证明）：本 match 无通配臂——新增/删除/重命名变体
@@ -115,6 +141,8 @@ fn core_expr_variant_set_frozen_exhaustive() {
             CoreExpr::Begin { .. } => "begin",
             CoreExpr::Module { .. } => "module",
             CoreExpr::Require { .. } => "require",
+            CoreExpr::Perform { .. } => "perform",
+            CoreExpr::Handle { .. } => "handle",
         }
     };
     let names: Vec<&'static str> = instances.iter().map(prove_frozen).collect();
@@ -124,7 +152,11 @@ fn core_expr_variant_set_frozen_exhaustive() {
     sorted.sort_unstable();
     sorted.dedup();
     assert_eq!(sorted.len(), names.len(), "kind_name 全变体互异");
-    assert_eq!(names.len(), 10, "冻结变体集 = 9 原语 + Require 声明变体");
+    assert_eq!(
+        names.len(),
+        12,
+        "冻结变体集 = 11 原语 + Require 声明变体（r25/42-f 效应两原语入集）"
+    );
     for (e, n) in instances.iter().zip(&names) {
         assert_eq!(e.kind_name(), *n);
         // Span 独立携带：全变体可取且与构造值一致（元数据不依赖命名约定——

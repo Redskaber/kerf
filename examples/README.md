@@ -16,7 +16,9 @@
 | `macros.krf` | 卫生宏（省略号 / swap / 引入重命名） | `kerf run examples/usage/macros.krf` |
 | `higher_order.krf` | map/filter 高阶函数 | `kerf run examples/usage/higher_order.krf` |
 | `gc_stress.krf` | 10^6 量级分配的堆稳定性 | `kerf run examples/usage/gc_stress.krf` |
+| `gc_stress_nontail.krf` | 非尾形递归的 GC 帧根扫描（r24 基准） | `kerf run examples/usage/gc_stress_nontail.krf` |
 | `io.krf` | print / str-append 最小 I/O | `kerf run examples/usage/io.krf` |
+| `effect_stress.krf` | 效应 GC 压力（挂起 continuation 第六来源跨回收存活——r25/42-f M5） | `kerf run examples/usage/effect_stress.krf` |
 
 ## audit/ —— 阶段审查脚本（`*.rs`，cargo example 运行，历史归档）
 

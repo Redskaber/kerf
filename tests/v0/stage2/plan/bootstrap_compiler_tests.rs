@@ -703,3 +703,43 @@ fn gate_b_b1_programs_execute_as_bootstrap_chain() {
         kerf_vm::render_value(&expected.value, &expected.heap)
     );
 }
+
+// ---- r25/42-f 效应组：perform/handle 编译臂 parity（门 A 扩展——
+// 三原型帧编排 INSTALL_HANDLER/PERFORM 双路径逐字节一致 + trampoline
+// 惰性单例确定性 + resume 脱糖在展开段共享（App 通道——无需编译段
+// 特设）----
+
+#[test]
+fn parity_effect_perform_and_handle_basic() {
+    // 基础形态：H/B 原型 + trampoline + INSTALL_HANDLER + PERFORM
+    parity("(handle add ((p k) (resume k (+ p 10))) (+ 1 (perform (cons 'add 5))))");
+    // 嵌套 handle：两套三原型 + 两个 tag 常量
+    parity(
+        "(handle outer ((p k) (resume k p)) (handle inner ((q j) 42) (perform (cons 'outer 7))))",
+    );
+}
+
+#[test]
+fn parity_effect_trampoline_shared_and_capture() {
+    // 多个 handle 共享 trampoline（惰性单例——第二个 Handle 复用首个
+    // T 原型索引；确定性序验证）+ 捕获面（handler 体引用外围全局与
+    // B 体捕获外围变量）
+    parity(
+        "(define base 10) (+ (handle a ((p k) (resume k (+ p base))) (perform (cons 'a 1))) (handle b ((q j) (resume j q)) (perform (cons 'b 2))))",
+    );
+    // B thunk 捕获外围局部（闭包捕获经 GcCell 槽）+ H 原型捕获
+    parity(
+        "(define (f x) (handle t ((p k) (resume k (+ p x))) (+ x (perform (cons 't x))))) (f 5)",
+    );
+}
+
+#[test]
+fn behavior_effect_resume_roundtrip() {
+    // 行为面：自举编译段产物经 VM 执行——挂起/分派/恢复全链
+    //（生产管线对照——编译段是唯一被测变量）
+    behavior("(handle add ((p k) (resume k (+ p 10))) (+ 1 (perform (cons 'add 5))))");
+    behavior(
+        "(handle outer ((p k) (resume k p)) (handle inner ((q j) 42) (perform (cons 'outer 7))))",
+    );
+    behavior("(handle t ((p k) 99) (+ 1 (perform (cons 't 0))))");
+}

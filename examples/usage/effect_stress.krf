@@ -1,0 +1,19 @@
+; effect_stress.krf — 效应 GC 压力（r25/42-f M5：gc_stress 效应变体）
+;
+; 挂起 continuation 携带数据栈快照与帧链（locals/captures 经共享
+; 单元格）；handler 体内万级 Pair 分配触发多轮标记-清除——活跃
+; continuation（GC 第六来源）与 payload 堆引用跨回收存活；恢复后
+; 挂起点外围中间值（数据栈快照：closure+ 与 100）继续参与求值。
+;
+; 运行：kerf run examples/usage/effect_stress.krf  ⇒  120
+
+(define (mk n) (if (= n 0) nil (cons n (mk (- n 1)))))
+
+; 效应值 = (gift . (0 . 20))：tag 分派键 + payload 点对
+(define (ask) (perform (cons 'gift (cons 0 20))))
+
+(define (guarded)
+  (handle gift ((p k) (begin (mk 50000) (resume k (+ (cdr p) (car p)))))
+    (+ 100 (ask))))
+
+(guarded)

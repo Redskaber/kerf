@@ -35,6 +35,11 @@ pub enum Value {
     Closure(Rc<ClosureValue>),
     /// 内置函数（driver 注册进全局环境）。
     Builtin(Rc<BuiltinFn>),
+    /// 挂起 continuation（r25/42-f——effect-language-design §2.3：
+    /// 捕获帧链 + 挂起点环境 + 唯一性状态三要素；D4 调用形态走
+    /// `Call` 通道）。堆根性：携带帧链/数据栈快照——可含堆子引用
+    /// （GC 六来源扩展：活跃 continuation 帧，M5）。
+    Continuation(Rc<ContinuationValue>),
 }
 
 impl Value {
@@ -51,6 +56,7 @@ impl Value {
             Value::Pair(_) => "pair",
             Value::Closure(_) => "procedure",
             Value::Builtin(_) => "builtin-procedure",
+            Value::Continuation(_) => "continuation",
         }
     }
 
@@ -100,6 +106,7 @@ impl Value {
             (Value::Pair(a), Value::Pair(b)) => a == b,
             (Value::Closure(a), Value::Closure(b)) => Rc::ptr_eq(a, b),
             (Value::Builtin(a), Value::Builtin(b)) => Rc::ptr_eq(a, b),
+            (Value::Continuation(a), Value::Continuation(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
     }
@@ -124,6 +131,33 @@ pub enum ClosureValue {
     },
 }
 
+/// 挂起 continuation（r25/42-f——effect-language-design §2.3 三要素
+/// + 实现必要补充）：
+///
+/// - ① 捕获帧链：挂起点 → handler 帧边界的帧结构快照（`Frame` 逐
+///   结构 clone——locals/captures 为 `Rc<GcCell>` 共享单元格：恢复后
+///   变量可见性与挂起时一致，set! 经共享单元传播）；
+/// - ② 数据栈快照：VM flat 数据栈跨帧共享，挂起/恢复必须显式还原
+///   （设计文档三要素之外的实施必要补充——v1.1 执行注记）；
+/// - ③ 唯一性状态：`consumed`（Fresh → Resumed 帧级单次消费标记，
+///   D3 线性唯一——第二次 resume = E0008 诊断非 UB；经 `Rc` + `Cell`
+///   跨帧共享）；首次恢复位置追踪供 E0008 诊断渲染（D9）。
+#[derive(Debug)]
+pub struct ContinuationValue {
+    /// 捕获帧链（挂起点帧 → handler 帧边界之上的全部帧，按栈序）。
+    pub frames: Vec<crate::vm::Frame>,
+    /// 数据栈快照（挂起时刻完整栈——resume 时整栈还原后压入实参）。
+    pub stack: Vec<Value>,
+    /// 恢复点 pc（挂起帧内 perform 指令的下一条——恢复后从该处继续）。
+    pub resume_pc: u32,
+    /// 挂起帧原型（恢复帧链末帧的执行原型——防跨程序调用越界防御用）。
+    pub resume_proto: u32,
+    /// 线性唯一性标记（单次消费——E0008 判据）。
+    pub consumed: Cell<bool>,
+    /// 首次恢复位置（E0008 诊断「第二次恢复」渲染——首次调用点 Span）。
+    pub first_resume_span: Cell<kerf_span::Span>,
+}
+
 /// VM 路径共享可变单元（TD-023 对症，r24/42-e）：值 + **堆根性摘要
 /// 标志**。标志由写路径（`set`）维护：Pair/Closure → true、其余 →
 /// false——是当前值的精确保守摘要（每写必置，sound 不变式）。
@@ -137,7 +171,10 @@ pub struct GcCell {
 
 impl GcCell {
     pub fn new(v: Value) -> Self {
-        let has_heap = matches!(v, Value::Pair(_) | Value::Closure(_));
+        let has_heap = matches!(
+            v,
+            Value::Pair(_) | Value::Closure(_) | Value::Continuation(_)
+        );
         GcCell {
             has_heap: Cell::new(has_heap),
             value: RefCell::new(v),
@@ -146,8 +183,10 @@ impl GcCell {
 
     /// 写入（维护堆根性摘要——TD-023 sound 不变式：每写必置）。
     pub fn set(&self, v: Value) {
-        self.has_heap
-            .set(matches!(v, Value::Pair(_) | Value::Closure(_)));
+        self.has_heap.set(matches!(
+            v,
+            Value::Pair(_) | Value::Closure(_) | Value::Continuation(_)
+        ));
         *self.value.borrow_mut() = v;
     }
 
@@ -215,6 +254,9 @@ pub fn render_value(v: &Value, heap: &Heap) -> String {
         Value::Str(s) => s.to_string(),
         Value::Symbol(s) => s.to_string(),
         Value::Pair(r) => render_pair(*r, heap, &mut HashMap::new()),
+        // r25/42-f：continuation 渲染（print/write-line 输出形态——
+        // Racket `#<continuation>` 惯例：不透明值，不枚举帧链）
+        Value::Continuation(_) => "#<continuation>".to_string(),
         Value::Closure(_) => "#<procedure>".to_string(),
         Value::Builtin(b) => format!("#<builtin:{}>", b.name),
     }

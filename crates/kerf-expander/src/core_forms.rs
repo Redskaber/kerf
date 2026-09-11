@@ -38,6 +38,11 @@ pub(crate) fn expand_core_form(
         Keyword::Module => expand_module(stx, items, ctx),
         Keyword::Require => expand_require(stx, items, ctx),
         Keyword::Quote => expand_quote(stx, items, ctx),
+        Keyword::Perform => expand_perform(stx, items, ctx),
+        Keyword::Handle => expand_handle(stx, items, ctx),
+        // D4（effect-language-design）：resume 非独立原语——展开期脱糖为
+        // `(κ v)` App（continuation 值的调用形态，复用调用机制）
+        Keyword::Resume => expand_resume(stx, items, ctx),
         Keyword::Import | Keyword::Export => Err(ExpandError::new(
             "import/export 只能出现在 module 形式内部",
             stx.span,
@@ -615,4 +620,140 @@ fn define_value_stx(def: &Stx, ctx: &ExpandCtxt) -> Result<Stx, ExpandError> {
     } else {
         Err(ExpandError::new("define 值形式必须是单个表达式", def.span))
     }
+}
+
+/// `(perform ⟨effect-value⟩)`（r25/42-f——effect-language-design §2.1 R10）。
+///
+/// 效应值先求值（App 序——求值顺序契约 06 §1.3 A1 不变）；结果须为
+/// `(tag . payload)` 点对（tag = Symbol 分派键——运行时校验，非展开期）。
+/// 控制转移非值归约：resume 后值由恢复点注入。
+fn expand_perform(
+    stx: &Stx,
+    items: &[Stx],
+    ctx: &mut ExpandCtxt,
+) -> Result<Rc<CoreExpr>, ExpandError> {
+    if items.len() != 2 {
+        return Err(ExpandError::new(
+            "perform 形式：(perform 效应值)——效应值须求值为 (tag . payload) 点对",
+            stx.span,
+        ));
+    }
+    let effect = crate::expander::expand_form(&items[1], ctx)?;
+    Ok(Rc::new(CoreExpr::Perform {
+        effect,
+        span: stx.span,
+    }))
+}
+
+/// `(handle ⟨tag⟩ ((⟨payload-var⟩ ⟨resume-var⟩) ⟨result-expr⟩) ⟨body⟩)`
+/// （R11——浅处理单子句，D2/D3）。两绑定器 fresh scope 深注入（TD-004
+/// 口径，与 Lambda 同型：注入绑定器符号与 handler 体；body 不注入
+/// ——p/r 的作用域仅覆盖处理子句）。body 恒单表达式（设计语法单形）。
+fn expand_handle(
+    stx: &Stx,
+    items: &[Stx],
+    ctx: &mut ExpandCtxt,
+) -> Result<Rc<CoreExpr>, ExpandError> {
+    if items.len() != 4 {
+        return Err(ExpandError::new(
+            "handle 形式：(handle 标签 ((载荷变量 恢复变量) 结果表达式) 体)",
+            stx.span,
+        ));
+    }
+    // 效应族标签（match 单键分派键——符号）
+    let tag_sym = items[1]
+        .datum
+        .as_symbol()
+        .ok_or_else(|| ExpandError::new("handle 效应标签必须是符号", items[1].span))?;
+    // tag 载体 = 符号字面量同型 Rc<str>（与 LiteralValue::Symbol 一致
+    // ——编译/VM 侧无需符号表）
+    let tag: std::rc::Rc<str> = std::rc::Rc::from(ctx.table.name(tag_sym));
+    // 处理子句：((p r) result)——fresh scope 深注入（绑定器 + handler 体）
+    let fresh = ctx.fresh_scope();
+    let mut clause = items[2].clone();
+    clause.add_scope_to_all(fresh);
+    let clause_list = clause
+        .datum
+        .as_list()
+        .ok_or_else(|| {
+            ExpandError::new(
+                "handle 处理子句必须是 ((载荷变量 恢复变量) 结果表达式) 形态",
+                items[2].span,
+            )
+        })?
+        .to_vec();
+    if clause_list.len() != 2 {
+        return Err(ExpandError::new(
+            "handle 处理子句必须是 ((载荷变量 恢复变量) 结果表达式) 形态",
+            items[2].span,
+        ));
+    }
+    let binders = clause_list[0]
+        .datum
+        .as_list()
+        .ok_or_else(|| {
+            ExpandError::new(
+                "handle 处理子句变量表必须是 (载荷变量 恢复变量) 双符号列表",
+                clause_list[0].span,
+            )
+        })?
+        .to_vec();
+    if binders.len() != 2 {
+        return Err(ExpandError::new(
+            "handle 处理子句变量表必须是 (载荷变量 恢复变量) 双符号列表",
+            clause_list[0].span,
+        ));
+    }
+    let payload_var = binders[0]
+        .datum
+        .as_symbol()
+        .ok_or_else(|| ExpandError::new("handle 载荷变量必须是符号", binders[0].span))?;
+    let resume_var = binders[1]
+        .datum
+        .as_symbol()
+        .ok_or_else(|| ExpandError::new("handle 恢复变量必须是符号", binders[1].span))?;
+    if payload_var == resume_var {
+        return Err(ExpandError::new(
+            "handle 载荷变量与恢复变量重名（须为不同名）",
+            binders[1].span,
+        ));
+    }
+    let payload_scopes = binders[0].scopes.clone();
+    let resume_scopes = binders[1].scopes.clone();
+    // handler 体（已随子句注入 fresh scope）
+    let handler_body = crate::expander::expand_form(&clause_list[1], ctx)?;
+    // 被保护计算（不注入子句 fresh——p/r 不在 body 作用域）
+    let body = crate::expander::expand_form(&items[3], ctx)?;
+    Ok(Rc::new(CoreExpr::Handle {
+        tag,
+        payload_var,
+        payload_scopes,
+        resume_var,
+        resume_scopes,
+        handler_body,
+        body,
+        span: stx.span,
+    }))
+}
+
+/// `(resume κ v)` → `(κ v)` App（D4：continuation 值的调用形态——脱糖，
+/// 复用调用机制；编译/运行时零特设路径）。
+fn expand_resume(
+    stx: &Stx,
+    items: &[Stx],
+    ctx: &mut ExpandCtxt,
+) -> Result<Rc<CoreExpr>, ExpandError> {
+    if items.len() != 3 {
+        return Err(ExpandError::new(
+            "resume 形式：(resume 续体 值)——续体恢复恰一实参",
+            stx.span,
+        ));
+    }
+    let fn_expr = crate::expander::expand_form(&items[1], ctx)?;
+    let arg = crate::expander::expand_form(&items[2], ctx)?;
+    Ok(Rc::new(CoreExpr::App {
+        fn_expr,
+        args: vec![arg],
+        span: stx.span,
+    }))
 }

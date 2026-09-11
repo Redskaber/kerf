@@ -31,3 +31,22 @@ pub fn err_setbang_unbound() -> String {
 pub fn err_pair_op(op: &str, actual: &str) -> String {
     format!("{op} 需要 pair，实际 {actual}")
 }
+
+/// E0007：效应未处理逃逸到顶层（r25/42-f——effect-language-design D9；
+/// VM `Perform` 扫描无匹配 handler 帧时构造）。
+pub fn err_effect_unhandled(tag: &str) -> String {
+    format!("效应 '{tag}' 未被任何 handler 处理（逃逸到顶层）")
+}
+
+/// E0008：continuation 二次恢复（线性唯一性违反——D3/D9；含首次
+/// 恢复位置追踪，VM `Call`/`TailCall` 的 Continuation 臂构造）。
+pub fn err_continuation_resumed_twice(first: &str) -> String {
+    format!("continuation 二次恢复（线性唯一性——首次恢复于 {first}）")
+}
+
+/// E0009：resume 调用元数错（continuation 调用恰一实参——D4 调用
+/// 形态的元数面；非 continuation 值被调用的类型面归 E0004 通用族，
+/// 见 effect-language-design v1.1 执行注记）。
+pub fn err_resume_arity(n: usize) -> String {
+    format!("resume 恰接受一个值（continuation 调用实参数 {n}）")
+}

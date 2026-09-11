@@ -106,6 +106,32 @@ pub enum Op {
     // ---- 终止 ----
     /// 终止：弹出最终结果值。
     Halt,
+
+    // ---- 效应（r25/42-f——effect-language-design D6/D8）----
+    /// 安装 handler 并调用被保护体（handle 表达式全部帧编排）。
+    ///
+    /// 从当前帧取 handler/body 两原型的捕获单元 → ① 压 handler 帧
+    /// （`trampoline` 哨兵原型——code=[Ret]；ext1 = HandlerFrame{
+    /// tag, handler 原型, 捕获, 数据栈水位}；ret = (当前原型, 本指令
+    /// 之后)）→ ② 压 body thunk 帧（ret = (trampoline, 0)）→ ③ 转移
+    /// 执行 body。body RET 经 trampoline 弹 handler 帧回到本指令之后
+    /// （R11-return）；body 内尾调用拆 thunk 帧穿透（D8：TCO 与浅
+    /// 处理正交——handler 帧保留在下方）；perform 上抛扫描 ext1
+    /// 匹配分派（R11-dispatch，D6）。
+    InstallHandler {
+        handler: u32,
+        body: u32,
+        /// 分派标签（常量池 SymLit 索引——符号值）。
+        tag: u32,
+        trampoline: u32,
+    },
+    /// 效应上抛（R10-perform）：弹出效应值（须为 `(tag . payload)`
+    /// 点对——tag = 符号值）→ 从帧栈顶向下扫描匹配 ext1 的最近
+    /// handler 帧 → 快照挂起 continuation（挂起帧链 + 数据栈 +
+    /// 恢复点）→ 拆帧到 handler 边界 → handler 帧变形为 handler 体
+    /// 执行帧（locals = [payload, κ]，ext1 清除——浅处理一次）→
+    /// 数据栈截回安装水位。未匹配 = E0007（逃逸到顶层）。
+    Perform,
 }
 
 impl Op {
@@ -153,6 +179,8 @@ impl Op {
             Op::IsBool => "IS_BOOL",
             Op::IsProcedure => "IS_PROCEDURE",
             Op::Halt => "HALT",
+            Op::InstallHandler { .. } => "INSTALL_HANDLER",
+            Op::Perform => "PERFORM",
         }
     }
 
@@ -173,7 +201,18 @@ impl Op {
             Op::Closure { proto, n_captures } => {
                 format!(" proto={} captures={}", proto, n_captures)
             }
-            // _ 臂理由：无操作数指令（PushNil/Pop/Dup/Ret/算术/比较/谓词/Car/Cdr/Halt 等）——无操作数后缀
+            Op::InstallHandler {
+                handler,
+                body,
+                tag,
+                trampoline,
+            } => {
+                format!(
+                    " handler={} body={} tag={} trampoline={}",
+                    handler, body, tag, trampoline
+                )
+            }
+            // _ 臂理由：无操作数指令（PushNil/Pop/Dup/Ret/算术/比较/谓词/Car/Cdr/Halt/Perform 等）——无操作数后缀
             _ => String::new(),
         }
     }
@@ -243,11 +282,20 @@ mod tests {
             Op::IsProcedure,
             // 终止（1）
             Op::Halt,
+            // 效应（2：r25/42-f——effect-language-design D6，原语集 9→11
+            // 对应字节码面两指令；04-bytecode-vm 同步冻结）
+            Op::InstallHandler {
+                handler: 0,
+                body: 0,
+                tag: 0,
+                trampoline: 0,
+            },
+            Op::Perform,
         ];
         assert_eq!(
             ops.len(),
-            41,
-            "操作码总数（Stage 0 冻结契约——r21 修正 40→41）"
+            43,
+            "操作码总数（r25/42-f 效应面 41→43——04 文档与 compiler.krf OP-* 表三方同步）"
         );
     }
 

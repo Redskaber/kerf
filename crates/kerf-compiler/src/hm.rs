@@ -604,6 +604,11 @@ impl<'a> Gen<'a> {
                 Rc::new(Ty::Dynamic)
             }
             CoreExpr::Require { .. } => Rc::new(Ty::Dynamic),
+            // r25/42-f 效应面（HM PoC 域外——effect-language-design 风险
+            // 表「与 HM 推断的效应行交互 = P3/Stage 3」）：Perform 值 =
+            // resume 注入的任意值；Handle 值 = 体/handler 体汇合——均
+            // 降级 Dynamic（保守契约：不收紧、不误报）
+            CoreExpr::Perform { .. } | CoreExpr::Handle { .. } => Rc::new(Ty::Dynamic),
         }
     }
 

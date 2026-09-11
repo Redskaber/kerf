@@ -3753,3 +3753,239 @@ Stage Summary:
 - **批次 I 执行 r23（44-a + 44-z）交付闭环——I1 段完成**：生产切换（CompilerKind）+ 门 B fixpoint（§21.3 条件 2 达成——两次编译自身字节一致 + SHA-256）+ eval 退役终态（唯一生产路径）+ 缓存分桶 + 收尾（670:0:0 零回归 + §3.2 全绿 + 对账七面 + r23 包内自举 + web E2E + git + 树压实）
 - 遵循：GATE 1（实测口径——两实测裁定如实入档 + 六命令 clean 起步）、§19.4（打包 + 包内验证）、§8.4.5（对账 + --list 权威计数发现表体陈旧两处修正）、§8.6（rec 树 l 索引首行新行）、INC7（T1 收口 + 12 行 299 回写兑现）
 - 下一步：42-e I2（stdlib 完整化 + TD-008 分代 GC 评估 + TD-023 根扫描对症 + TD-010/011/014/018 批量清偿——TD-009 已随 r23 resolved，清单更新）→ 42-f Effect M1-M5 + 能力 M2 同轮 → 42-g I3 门审查（§7.3 ≥30 新 case + §21.3 四条锚定 + §14 阶段末环）
+Task ID: 45-a
+Agent: Super Z (main) — DEV-A 主导 + QA-A（测试/基准）+ ARCH-A（TD-008 裁定）（L3 多角色会话）
+Task: MUV 45-a（= plan 42-e）：I2 stdlib/GC/TD 批——TD 五项清偿（010/011/014/018/023）+ TD-008 裁定 + stdlib 缺口补齐（r24）
+
+Work Log:
+- PHASE 1 路由：读 sop.md §1/§3.2 + worklog 尾部（43-a/z r22 + 44-a/z r23）
+  + plan §5a 42-e 行 + TD 登记册 + 09-stdlib v6.2 + perf-baseline（§9 协议）
+  ——冲突检测：git clean f1c9c50（r23+web 指针终态）；传入会话摘要过期
+  （称 r22 被工具阻断——实测已闭环，以仓库为准，R4 纪律）；基线 670:0:0
+  实跑确认后开工
+- **TD-023 基准重定型先行**（§2.3-11 实测禁臆测）：新增
+  examples/usage/gc_stress_nontail.krf（非尾形深递归——(+ (grow …) 1)
+  参数位 ⇒ 峰值 3×10^4 存活帧）；r23 二进制基线实测：非尾形 144.06ms/轮
+  （尾形 39.68 的 3.6×）+ 缩放 15k/30k/60k = 45.07/144.06/528.33（**2×→
+  3.2~3.7× 超线性实测成立**——登记的残留模式锚定）
+- **TD-018 消息单源**：kerf-vm/src/messages.rs（五族构造器：if 条件/
+  not/car·cdr/set? 未绑定——VM 操作码 + eval 参考臂 + driver 内置三
+  消费面同源）；Value::truthy 复活为单一实现（原无调用方死助手 R1
+  判断 → Result<bool, RuntimeError> 化——VM JumpIfFalse + eval if 臂
+  共用）；前缀统一「if 条件需要 bool」（与静态面 R1 一致）；scope_set
+  新增对拍回归 td018_if_cond_message_unified_dual_path（消息文本相等
+  断言）；未绑定族裁定保留（VM 携全局兜底阶段信息——非分裂）
+- **TD-011 字符串全序**：cmp_builtin 全字符串链按码点序参与全族
+  （Rc<str> 比较 = UTF-8 字节序 = 码点序——编码保序性；混合链保持
+  TD-016「需要数值」口径）；typecheck R3：Ordering ≡ NumOrAllStr 同
+  语义放行；HM 超集门语料换混串链（(< "a" "b") 现为合法）；负例改写
+  comparison_string_ordering_rejected → mixed_chain（正例锚 stdlib
+  12 case + 负例 3）
+- **TD-010 闭包/内置装箱**：HeapObj::Foreign(Rc<ForeignBox>)——any:
+  Rc<dyn Any>（类型擦除 Rc 载体——解箱往返恒等 → eq? 按引用）+
+  tracer: ForeignTracer（**追踪协议由装箱方注入**——标记阶段 children
+  经 tracer 枚举闭包捕获图 Pair 子引用；kerf-runtime 不依赖 kerf-vm
+  类型，§11 接口隔离）；box_value/unbox_slot/render 三面 + GC 存活
+  测试 2（追踪器实际行使 + 捕获链多级传递）+ 往返恒等/函数列表模式
+  （(list f g) + map 应用）/渲染正负 12 case
+- **TD-014 嵌套 define 归因**：专门消息「嵌套 define 重复绑定（同名
+  内部变量只允许出现一次）」+ Span = 第二次出现处 define 形式自身；
+  seed expand_body（seen 向量）+ 自举 expand-body/dup-define-scan
+  双侧镜像（判定序一致：切分 → late → 重名 → 提升）；bootstrap
+  parity_err +2 case（消息 + Span 逐字）；e6 矩阵断言更新
+- **stdlib 缺口补齐（清单清零）**：盘点三面（文档合同 52/52 ✓ /
+  值模型谓词完备面缺 5 / prelude 对称面缺 foldr）→ 谓词 5 件（string?/
+  symbol?/float?/number?（Int∪Float 数值塔域）/list?（Floyd 龟兔环
+  安全——环 → false，引用 Racket 语义）+ BUILTIN_SIGS 同步）+ prelude
+  foldr（对偶语义可观测锚：foldr - 0 (1 2 3) = 2 vs foldl = -6）；
+  09-stdlib v6.3（52→57 项 + 比较行重写 + prelude foldr）
+- **TD-023 对症双件**：① GcCell 堆根性摘要（Rc<RefCell<Value>> →
+  Rc<GcCell>——has_heap 标志由写路径维护（set/new 每写必置，sound
+  不变式）；根集枚举对非堆单元 O(1) 跳过——深帧根扫描实测主导成本
+  对症；写路径 soundness 回归锚 gc_cell_flag_flips_on_pair_write：
+  set! 写 Pair 进捕获 cell 后经 5 万次分配压力读回 42）② 根扫描缓冲
+  跨周期复用（root Vec + visited HashSet 由 execute 持有 take/归还
+  ——零 API 变更，无分配化路径 B）
+- **TD-023 对拍实测（stash 重建 r23 二进制同会话）**：非尾形 144.06
+  →105.15ms（**-27.1%**）；尾形 gc_stress 39.68→38.57ms（-2.8%）+
+  fib 86.97→84.22ms（-3.1%）——双噪声带（§14.6.4 验收 ≤5% ✓）；
+  残留超线性（2×→3.4×）如实归因 = 帧栈内存 churn + 每周期固定成本
+  （精确 MS 栈根扫描的结构性成本——非分配模式缺陷）
+- **TD-008 裁定 DEFER（Stage 3+ 条件触发）**：实测依据三面——①收益
+  面不存在（Stage 2 无长驻程序；尾形/非尾形/分配主导三基准全过验收
+  门）②分代对栈根扫描无通用免除（非尾形主导成本在帧根扫描 + 帧
+  churn，分代只减堆标记量——本负载堆恒 ~阈值规模）+ 压缩破坏
+  GcRef=槽位索引契约（转发表 = P1 级全量改写）③复杂度预算（§12——
+  42-f Effect/M2 + 42-g 门审查优先）；重评估触发条件入册
+- 验证：cargo test --release --workspace **684:0:0**（670 零回归 +
+  净 14：stdlib +7 / gc +3 / prelude +3 / scope_set +1）；fmt + clippy
+  -D warnings 0（两处 clippy 修正：redundant pattern match + if-let
+  collapse）；--list 权威计数逐套件核对（gc 9 / stdlib 24 / scope_set
+  10 / prelude 10）
+
+Stage Summary:
+- 42-e 交付：**TD 五项 resolved（010 装箱/011 全序/014 归因/018 单源/
+  023 对症——非尾形 -27.1% + 双噪声带）+ TD-008 裁定 DEFER（实测
+  依据三面）** + stdlib 缺口清单清零（谓词 5 + foldr + 09-stdlib
+  v6.3 57 项）；684:0:0 零回归 + 净 14
+- 遵循：§2.3-11（先实测禁臆测——基准重定型先行 + stash 重建对拍 +
+  超线性残留如实归因）、§9.4.3（正负成对——全序/装箱/谓词/foldr 全
+  组）、§12（最优>最小——追踪器协议 vs 类型耦合；GcCell 摘要 vs 全
+  表重建）、§11（接口隔离——ForeignTracer 协议注入）、§14.6.4（基准
+  协议——5 轮 + 会话内对拍 + §9.1 复测记录义务）、R1（死助手 truthy
+  判断入档——复活为单一实现）
+- 下一步：45-z r24 收尾交付（§3.2 + 对账 + tar.gz + web + git + 树压实）
+---
+Task ID: 45-z
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，批次 I 执行 r24 收尾交付）
+Task: MUV 45-z：r24 收尾交付（§3.2 六命令 + 对账七面 + r24 tar.gz 包内自举验证 + web 同步 + git + 树压实）
+
+Work Log:
+- **§3.2 六命令全绿（clean 起步终验）**：cargo clean（177.7MiB）→
+  build --release --workspace 12.83s 零告警 → check 0 errors 0
+  warnings → fmt --check 零 diff → clippy --all-targets -D warnings 0
+  → test --release --workspace **684:0:0**（单元 205 + 集成 479；--list
+  权威计数逐套件核对）
+- CLI 冒烟七路径 + 扩展：VM run fib ⇒ 75025/144 + macros ⇒ (2 1)/42 +
+  io 门控端到端（print 两行 + ⇒ 42）+ check ok（2 原型/9 常量/5 全局
+  引用/38 指令）+ native fib exit 144（**print-free 先例口径**——
+  fib.krf 含 require+print，PoC 边界 B1 显式拒绝；print-free 变体
+  exit 144 与 r23 口径一致）+ E0006 负例（exit 1 结构化报错——管道
+  exit 码陷阱实测发现并如实修正冒烟方法）+ eval 退役提示（exit 2）
+  + **新谓词/字符串序冒烟（list? ⇒ true + (< "a" "b" "c") ⇒ true）**
+- 双审计集 EXIT 0（stage0 41 + stage1 50——七类全覆盖；条件 3 stdlib
+  检视点含 r24 谓词/foldr 面）
+- **对账七面**：RELEASE_NOTES v0.4.0-r24（三交付节——预插入头部）/
+  09-stdlib v6.3（52→57 项 + 比较行重写（码点序裁定 + NUM_* ISA 口径
+  澄清）+ prelude foldr + 推迟项更新）/ TD 登记册 v0.3.0-r24（五
+  resolved + 一裁定——索引表 + 详情注记 + Status 头）/ matrix
+  v0.1.0-r24（670→684 净 +14 集成 + r24 增量行 + 表体四行：gc 9 /
+  stdlib 24 / scope_set 10 / prelude 10 + 集成 header 479）/ plan.md
+  Status（42-e 交付 r24——I2 段闭环）/ perf-baseline v0.3.0-r24（
+  **§4.1 r24 复测四口径对拍表** + §9.1 复测记录两行（r18 追溯行补
+  采 + r24）+ §9 回归项 2→1（TD-023 resolved）+ §10 热点行 resolved）/
+  pipeline 性能小节（三指标 r24 口径）/ 本 RELEASE_NOTES
+- **r24 tar.gz**（307 条目/1.6MB——§19.4 命令 + r17 先例含 tools/
+  scripts）+ **包内自举验证**：/tmp 解包 → 全新 cargo build --release
+  12.08s → 全量测试 **684:0:0 复跑** + CLI 五路径一致（VM fib 144 +
+  macros 42 + native 144 + check ok + 谓词 true）
+- web 同步：kerf-data.ts（Stage 2 status r21-r24「I2 批——五债清偿 +
+  对症」+ points 三节点（TD 五清偿 / TD-023+TD-008 / stdlib+质量
+  口径）+ HERO_FEATURES +2（I2 批交付/字符串全序+装箱+foldr）+
+  PACKAGE_CONTENTS r24 四条 + 示例 7 件（+gc_stress_nontail））+
+  site-footer v6.4（状态行 r24 + 两段文案 + 底行 I2 口径）+
+  download/README.md r24 节；/api/stats 自动选取 r24 包（mtime——
+  testCount 684 + packageName r24 实测）；bun run lint EXIT 0
+- git 入账（kerf 仓库 + web 仓库双轨）+ rec 树压实（02 层 08_r24 rec +
+  02 层 l 首行新行 + 头部覆盖区间 r17-r24）
+
+Stage Summary:
+- **批次 I 执行 r24（45-a + 45-z）交付闭环——I2 段完成**：TD 五项
+  resolved + TD-008 裁定 DEFER + stdlib 缺口清单清零 + 收尾（684:0:0
+  零回归 + §3.2 全绿 + 对账七面 + r24 包内自举 + web + git + 树压实）
+- 遵循：GATE 1（实测口径——clean 起步六命令 + 冒烟方法管道陷阱实测
+  修正 + stash 重建对拍）、§19.4（打包 + 包内验证 + print-free 先例
+  口径延续）、§8.4.5（对账 + --list 权威计数）、§8.6（rec 树 l 索引
+  首行新行）
+- 下一步：42-f I 后段——Effect M1-M5（VM ext1 激活 + perform/handle
+  编译 + E0007-E0009 诊断族 + parity 迁移路径）+ 能力管线泛化 M2
+  同轮（driver 组合根双接触面协调）→ 42-g I3 门审查（§7.3 ≥30 新
+  case + §21.3 四条锚定 + §14 阶段末环）
+
+---
+Task ID: 46-a
+Agent: Super Z (main) — DEV-A 主导 + ARCH-A/QA-A 会话（L3 多角色）
+Task: MUV 46-a（= plan 42-f 主体）：Effect M1-M5 语言级效应全交付 + 能力管线泛化 M2 同轮
+
+Work Log:
+- **恢复点修正（§8.4 文档为准纪律）**：会话恢复摘要停留在 r21/657——
+  磁盘实况 git log 实证 r22/r23/r24 已全交付（HEAD a7a11f8 = r24 终态
+  clean、684:0:0、web 已同步 r24）——按 PHASE 4「以文档为准不以对话
+  记忆为准」修正路由：本 MUV 直接推进 42-f（无重复实施）
+- **M1 语法/展开层**：Keyword +3（perform/handle/resume）+ 预内部化
+  表同步（修复 symbol.rs 查表 panic）；CoreExpr +2 变体（Perform/
+  Handle——tag 载体裁定 Rc<str> 符号字面量同型（编译侧无表，与
+  LiteralValue::Symbol 一致））；free_var_occurrences/ir.rs/code_value.rs
+  穷尽面（IR +Perform/Handle 直译变体 + 绑定屏蔽镜像）；核心形式
+  冻结证明 12 实例（architecture_audit——原语集 9→11 入集）；种子
+  core_forms.rs 三展开函数（handle 子句 fresh scope 深注入——TD-004
+  口径，body 不注入；resume 脱糖 (κ v) App——D4）；自举 expander.krf
+  三展开臂 + KEYWORDS 表 + first/seventh 辅助（修复自举链未绑定错）
+  + 括号平衡修复两处
+- **M2 编译/VM 层（D6 帧编排）**：Op::InstallHandler{handler, body,
+  tag, trampoline}（41）+ Op::Perform（42）——43 项三方冻结
+  （opcode.rs 守护测试 + compiler.krf OP-* + 04 文档）；**三原型方案**
+  （T trampoline 程序级惰性单例 code=[Ret] / H handler 原型
+  params=[payload, resume] / B body thunk 体=lambda 体语义尾位穿
+  线）+ Rust compile_inner_proto（compile_lambda 原型段抽取复用）+
+  krf compile-handle/compile-inner-proto/ensure-trampoline 镜像；
+  VM ext1 具体化（HandlerFrame：tag/handler_proto/captures/
+  stack_watermark——原则 27 槽位兑现，FrameExt Copy 撤销）；InstallHandler
+  原子帧编排（两原型捕获从当前帧取——编译器零 CLOSURE/CALL 发射）；
+  Perform 五步（解构 (tag . payload)→扫描 ext1 匹配→快照→帧变形
+  →栈截水位）
+- **关键缺陷修复（实测驱动）**：①冒烟死循环 → 根因 = continuation
+  快照缺 handler 帧本身（B 链返回目标 (trampoline, 0) 无帧承接——
+  Ret 后帧序断裂回 main 起点）→ 快照 frames[hi..]（ext1 清除——D2
+  浅处理：恢复后再 perform 不回同一 handler）+ Call 的 Continuation
+  臂加 frames.pop()（控制转移语义：H 执行帧拆除——handler 体内 κ
+  调用后代码永不执行）；②expander.krf first 未绑定（补 first/seventh）
+  ；③两处括号不平衡（python 精确 checker 定位——跳字符串/注释）
+- **continuation 四要素**（Value::Continuation + ContinuationValue）：
+  捕获帧链（含 handler 帧）+ 数据栈快照（VM flat 栈整栈还原——设计
+  三要素之外的实现必要补充，v1.1 执行注记①）+ 恢复点 + 线性唯一
+  （consumed Cell 跨帧共享——E0008 含首恢位置 Span 追踪）；type_name
+  /eq_value（指针）/render（#<continuation>——Racket 惯例不透明）
+- **M4 诊断族**：messages.rs 单源三构造器（TD-018 纪律）——E0007
+  逃逸（tag 名经 Value::Symbol 文本直渲染——符号值天然携名）/E0008
+  二次恢复（首恢位置）/E0009 元数；VmError + code 字段（None→
+  E0004 通用族——driver from_vm 码映射）；「非 continuation 值被
+  resume」归 E0004 通用族（v1.1 执行注记⑤口径）
+- **M3 双路径（42-d 新口径）**：eval 域（树走）Perform→EvalError.
+  effect 逃逸通道（D7 承载形态——Value 非 Send 不走 handle_escape
+  宿主通道的裁定记录）+ Handle 捕获分派 + resume 哨兵 Builtin（显
+  式域错——call_closure 拒绝 Eval 闭包同型先例）；种子/生产双编译
+  链效应行为一致 8 case（dual_path_agrees）+ eval 域 dispatch 一致
+  3 case
+- **M5 GC 六来源**：collect_value_roots + Continuation 递归（帧链
+  locals/captures + 数据栈——visited 防嵌套环）+ GcCell has_heap
+  判据 +Continuation + ForeignBox 装箱/解箱（TD-010 协议复用 +
+  trace_foreign_continuation 专用追踪器）；M1 gc_stress 效应变体
+  examples/usage/effect_stress.krf（⇒120——万级分配下挂起链存活）
+- **穷尽面补全**：typecheck（Perform/Handle→Unknown——效应行
+  Stage 3）/hm（→Dynamic PoC 域外）/anf+qbe+codegen（native 显式
+  拒绝——B1 同型：效应语义由 VM 承载）/capability 三遍历（效应
+  子树递归——D10 正交：门控提取/验证照常）/桥两向（core_to_node
+  + core_from_value + op_from_value 41/42 码）
+- **能力 M2（capability-model-design §7 别名兼容路径）**：IoFamily
+  形状标记（CapabilityModelFamily::Token = IoGrant——Grant<io 族>
+  trait 形态承载，冻结路径零删改）+ 门控表 net 增行评估（依赖①
+  效应成熟已就位（本批）——结论维持不增行（Stage 2 末窗口，零
+  破坏纪律））+ 机器锚测试 2（归位证明 + 零增行断言）+ capability.
+  rs/READ_GATED 头注与评估注记
+- **验证（GATE 1 实测纪律）**：五点冒烟全过（基础恢复 ⇒16/嵌套
+  逃逸 ⇒7/E0007 结构化/E0008 含首恢位置/TCO 10 万深穿透 ⇒100）；
+  cargo test --release --workspace **706:0:0**（684 零回归 + 净 22：
+  effect_tests 17 + bootstrap 效应组 3 + capability M2 2）；fixpoint
+  门 B 维持（compiler.krf 自身无效应形式——自举链不受新指令影响）
+- **性能对账（§14.6.4）**：worktree 重建 r24 二进制**同会话交错成对
+  对拍**（单次连续测量存在 +10% 级机器漂移——成对差消除）：fib
+  +3.9% 带内 ✓ / gc_stress +4.5% 带内 ✓ / 非尾形 +6.2% **带外
+  1pct**——对照实验（退回两模式判据）不降反升 → 非单点归因（布
+  局漂移 + 自举 krf 体量 + GcCell 三模式叠加）→ 如实入册（perf-
+  baseline §4.2 + §9.1）不做推测性微优化（§2.3-11 先实测禁臆测）
+
+Stage Summary:
+- 42-f 主体交付：**Effect M1-M5 全落地**（原语集 9→11 + 三原型帧
+  编排 + continuation 四要素 + E0007-E0009 + GC 六来源 + 双路径
+  parity/行为面 + native 拒绝）+ **能力 M2 别名兼容落地**（IoFamily
+  归位 + net 评估维持不增行）；706:0:0 零回归 + 净 22；五 MUV 验收
+  合同逐条兑现（设计测试锚正 6 负 7 超额 + M3 ≥8 + GC 存活 + 零
+  破坏（既有 capability 测试零改动））
+- 遵循：§8.4（文档为准——恢复点修正）、§2.3-11（实测驱动——快照
+  含 handler 帧的根因推演 + 性能对照实验）、D6/D8（三原型 +
+  TCO 穿透——帧数语义实测验证 10 万深）、§9.4.3（正负比 6:7 ≥1:3）、
+  §14.6.4（同会话交错对拍 + 如实归因）、R4（三处设计未覆盖点回写
+  v1.1 执行注记九条）
+- 下一步：46-z r25 收尾（W1/W3/W4/W5 文档回写已完成 → tar.gz 包内
+  自举 + web 同步 + git + rec 树）

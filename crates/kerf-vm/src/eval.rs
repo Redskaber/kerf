@@ -17,7 +17,7 @@ use kerf_runtime::{GcRef, Heap, RuntimeError};
 use kerf_span::Span;
 use kerf_syntax::{ScopeSet, Symbol};
 
-use crate::value::{ClosureValue, Value};
+use crate::value::{BuiltinFn, ClosureValue, Value};
 use crate::vm::MAX_FRAMES;
 
 /// eval 参考路径的求值深度上限（D3 修复：原实现无防护 → Rust 栈溢出
@@ -66,13 +66,44 @@ impl Drop for DepthGuard {
 pub struct EvalError {
     pub message: String,
     pub span: Span,
+    /// 效应逃逸载荷（r25/42-f——R10 上抛通道：树走路径的非局部控制
+    /// 流；`Some` = Perform 上抛且尚未被 Handle 捕获）。渲染层
+    /// （driver/测试）凭 `effect` 判别逃逸 vs 真错误。
+    pub effect: Option<EffectEscape>,
 }
+
+/// 效应逃逸载荷（Perform → 最近匹配 Handle 的传播通道）。`PartialEq`
+/// 按引用（payload 值比较非逃逸语义域——判别只看 tag）。
+#[derive(Debug, Clone)]
+pub struct EffectEscape {
+    /// 效应族标签（分派键）。
+    pub tag: Rc<str>,
+    /// 载荷（handler 的 payload 绑定值）。
+    pub payload: Value,
+}
+
+impl PartialEq for EffectEscape {
+    fn eq(&self, other: &Self) -> bool {
+        self.tag == other.tag
+    }
+}
+impl Eq for EffectEscape {}
 
 impl EvalError {
     fn new(message: impl Into<String>, span: Span) -> Self {
         EvalError {
             message: message.into(),
             span,
+            effect: None,
+        }
+    }
+
+    /// 效应上抛（R10-perform：非局部控制流，非真错误）。
+    fn effect(tag: Rc<str>, payload: Value, span: Span) -> Self {
+        EvalError {
+            message: String::new(),
+            span,
+            effect: Some(EffectEscape { tag, payload }),
         }
     }
 
@@ -305,6 +336,98 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
             // 零字节码行为一致；T1 双路径口径）
             let _ = span;
             Ok(Value::Nil)
+        }
+        // r25/42-f（M3/D7——eval 域效应映射）：树走路径的 R10 上抛
+        // 经 `EvalError.effect` 逃逸通道承载（非局部控制流）；handle
+        // 捕获按 tag 分派（R11-dispatch）。**域限（D7 + v1.1 执行
+        // 注记）**：resume_var 绑定哨兵内置（调用报显式域错——与
+        // `call_closure` 拒绝 Eval 闭包同型先例：树走 continuation
+        // 是 Rust 调用栈不可值化；resume 程序的 T1 一致性由种子/生产
+        // 双编译链（42-d 新口径）在 VM 面承载）
+        CoreExpr::Perform { effect, span } => {
+            let v = eval_expr(effect, env, heap)?;
+            // 效应值解构：(tag . payload)（tag = 符号值——与 VM 路径
+            // 同一判据）
+            match &v {
+                Value::Pair(r) => {
+                    let (car, cdr) = match heap.get_pair(*r) {
+                        Some(p) => p,
+                        None => {
+                            return Err(EvalError::new(
+                                "perform 效应值应为 (tag . payload) 点对",
+                                *span,
+                            ))
+                        }
+                    };
+                    let tag_v = crate::vm::unbox_slot(car, heap);
+                    match tag_v {
+                        Value::Symbol(s) => {
+                            let payload = crate::vm::unbox_slot(cdr, heap);
+                            Err(EvalError::effect(s, payload, *span))
+                        }
+                        other => Err(EvalError::new(
+                            format!("perform 效应值 tag 位需要符号，实际 {}", other.type_name()),
+                            *span,
+                        )),
+                    }
+                }
+                other => Err(EvalError::new(
+                    format!(
+                        "perform 效应值需要 (tag . payload) 点对，实际 {}",
+                        other.type_name()
+                    ),
+                    *span,
+                )),
+            }
+        }
+        CoreExpr::Handle {
+            tag,
+            payload_var,
+            payload_scopes,
+            resume_var,
+            resume_scopes,
+            handler_body,
+            body,
+            span,
+        } => {
+            match eval_expr(body, env, heap) {
+                // R11-return：体完成值 = handle 表达式值
+                Ok(v) => Ok(v),
+                Err(e) => {
+                    if let Some(esc) = &e.effect {
+                        if esc.tag.as_ref() == tag.as_ref() {
+                            // R11-dispatch：匹配——handler 体求值（payload/
+                            // resume 绑定注入；词法子环境）
+                            let h_env = env.child();
+                            h_env.define_scoped(
+                                *payload_var,
+                                payload_scopes.clone(),
+                                esc.payload.clone(),
+                            );
+                            h_env.define_scoped(
+                                *resume_var,
+                                resume_scopes.clone(),
+                                Value::Builtin(Rc::new(BuiltinFn {
+                                    name: "resume",
+                                    f: Rc::new(|_heap, _args| {
+                                        Err(RuntimeError::new(
+                                            "eval 路径 continuation 不可调用（树走路径域限——resume 一致性由 VM 双编译链承载；effect-language-design v1.1 执行注记）",
+                                        ))
+                                    }),
+                                })),
+                            );
+                            eval_expr(handler_body, &h_env, heap)
+                        } else {
+                            // 非匹配 tag：沿帧栈继续上抛（R11-dispatch）
+                            Err(e)
+                        }
+                    } else {
+                        // 真错误透传（错误吸收语义同 06 §3）
+                        let _ = span;
+                        Err(e)
+                    }
+                }
+            }
         }
     }
 }

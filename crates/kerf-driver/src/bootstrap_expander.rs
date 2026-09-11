@@ -473,6 +473,40 @@ fn core_from_value(
             }
             Ok(Rc::new(CoreExpr::Require { caps, span }))
         }
+        // r25/42-f 效应两臂（节点协议与 compiler.krf 契约一致：
+        // ('perform s e x 效应节点)——expander.krf 展开产物）
+        "perform" => {
+            if rest.len() != 1 {
+                return Err(internal_x("perform 节点字段数异常"));
+            }
+            let effect = core_from_value(&rest[0], heap, file_id, table)?;
+            Ok(Rc::new(CoreExpr::Perform { effect, span }))
+        }
+        // ('handle s e x tagstr 载荷名 载荷作用域 恢复名 恢复作用域
+        //   handler节点 body节点)——两绑定器作用域集与 lambda 节点同型
+        "handle" => {
+            if rest.len() != 7 {
+                return Err(internal_x("handle 节点字段数异常"));
+            }
+            let tag: std::rc::Rc<str> =
+                std::rc::Rc::from(as_str(&rest[0]).map_err(read_to_expand)?);
+            let payload_var = table.intern(as_str(&rest[1]).map_err(read_to_expand)?);
+            let payload_scopes = scope_set_from_value(&rest[2], heap)?;
+            let resume_var = table.intern(as_str(&rest[3]).map_err(read_to_expand)?);
+            let resume_scopes = scope_set_from_value(&rest[4], heap)?;
+            let handler_body = core_from_value(&rest[5], heap, file_id, table)?;
+            let body = core_from_value(&rest[6], heap, file_id, table)?;
+            Ok(Rc::new(CoreExpr::Handle {
+                tag,
+                payload_var,
+                payload_scopes,
+                resume_var,
+                resume_scopes,
+                handler_body,
+                body,
+                span,
+            }))
+        }
         other => Err(internal_x(&format!("未知 core 节点种类 '{}'", other))),
     }
 }

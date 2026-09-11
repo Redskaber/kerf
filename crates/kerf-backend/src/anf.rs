@@ -551,6 +551,13 @@ fn lower_atom(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<AAtom, LowerError
             "本地码 PoC 边界：require 无值语义（出现在表达式位置非法）",
             *span,
         )),
+        // r25/42-f：效应形式在 native 路径显式拒绝（PoC 边界 B1 同型
+        // 口径——require+print 先例；效应语义由 VM 路径承载，native
+        // 效应化属 Stage 3 后端演进评估项）
+        CoreExpr::Perform { span, .. } | CoreExpr::Handle { span, .. } => Err(LowerError::new(
+            "本地码 PoC 边界：效应形式（perform/handle）未进 PoC——效应语义由 VM 路径承载",
+            *span,
+        )),
     }
 }
 

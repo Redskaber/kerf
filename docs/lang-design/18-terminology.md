@@ -269,3 +269,17 @@ Landin 借用这个概念：**函数加上其捕获的环境，形成了一个"�
 | AiAssistant | AI 辅助语义 API：语义摘要/签名查询/快速类型检查/重构建议/文档注释生成——复用 LanguageService 查询基建（P2，[13 §3.3.9](./13-capability-matrix.md)） |
 | P0-P3 预留优先级 | 按「不预留的破坏性代价」排序：P0 = 必须在 Stage 0 数据结构中预留位置（LSP/调试/增量）；P1 = 强烈建议 Stage 0 预留 trait（FFI/后端/服务化）；P2 = Stage 1 预留（包管理/AI）；P3 = Stage 3+ 可加（分布式效应）（[13 §3.5.1](./13-capability-matrix.md)） |
 | 预留留白原则 | 原则 32：接口预留的本质是「为未来留出空间」而非「提前实现」——要求数据结构与类型定义的兼容性，而非功能的完整性（[17 §1](./17-principles.md)） |
+
+## 6. 诊断码位登记表（r25/42-f W3 回写——结构化阶段码全族总账）
+
+| 码位 | 族 | 引入 | 定义锚 |
+|------|----|------|--------|
+| E0001-E0004 | 阶段码（词法/语法/展开/运行时类型） | Stage 0 | kerf-span/diagnostic.rs（渲染 `error[E000N]`）；运行时类型族经 driver `from_vm` 映射 |
+| E0005 | 静态类型检查（保守 R1-R8） | r7 批次 C | typecheck.rs |
+| E0006 | 能力权限（R9 fail-closed） | r8 批次 D | capability.rs（`IO_PERMISSION_CODE`） |
+| **E0007** | **效应未处理逃逸**（未匹配 tag 上抛到顶层） | **r25/42-f** | effect-language-design D9；messages.rs `err_effect_unhandled`（单源——VM `Perform` 扫描无匹配） |
+| **E0008** | **continuation 二次恢复**（线性唯一性违反——含首次恢复位置追踪） | **r25/42-f** | 同上 D3/D9；`err_continuation_resumed_twice`（VM `Call`/`TailCall` 的 Continuation 臂） |
+| **E0009** | **resume 元数面**（continuation 调用恰一实参；非 continuation 值被调用的类型面归 E0004 通用族——effect-language-design v1.1 执行注记口径） | **r25/42-f** | 同上 D4；`err_resume_arity` |
+| E0010-E0012 | FFI 实现族（**预留**——ffi-ownership-model E9/E10/E11 暂名落位；避免与运行时效应族冲突） | 预留（r18 登记） | ffi-ownership-model.md（W3 码位冲突预防） |
+
+**登记纪律**：新码位 = 先查本表占位 → 模型层单源构造（TD-018）→ 回填本表 + 对应族文档锚。禁止未登记静默占位。

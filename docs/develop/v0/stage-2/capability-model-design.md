@@ -2,8 +2,8 @@
 
 > **Author**: Super Z（ARCH-A 主导 + PL-A 语义分析——L3 多角色会话）
 > **Date**: 2026-09-11（批间插入轮 r19 / MUV 41-a）
-> **Version**: v1.0
-> **Status**: Active（定位裁定 + 模型层骨架冻结——r19 交付）
+> **Version**: v1.1（M2 执行注记——r25/42-f）
+> **Status**: Active（定位裁定 + 模型层骨架冻结（r19）+ **管线层 M2 别名兼容落地**（r25/42-f——`IoFamily` 形状标记：`IoGrant` = `Grant<io 族>` 的 trait 形态承载，冻结路径零删改；门控表 net 增行评估 = 维持不增行（依赖条件①效应系统已就位，引入窗口 Stage 2 末——零破坏纪律）））
 > **输入**: 用户指令 41-a（「能力模型的定位与边界是否太窄——IO 只是子集」）；sop.md §13.1/§13.2/§21.7/§11/原则 27-32；[13-capability-matrix §3.1/§3.1.3/§3.3.4](../../lang-design/13-capability-matrix.md)；[12-roadmap §2.4.5](../../lang-design/12-roadmap.md)（能力模型 + 线性类型——Stage 2 完整能力模型口径）；[01-core-forms §6](../../lang-design/01-core-forms.md)（require 形式）；[ffi-ownership-model.md](./ffi-ownership-model.md)（CPointer 线性令牌——能力交互第二实例已设计）；[effect-language-design.md](./effect-language-design.md)（D10 能力-效应正交裁定）；r19 代码实况（reserved/capability_io.rs / capability.rs / kerf-core::Capability）
 > **上游**: 批次 H r18（40-g 预留层标准化——四能力族独立文件的拆分即本设计的结构触发点）
 

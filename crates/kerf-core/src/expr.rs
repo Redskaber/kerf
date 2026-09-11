@@ -159,6 +159,35 @@ pub enum CoreExpr {
     /// 程序侧声明面；**零运行时语义**：不产字节码、不求值出 nil，仅供
     /// 编译期权限验证（R9/E0006）与 driver 令牌铸造消费）。
     Require { caps: Vec<Capability>, span: Span },
+    /// `(perform ⟨effect-value⟩)`（r25/42-f——effect-language-design
+    /// §2.1/R10：效应上抛。`effect` 先求值（求值顺序契约 App 序不变），
+    /// 结果须为 `(tag . payload)` 点对（tag = Symbol 分派键；非此形态报
+    /// 运行时类型错）。控制转移非值归约——resume 后值由恢复点注入，
+    /// 未恢复则本表达式求值永不完成（body 剩余部分被 dispatch 丢弃）。
+    Perform { effect: Rc<CoreExpr>, span: Span },
+    /// `(handle ⟨tag⟩ ((⟨payload-var⟩ ⟨resume-var⟩) ⟨result-expr⟩) ⟨body⟩)`
+    /// （R11——浅处理，D2：handler 处理一层效应；嵌套 handle = 用户侧
+    /// 组合深处理）。`payload_var`/`resume_var` 为绑定器（绑定作用域集
+    /// 平行字段与 Lambda.param_scopes 同口径，TD-004）；`resume` 非独立
+    /// 原语——continuation 值的调用形态（D4，展开期脱糖为 App）。
+    Handle {
+        /// 效应族标签（match 单键分派——D1：与 syntax-rules 字面量集合同型；
+        /// 符号字面量同型载体 `Rc<str>`——与 LiteralValue::Symbol 一致，
+        /// 编译侧无需符号表）。
+        tag: Rc<str>,
+        payload_var: Symbol,
+        /// payload 绑定器的绑定作用域集（fresh scope 注入，展开器携带）。
+        payload_scopes: ScopeSet,
+        resume_var: Symbol,
+        /// resume 绑定器的绑定作用域集。
+        resume_scopes: ScopeSet,
+        /// handler 体（单子句——D3 线性唯一性的语法承载）。
+        handler_body: Rc<CoreExpr>,
+        /// 被保护计算（效应触发时挂起于此）。体尾位 = 尾位穿线
+        /// （body thunk 闭包体语义——TCO 穿透 handler 帧，D8）。
+        body: Rc<CoreExpr>,
+        span: Span,
+    },
 }
 
 /// 能力令牌种类（`(require ...)` 声明项——Stage 1 仅 I/O 两类；
@@ -195,7 +224,9 @@ impl CoreExpr {
             | CoreExpr::Define { span, .. }
             | CoreExpr::Begin { span, .. }
             | CoreExpr::Module { span, .. }
-            | CoreExpr::Require { span, .. } => *span,
+            | CoreExpr::Require { span, .. }
+            | CoreExpr::Perform { span, .. }
+            | CoreExpr::Handle { span, .. } => *span,
         }
     }
 
@@ -212,6 +243,8 @@ impl CoreExpr {
             CoreExpr::Begin { .. } => "begin",
             CoreExpr::Module { .. } => "module",
             CoreExpr::Require { .. } => "require",
+            CoreExpr::Perform { .. } => "perform",
+            CoreExpr::Handle { .. } => "handle",
         }
     }
 
@@ -276,6 +309,26 @@ impl CoreExpr {
             CoreExpr::Require { caps, .. } => {
                 let cs: Vec<&str> = caps.iter().map(|c| c.as_str()).collect();
                 format!("(require io {})", cs.join(" "))
+            }
+            CoreExpr::Perform { effect, .. } => {
+                format!("(perform {})", effect.render(resolve))
+            }
+            CoreExpr::Handle {
+                tag,
+                payload_var,
+                resume_var,
+                handler_body,
+                body,
+                ..
+            } => {
+                format!(
+                    "(handle {} (({} {}) {}) {})",
+                    tag,
+                    resolve(*payload_var),
+                    resolve(*resume_var),
+                    handler_body.render(resolve),
+                    body.render(resolve)
+                )
             }
         }
     }
@@ -363,6 +416,30 @@ impl CoreExpr {
             // _ 臂理由：require 不含变量引用（零运行时语义——能力声明
             // 不进入作用域分析）
             CoreExpr::Require { .. } => {}
+            CoreExpr::Perform { effect, .. } => {
+                effect.free_var_occurrences(bound, out);
+            }
+            CoreExpr::Handle {
+                payload_var,
+                resume_var,
+                handler_body,
+                body,
+                ..
+            } => {
+                // 绑定屏蔽（与 Lambda 同型——两绑定器先入 bound，体遍历
+                // 后弹出；tag 为符号常量非变量引用）
+                let shadowed = 2;
+                for p in [payload_var, resume_var] {
+                    if !bound.contains(p) {
+                        bound.push(*p);
+                    }
+                }
+                handler_body.free_var_occurrences(bound, out);
+                body.free_var_occurrences(bound, out);
+                for _ in 0..shadowed {
+                    bound.pop();
+                }
+            }
         }
     }
 

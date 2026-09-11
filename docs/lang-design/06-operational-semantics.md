@@ -19,16 +19,16 @@
 ### 1.2 运行时域
 
 ```text
-v   ::= #n | #f | nil | unit | ⟨s⟩ | ⟨z⟩ | (v . v) | ⟨λ(x₁…xₙ).e, ρ, C⟩ | b      值
+v   ::= #n | #f | nil | unit | ⟨s⟩ | ⟨z⟩ | (v . v) | ⟨λ(x₁…xₙ).e, ρ, C⟩ | b | κ        值（κ = continuation——r25/42-f）
 ρ   ::= ∅ | ρ[x ↦ v]                                                        环境（词法链）
 C   ::= 共享捕获单元格组（Rc<RefCell<Value>> 槽的有限序列）                   闭包捕获描述
 σ   ::= (H, R)                                                              堆（对象集 H 与根集 R）
 b   ::= 内置函数句柄（driver 注册，见 [09-标准库 §2](./09-stdlib.md)）
 ```
 
-- **值 `v`**：布尔、整数、浮点、字符串、**符号**、nil、**unit**、点对（堆分配）、闭包（`⟨λ(x₁…xₙ).e, ρ, C⟩`：代码 + 定义环境 + 捕获单元格组）、内置函数——与 `kerf-vm/src/value.rs` 的 `Value` **十变体一一对应**（v6.2 补 `symbol`：`Value::Symbol(Rc<str>)` 为 quote 符号 datum 的运行时形态（TD-002 r5，按名相等——`eq?` 同名符号相等），此前文档停在九变体口径；v5.2 补 `unit`：`Value::Unit` 是「未定义返回值」的占位值，与 Nil 语义区分以支持未来的多值/效应扩展——deep-review R1 偏差 #14）。
+- **值 `v`**：布尔、整数、浮点、字符串、**符号**、nil、**unit**、点对（堆分配）、闭包（`⟨λ(x₁…xₙ).e, ρ, C⟩`：代码 + 定义环境 + 捕获单元格组）、内置函数——与 `kerf-vm/src/value.rs` 的 `Value` 变体一一对应（v6.4 补 `continuation`：`Value::Continuation(Rc<ContinuationValue>)` 为挂起计算的运行时形态（r25/42-f——捕获帧链 + 数据栈快照 + 恢复点 + 线性唯一性标记三要素 + 实现必要补充；`render` 为 `#<continuation>` 不透明形态；GC 六来源见堆注记）；v6.2 补 `symbol`：`Value::Symbol(Rc<str>)` 为 quote 符号 datum 的运行时形态（TD-002 r5，按名相等——`eq?` 同名符号相等），此前文档停在九变体口径；v5.2 补 `unit`：`Value::Unit` 是「未定义返回值」的占位值，与 Nil 语义区分以支持未来的多值/效应扩展——deep-review R1 偏差 #14）。
 - **环境 `ρ`**：有限映射，实现为词法父子链（`Env::child / lookup / define / set`）。`lookup` 沿链向父级搜索；`define` 在**当前**层新增绑定；`set` 修改链上**已有的**绑定（未绑定则失败）。
-- **堆 `σ`**：点对等对象在堆上分配；根集 `R`（**五来源**：VM 栈、帧局部槽、帧捕获槽、全局环境、外部登记引用，见 [05-运行时 §3.2](./05-runtime.md)）决定可达性。
+- **堆 `σ`**：点对等对象在堆上分配；根集 `R`（**六来源**：VM 栈、帧局部槽、帧捕获槽、全局环境、外部登记引用、**活跃 continuation 帧**（r25/42-f M5——continuation 携带的帧链槽与数据栈快照经 `Value::Continuation` 递归枚举），见 [05-运行时 §3.2](./05-runtime.md)）决定可达性。
 
 ### 1.3 求值状态与判断
 
@@ -143,6 +143,27 @@ b   ::= 内置函数句柄（driver 注册，见 [09-标准库 §2](./09-stdlib.
 ```
 
 **Stage 0 裁定**：模块体在全局环境 `ρ_g` 直接求值（单模块世界）；`declare / visit / instantiate` 三操作的完整相位语义与传递依赖先行次序属编译期簿记，不在小步归约中显现。多模块实例化隔离（每模块独立命名层）推迟至 Stage 1+（[12-路线图 §2.5](./12-roadmap.md) 演进矩阵）。
+
+### R10/R11 效应执行与处理（r25/42-f 新增——effect-language-design §2.2）
+
+```text
+(R10-perform)   ⟨(perform e), ρ, σ⟩ →* ⤴ e'       其中 e →* v = (⟨tag⟩ . v_p)：
+                                                 控制转移（⤴ 记号——非值归约），
+                                                 tag = 符号分派键；挂起点帧链/数据栈
+                                                 快照入 continuation κ
+(R10-resume)    ⟨(κ v), ρ, σ⟩ → ⟨e_κ, ρ_κ, σ_κ⟩   κ 恢复：挂起帧链 + 数据栈整栈还原，
+                                                 v 即 perform 表达式的值（resume 脱糖
+                                                 为调用形态——D4；线性唯一：二次恢复 = E0008）
+(R11-handle)    ⟨(handle τ ((p k) e_h) e_b), ρ, σ⟩
+                  → ⟨e_b, ρ, σ ⊕ handler帧[τ ↦ (e_h, ρ)]⟩   安装：帧栈压入（浅处理——
+                                                            handler 帧一次消费，D2）
+(R11-dispatch)  挂起点 perform (⟨τ'⟩ . v_p) 且 τ' = τ
+                  → handler 体求值（p ↦ v_p、k ↦ κ 注入）；非匹配 τ' 沿帧栈
+                    继续上抛（逃逸到顶层 = E0007）
+(R11-return)    e_b 归约到值 v 且无挂起 → handle 表达式值 = v（帧弹出）
+```
+
+**求值顺序契约维持**（§1.3 A1）：`perform` 的效应值先求值（App 序不变）。**效应值形态**：`(tag . payload)` 点对（tag 位须符号——运行时判据，非展开期）。**T1 域注记（v1.1 执行注记口径）**：resume 一致性由种子/生产双编译链在 VM 面承载（42-d eval 退役终态）；树走 eval 路径经逃逸通道承载 dispatch（D7）——resume 于 eval 域为哨兵域限（显式报错，与 `call_closure` 拒绝 Eval 闭包同型先例）。
 
 ---
 

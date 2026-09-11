@@ -33,7 +33,7 @@
 | TD-021 | 高阶函数用户面注入缺载体 | P3 | **已解决（r15——kerf-prelude 模块/import 承载）** | ~~Stage 1 批次 E~~ |
 | TD-022 | 自举 Reader/Expander 帧消耗 O(源字符数) | P3 | **已解决（r18 / 40-c——TCO 兑现）**：VM 尾调用优化（Op::TailCall 帧复用 + 编译器尾位穿线（Lambda 体/If 两臂/Begin 末项）+ 内建尾调用隐式 RET + 指令预算护栏 10^9 兜底无限尾循环）；实证：127,780B 源（>10^5 字符边界）自举管线完整通过 + 自举 expander 10_000 深度链端到端（TD-007/TD-022 耦合解除） | ~~Stage 2 批次 H2~~ 已交付 |
 | TD-023 | gc_stress 深递归 GC 根扫描回归（超线性） | P3（r18 降级） | **resolved（r24 / 42-e）**：基准重定型（gc_stress_nontail 非尾形锚定——改前 144.06ms/轮 + 2×→3.2-3.7× 超线性实测成立）+ 对症双件（GcCell 堆根性摘要——非堆单元 O(1) 跳过；根扫描缓冲跨周期复用——无分配化路径 B）→ **非尾形 -27.1%（144.06→105.15ms）**；尾形 gc_stress -2.8% / fib -3.1%（±5% 噪声带 ✓）；残留超线性（2×→3.4×）如实归因 = 帧栈内存 churn + 每周期固定成本（精确 MS 栈根扫描的结构性成本，非分配模式缺陷） | ~~Stage 2 批次 I2~~ 已交付 |
-| TD-024 | 本地码后端 PoC 边界（整数域十二原语 + 直接调用；闭包/Float/Str/Pair/set!/module/IO/函数值一等边界外） | P3 | **登记（r17 / 38-b·38-c）**：显式错误非静默降级（B1 类）；FFI 面（print/write_stdout）按 ffi-ownership-model 批次 I 做实；闭包/GC 协同批次 H/I | Stage 2 批次 H-I（GC-后端协同轮） |
+| TD-024 | 本地码后端 PoC 边界（整数域十二原语 + 直接调用；闭包/Float/Str/Pair/set!/module/IO/函数值一等边界外；**r25 扩界注记**：perform/handle 效应形式同口径显式拒绝——效应语义由 VM 路径承载（anf LowerError B1 类），native 效应化属 Stage 3 后端演进评估项） | P3 | **登记（r17 / 38-b·38-c）**：显式错误非静默降级（B1 类）；FFI 面（print/write_stdout）按 ffi-ownership-model 批次 I 做实；闭包/GC 协同批次 H/I | Stage 2 批次 H-I（GC-后端协同轮） |
 | TD-025 | 自举侧 retag 无均匀标记快路径（包装宏链 O(N²) VM 工作） | P3 | **resolved（r18 / 40-f）**：krf 六头字段协议落地——`(tag s e exp scopes uni . fields)`（`uni = ('uni . scopes)` 均匀证书，make-node 默认 nil + retag 重建置位 + inject-scope 注入清除 + 桥 stx_to_node 同步）；retag-scope 快路径（uni 命中 → 整棵子树 O(1) 共享——种子 uniform_tag 镜像）；实测门审计 C02 包装链 **>540s → 7.37s（73×+）**；双审计集 EXIT 0（stage0 41 + stage1 51，20s/28s） | ~~Stage 3~~ 已交付 |
 
 ## 详情

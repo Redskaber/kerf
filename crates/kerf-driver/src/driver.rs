@@ -90,7 +90,13 @@ impl DriverError {
     }
 
     fn from_vm(e: &VmError, sm: &SourceMap, table: &SymbolTable) -> Self {
-        let mut diag = Diagnostic::error(Some(DiagnosticCode(4)), e.message.clone(), e.span);
+        // E 码映射：VM 携码（r25/42-f 效应族 E0007-E0009）直用；
+        // None = E0004 运行时通用族（既有口径）
+        let mut diag = Diagnostic::error(
+            Some(DiagnosticCode(e.code.unwrap_or(4))),
+            e.message.clone(),
+            e.span,
+        );
         for t in &e.trace {
             diag = diag.with_child(Severity::Note, "调用点", t.span);
         }

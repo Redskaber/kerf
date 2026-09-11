@@ -160,6 +160,13 @@ fn collect_var_refs(ir: &IrGraph, root: NodeId, out: &mut Vec<Symbol>) {
             IrNode::Begin { body } | IrNode::Module { body, .. } => {
                 stack.extend(body.iter().copied())
             }
+            IrNode::Perform { effect } => stack.push(*effect),
+            IrNode::Handle {
+                handler_body, body, ..
+            } => {
+                stack.push(*handler_body);
+                stack.push(*body);
+            }
         }
     }
 }
@@ -215,6 +222,27 @@ fn free_refs_of_graph(ir: &IrGraph, root: NodeId) -> Vec<Symbol> {
             IrNode::Begin { body } | IrNode::Module { body, .. } => {
                 for b in body {
                     walk(ir, *b, bound, out);
+                }
+            }
+            IrNode::Perform { effect } => walk(ir, *effect, bound, out),
+            IrNode::Handle {
+                payload_var,
+                resume_var,
+                handler_body,
+                body,
+                ..
+            } => {
+                // 两绑定器屏蔽（与 Lambda 同型）
+                let pushed = [payload_var, resume_var]
+                    .iter()
+                    .filter(|p| !bound.contains(p))
+                    .count();
+                bound.push(*payload_var);
+                bound.push(*resume_var);
+                walk(ir, *handler_body, bound, out);
+                walk(ir, *body, bound, out);
+                for _ in 0..pushed {
+                    bound.pop();
                 }
             }
         }

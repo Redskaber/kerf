@@ -2,8 +2,8 @@
 
 > **Author**: Super Z（ARCH-A 主导 + ALG-C 语义审查——L3 多角色会话）
 > **Date**: 2026-09-11（批次 H r18）
-> **Version**: v1.0
-> **Status**: Active（设计冻结——实现窗口裁定见 D12；H1 E2 GO-DESIGN 兑现）
+> **Version**: v1.1（执行注记扩充——r25/42-f 实现落地对账）
+> **Status**: Active（**已实现**——M1-M5 于 r25/42-f 全交付（原语集 9→11、三原型帧编排、GC 六来源、E0007-E0009）；D12 窗口按期兑现）
 > **输入**: sop.md §21.5/§13.2；[01-core-forms §7.3](../../lang-design/01-core-forms.md)（next2 效应映射论证）；[06-operational-semantics §1-§3](../../lang-design/06-operational-semantics.md)（归约规则体系与错误吸收）；[13-capability-matrix §3.1.1](../../lang-design/13-capability-matrix.md)（P3 冻结契约 + r8 编译器内部做实注记）；[stage0 §6.4](../../stage0.md)（OCaml 5 方案四完整论证）；[primitive-migration-evaluation.md](./primitive-migration-evaluation.md)（40-b E2/E4 裁定）；[ffi-ownership-model.md](./ffi-ownership-model.md)（线性令牌先例 + 诊断码族先例）；r18 代码实况（effects.rs / vm.rs ext1 / TCO 40-c）
 > **上游**: 批次 G r17（605 基线）+ 批次 H r18（TCO 落地——帧语义与效应栈交互面就绪）
 
@@ -206,3 +206,51 @@ continuation 的语义裂缝）的显式规避（next2 裁定 + 40-b E4 SPEC-ANC
 ---
 
 *遵循条款：§21.5（切换信号——D12 窗口裁定）、§13.2（切换期重构流程——语言级效应是 40-b E2 批准的批次内语义变更）、§8.4.5（决策附条款号 + 代码实锚 6 项）、§11（接口隔离——D6 ext1 激活 / D10 能力-效应正交）、原则 27（接口预留时机——ext1 兑现）、§2.3-2（显式失败——E0007-E0009 诊断而非 UB）、§2.3-4（缺口显式——T1 域收窄注记）、§9.4.3（正负比 1:3 计划）、GATE 3（全部裁定附依据）。*
+
+
+---
+
+## 9. v1.1 执行注记（r25/42-f 实现落地对账——设计 → 实现的精确化补充）
+
+实现审查发现的**设计未覆盖/需精确化**事项（依 R4 纪律：代码为准 + 本次修正文档）：
+
+1. **数据栈快照 = continuation 第四要素（实现必要补充）**：VM flat
+   数据栈跨帧共享——挂起/恢复必须整栈快照还原（设计 §2.3 三要素
+   之外的必要补充；`ContinuationValue.stack`）。栈平衡推演：挂起时
+   snapshot（pop 效应值后）→ dispatch 时 truncate 到安装水位
+   （`HandlerFrame.stack_watermark`——外层中间值保持）→ resume 时
+   整栈还原 + 压入实参。
+2. **三原型帧编排（D6 的编译形态精确化）**：handle 表达式编译为
+   T/H/B 三原型 + 单条 `INSTALL_HANDLER{handler, body, tag,
+   trampoline}` 原子指令——T（trampoline，程序级惰性单例，
+   `code=[RET]`）承接 body RET 弹 handler 帧；H（handler 原型，
+   params = [payload, resume]）；B（body thunk，体 = lambda 体
+   语义——尾位穿线）。编译器不发射 CLOSURE/CALL（帧编排由 VM 按两
+   原型捕获描述符原子完成）。
+3. **continuation 快照含 handler 帧本身**（帧序完整性）：快照
+   `frames[hi..]`（含 trampoline 帧——它是挂起链的返回目标；快照
+   中该帧 ext1 清除——浅处理 D2：恢复后再 perform 不回同一
+   handler）。resume 的控制转移语义：当前 H 执行帧拆除（Call 与
+   TailCall 同口径——handler 体内 κ 调用之后的代码永不执行）。
+4. **效应值形态裁定**：`(tag . payload)` 点对——tag 位须符号
+   （Value::Symbol——TD-002 符号值天然携带名字文本，E0007 消息
+   直接渲染 tag 名）。非点对/非符号 tag = 运行时类型错（E0004 通用
+   族——与「不可调用的值」同型）。
+5. **E0009 实施口径**：元数面（continuation 调用恰一实参）；
+   「非 continuation 值被 resume」脱糖后表现为通用不可调用错误
+   （E0004 族——测试锚可测，码位归 E0004 而非 E0009）。
+6. **handle 单体语法**（§2.1 精确化）：body 恒单表达式（设计语法
+   单形——多体形式报展开错）；tag = 裸符号字面量（quote 形式非
+   法——与 syntax-rules 字面量集合同型）。
+7. **M3 双路径新口径（42-d eval 退役后）**：resume 一致性的 T1
+   承载面 = 种子/生产**双编译链**（`dual_path_agrees`——非 eval）；
+   eval 域（树走）经 `EvalError.effect` 逃逸通道承载 dispatch
+   （D7 兑现形态），resume 于 eval 域为哨兵域限（显式报错——与
+   `call_closure` 拒绝 Eval 闭包同型先例）。
+8. **原生码路径（B1 同型口径）**：perform/handle 在 anf/qbe/native
+   显式拒绝（PoC 边界——效应语义由 VM 路径承载；native 效应化属
+   Stage 3 后端演进评估项）。
+9. **验收对账**：测试锚正 6 负 7（超设计的正 6 负 6——E0002 形态
+   族细化为 2 case + 类型面 2 case）+ M3 双路径 8 case + eval 域
+   3 case + GC 存活 2 case + parity 3 case + fixpoint 门 B 维持
+   （compiler.krf 自身无效应形式——自举链不受新指令影响）。

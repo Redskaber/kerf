@@ -156,6 +156,8 @@ next2 讨论的最终推荐（不考虑兼容性的重新设计）为 8 原语�
 
 > **r18 批次 H 评估裁定注记（H1 交付——[primitive-migration-evaluation.md](../develop/v0/stage-2/primitive-migration-evaluation.md)）**：五项评估经 §13.4 J1-J6 判据 + §6.3 五角色全票（5.5/5.5 × 5）裁定——E1 Let **DEFER-TO-STAGE3**（IR 层 AnnotatedANF 已承载 ANF 锚点；Core 层引入破坏自举 parity 链时机）/ E2 Perform/Handle **GO-DESIGN**（设计做实 Stage 2（r18 effect-language-design.md 交付）；实现窗口 D12 = 批次 I 后段）/ E3 de Bruijn **分层裁定**（**展开层命名制永久保持**——ScopeSet 卫生机制载体不可牺牲；IR 层编码化 = Stage 3 优化器伴生评估）/ E4 continuation **SPEC-ANCHOR**（三要素 + 线性唯一性规格入 H3 设计）/ E5 语义化命名 **REJECT-STANDALONE**（名实不符——8 形态命名前提是结构就位；绑定 E1-E4 全落地后 Stage 3 切换期一次性迁移）。**总裁定：Stage 2 内原语集零变更**（核心冻结原则 9 维持）。核心冻结原则（§2/原则 9）的精确化表述（v5.4 §6）不变：语义原语集冻结 + 声明变体可追加；效应原语化属于 Stage 2 语义层变更，须经 §13.2 切换期重构流程 + 委员会投票。8 原语语义等价迁移映射（9 冻结原语 → 8 原语形态的逐项映射表）见 §8.3 与 [upload/stage0.md §6.12.6](../stage0.md)。
 
+> **r25 批次 I 后段交付注记（W1 回写——42-f / Effect M1-M5）**：Perform/Handle **已引入**（CoreExpr 第 11/12 变体——原语集 9(+Require) → 11(+Require)；[effect-language-design.md](../develop/v0/stage-2/effect-language-design.md) D1-D12 全裁定按期兑现：浅处理 D2 / continuation 线性唯一 D3 / resume 脱糖为调用形态 D4 / VM ext1 槽位激活 D6 / TCO 正交 D8 / 诊断 E0007-E0009 D9 / 能力-效应正交 D10 / 多次恢复否决 D11）。`set! → Perform(State)` 映射仍维持**语义等价证明而非实现义务**（D5——set! 保留原语）；原语集变更经 §13.2 流程批准（E2 GO-DESIGN 批次内变更），冻结契约更新为 **11 语义原语 + Require 声明变体**（architecture_audit 冻结证明 12 实例同步——r25）。
+
 ## 8. 内部语法设计：类型安全 ADT 与语义化命名（v6.0 吸收自 next3.md 第七轮）
 
 > 本节回答「内部语法该用派生关键词还是类型安全 ADT」——next3.md 终轮裁定：**不应该使用旧时代的派生关键词设计**（Racket `#%` 前缀标识符或 Scheme `define`/`set!` 历史名称）——`#%` 前缀是 S 表达式语境区分用户层/编译器层的历史妥协（仅当语法与 AST 同构时必要），2026 年正确设计是「类型安全 ADT + 语义化命名 + 零历史包袱」：内部 AST 节点是编译器私有数据结构而非用户可见标识符，安全性由类型系统而非命名约定保证。
@@ -190,7 +192,7 @@ next2 讨论的最终推荐（不考虑兼容性的重新设计）为 8 原语�
 | Begin | `Let` 链（ANF 顺序） | 脱糖（`Let` 为新增原语） |
 | Module | （移至模块系统层，非语义原语） | 层级迁移 |
 | （新增）Let | `Let` | ANF 必需的新原语 |
-| （新增）Perform/Handle | `Perform`/`Handle` | 效应执行/处理配对 |
+| （新增，r25 已引入）Perform/Handle | `Perform`/`Handle` | 效应执行/处理配对——**已落地**（CoreExpr 第 11/12 变体，[effect-language-design.md](../develop/v0/stage-2/effect-language-design.md)） |
 | Require（声明变体） | （保留——声明面与语义面两层不合流，§6 裁定） | 不变 |
 
 迁移须走 Stage 2 「目标语言完整化」门审查（同 §7.3 裁定：§13.2 切换期重构流程 + 委员会投票）。2026 形态完整 Rust ADT 定义（8 变体 + EffectKind + HandlerClause + LiteralValue）见 [upload/stage0.md §7.4.3](../stage0.md)；六维度对比表（安全性/精确性/冗余度/模式匹配/元数据/可扩展性）见同文件 §7.4.3。

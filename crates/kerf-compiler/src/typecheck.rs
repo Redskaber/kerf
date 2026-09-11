@@ -349,6 +349,12 @@ impl<'a> TypeCtxt<'a> {
             // r8 能力声明：权限验证归 driver R9（E0006 家族），静态类型
             // 检查（E0005 家族）不涉——零运行时语义无类型约束
             CoreExpr::Require { .. } => TcType::Unknown,
+            // r25/42-f 效应面（保守 R1-R8 纪律与 Require 同型入口）：
+            // Perform 值 = resume 注入的任意值（类型不可静态收窄）→
+            // Unknown；Handle 值 = 体与 handler 体汇合的动态结果 →
+            // Unknown（effect-language-design：效应行/行多态属 Stage 3
+            // 类型层——静态面不收紧）
+            CoreExpr::Perform { .. } | CoreExpr::Handle { .. } => TcType::Unknown,
         }
     }
 

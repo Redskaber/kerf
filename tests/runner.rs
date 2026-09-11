@@ -160,3 +160,9 @@ mod multi_error_recovery_tests;
 
 #[path = "v0/stage2/plan/bootstrap_compiler_tests.rs"]
 mod bootstrap_compiler_tests;
+
+// 批次 I 后段（r25：42-f Effect M1-M5——语言级效应面 + GC 六来源 +
+// 双路径一致；effect-language-design §5 测试锚正 6 负 7 + M3 ≥8）
+
+#[path = "v0/stage2/plan/effect_tests.rs"]
+mod effect_tests;

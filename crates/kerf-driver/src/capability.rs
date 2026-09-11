@@ -6,6 +6,10 @@
 //! 模型层骨架见 `reserved/capability_model.rs`（族形状 + 演算位），
 //! 族层契约见 `reserved/capability_io.rs`（capability-model-design.md
 //! §4.3 分层架构；M2 泛化命名迁移窗口 = 批次 I 后段——D12）。
+//! **M2 执行注记（r25 / 42-f）**：族无关形态经模型层 trait 承载
+//! （[`IoFamily`] 形状标记——`IoGrant` 即 `Grant<io 族>` 的别名兼容
+//! 语义，冻结路径零删改——设计 §7 M2「别名/注记」路径）；门控表
+//! net 增行评估见 [`READ_GATED`] 尾注（维持不增行——零破坏纪律）。
 //!
 //! **三层分工**（interface-contract-review F2 修复裁定）：
 //! - `reserved.rs`：冻结契约（令牌类型 + `CapabilityIO` trait——签名
@@ -52,6 +56,15 @@ use crate::reserved::{
 pub(crate) const IO_PERMISSION_CODE: DiagnosticCode = DiagnosticCode(6);
 
 /// 读门控内置名（R9 数据驱动表——read 能力覆盖面）。
+///
+/// **net 增行评估（r25/42-f M2——capability-model-design §4.1/§7 M3）**：
+/// net 族引入的依赖条件 ①效应系统成熟（12 §2.4.5「能力可视为不可
+/// 撤销的效应」）已于本批就位（Effect M1-M5 落地）；②族分类学手术
+/// 面经模型层锢定收敛为三点加法（D11：枚举变体 + 门控表行 + 族文件）。
+/// 评估结论：**维持不增行**——net 语音面（`(require net ...)`）与门控
+/// 内置属 Stage 2 末窗口（I3 门审后——避免与 42-f 同批引入新门控行
+/// 破坏零回归基线；本批为纯新增面：效应 + IoFamily 归位，既有门控
+/// 表/授权管线/require 语法零改动）。
 pub(crate) const READ_GATED: &[&str] = &["read-line", "read-int", "read-num"];
 
 /// 写门控内置名（R9 数据驱动表——write 能力覆盖面）。
@@ -134,6 +147,15 @@ fn collect_requirements(e: &CoreExpr, req: &mut IoRequirements) {
             }
         }
         CoreExpr::VarRef { .. } | CoreExpr::Literal { .. } => {}
+        // r25/42-f：效应子树递归（D10 正交——效应体内 require/门控
+        // 引用照常提取/验证；能力管线零感知效应语义）
+        CoreExpr::Perform { effect, .. } => collect_requirements(effect, req),
+        CoreExpr::Handle {
+            handler_body, body, ..
+        } => {
+            collect_requirements(handler_body, req);
+            collect_requirements(body, req);
+        }
     }
 }
 
@@ -185,6 +207,23 @@ impl IoGrant {
             read: self.read.is_some(),
             write: self.write.is_some(),
         }
+    }
+}
+
+/// io 族形状标记（r25/42-f 能力管线泛化 M2——capability-model-design
+/// §7 M2「别名兼容」路径做实）。
+///
+/// 语义：`IoGrant` = **族无关授权形态 `Grant` 的 io 族实例**——`type
+/// Token = IoGrant` 即 `pub type IoGrant = Grant<IoFamily>` 的 trait
+/// 形态承载（模型层族形状提供类型归属；管线层具体结构冻结零删改
+/// ——原则 27 兼容路径）。driver 组合根按本形状消费授权（D12 同轮
+/// 协调：42-f Effect + M2 双接触面经 worklog 交叉引用锚定）。
+pub struct IoFamily;
+
+impl crate::reserved::CapabilityModelFamily for IoFamily {
+    type Token = IoGrant;
+    fn family_name() -> &'static str {
+        "io"
     }
 }
 
@@ -328,6 +367,12 @@ fn verify_refs(
             .iter()
             .find_map(|item| verify_refs(item, declared, takeover, table)),
         CoreExpr::Require { .. } | CoreExpr::Literal { .. } => None,
+        // r25/42-f：效应子树递归（同 collect_requirements 口径）
+        CoreExpr::Perform { effect, .. } => verify_refs(effect, declared, takeover, table),
+        CoreExpr::Handle {
+            handler_body, body, ..
+        } => verify_refs(handler_body, declared, takeover, table)
+            .or_else(|| verify_refs(body, declared, takeover, table)),
     }
 }
 
@@ -377,6 +422,14 @@ fn collect_takeover(e: &CoreExpr, table: &SymbolTable, out: &mut HashSet<String>
             }
         }
         CoreExpr::Require { .. } | CoreExpr::VarRef { .. } | CoreExpr::Literal { .. } => {}
+        // r25/42-f：效应子树递归（接管名可藏于效应体内——同提取口径）
+        CoreExpr::Perform { effect, .. } => collect_takeover(effect, table, out),
+        CoreExpr::Handle {
+            handler_body, body, ..
+        } => {
+            collect_takeover(handler_body, table, out);
+            collect_takeover(body, table, out);
+        }
     }
 }
 
@@ -600,4 +653,38 @@ mod tests {
         assert_eq!(required_capability("cons"), None);
         let _ = table_with("x");
     }
+}
+
+// ---- r25/42-f 能力管线泛化 M2（capability-model-design §7 M2）----
+
+/// io 族授权形态归位：`IoFamily` 形状满足模型族 trait（族无关
+/// `Grant` 的 io 实例——别名兼容语义的机器验证；M2 验收「零破坏
+/// （既有测试零改动）」由本组不触碰既有断言承担）。
+#[test]
+fn io_family_grant_satisfies_model_family() {
+    use crate::reserved::CapabilityModelFamily;
+    assert_eq!(IoFamily::family_name(), "io");
+    // Token 关联类型 = IoGrant（管线层具体结构）——类型级别名
+    // 兼容证明（fn 指针形态锚定关联类型等式）
+    fn token_of<F: CapabilityModelFamily>() -> fn(&F::Token) {
+        fn ptr<T>(_: &T) {}
+        ptr::<F::Token>
+    }
+    let grant_fn: fn(&IoGrant) = token_of::<IoFamily>();
+    let g = IoGrant::none();
+    grant_fn(&g);
+    // 授权面回读经族形状消费（组合根同口径——观测面不分裂）
+    assert!(!g.requirements().read);
+    assert!(!g.requirements().write);
+}
+
+/// net 增行评估面断言：门控表维持两族（read/write）——本批零增行
+/// （评估结论注记的机器锚——READ_GATED 尾注；net 引入窗口 =
+/// Stage 2 末，手术面三点加法 D11）。
+#[test]
+fn net_gate_rows_unchanged_in_42f() {
+    assert_eq!(READ_GATED.len(), 3);
+    assert_eq!(WRITE_GATED.len(), 3);
+    assert_eq!(required_capability("connect"), None);
+    assert_eq!(required_capability("listen"), None);
 }

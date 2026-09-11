@@ -39,9 +39,43 @@ impl Rt {
     }
 }
 
-/// 预留槽类型（§8.12 三扩展槽——Stage 0 空实现，格式冻结）。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct ContinuationSlot;
+/// 效应处理器帧数据（r25/42-f——D6 ext1 具体化：`ContinuationSlot`
+/// 预留槽激活，结构零变更——原则 27 接口预留时机兑现）。
+///
+/// 携带分派键 + handler 原型 + 捕获单元 + 安装时数据栈水位：
+/// perform 扫描匹配后据此变形 handler 帧并截回数据栈（外层中间值
+/// 保持；挂起帧链/中间值已存入 continuation 快照）。
+#[derive(Debug, Clone)]
+pub struct HandlerFrame {
+    /// 效应族标签（match 单键分派键——符号字面量同型 `Rc<str>`，与
+    /// `CoreExpr::Handle.tag` / `Value::Symbol` 同载体）。
+    pub tag: Rc<str>,
+    /// handler 原型（params = [payload_var, resume_var]）。
+    pub handler_proto: u32,
+    /// handler 原型捕获单元（共享可变——与 Closure 捕获同机制；
+    /// dispatch 变形时作为 H 执行帧的 captures）。
+    pub captures: Vec<Rc<GcCell>>,
+    /// 安装时刻数据栈深度（dispatch 截回水位——R11-dispatch）。
+    pub stack_watermark: usize,
+}
+
+/// 结构相等（FrameExt 派生需要）：分派键/原型/水位按值，捕获按单元
+/// 指针（同一安装点的双 clone 共享相等；不同安装点同结构不等——
+/// 帧身份语义）。
+impl PartialEq for HandlerFrame {
+    fn eq(&self, other: &Self) -> bool {
+        self.tag == other.tag
+            && self.handler_proto == other.handler_proto
+            && self.stack_watermark == other.stack_watermark
+            && self.captures.len() == other.captures.len()
+            && self
+                .captures
+                .iter()
+                .zip(other.captures.iter())
+                .all(|(a, b)| Rc::ptr_eq(a, b))
+    }
+}
+impl Eq for HandlerFrame {}
 
 /// 预留槽类型（ext2：异常处理表）。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -51,11 +85,12 @@ pub struct HandlerTableSlot;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DebugFrameSlot;
 
-/// 调用帧扩展（三槽冻结格式）。
+/// 调用帧扩展（三槽冻结格式；ext1 于 r25/42-f 具体化为效应 handler
+/// 帧——D6 预留槽位激活；`Copy` 撤销（ext1 携带 `Rc`））。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FrameExt {
-    /// ext1：continuation / effect handler（Stage 0 空）。
-    pub ext1: Option<ContinuationSlot>,
+    /// ext1：效应 handler 帧（None = 未安装）。
+    pub ext1: Option<Rc<HandlerFrame>>,
     /// ext2：异常处理表（Stage 0 空）。
     pub ext2: Option<HandlerTableSlot>,
     /// ext3：调试帧信息（Stage 0 空）。
@@ -104,6 +139,9 @@ pub struct VmError {
     pub message: String,
     pub span: Span,
     pub trace: Vec<TraceFrame>,
+    /// 结构化诊断码（None = E0004 运行时通用族；r25/42-f 效应族
+    /// E0007-E0009 携码——driver 层 `from_vm` 按此映射）。
+    pub code: Option<u32>,
 }
 
 impl VmError {
@@ -112,6 +150,17 @@ impl VmError {
             message: message.into(),
             span,
             trace: Vec::new(),
+            code: None,
+        }
+    }
+
+    /// 携结构化码构造（E0007-E0009 效应族——messages 单源消息配套）。
+    fn new_code(code: u32, message: impl Into<String>, span: Span) -> Self {
+        VmError {
+            message: message.into(),
+            span,
+            trace: Vec::new(),
+            code: Some(code),
         }
     }
 
@@ -602,6 +651,23 @@ fn execute(
                             span,
                         ))
                     }
+                    // r25/42-f（D4）：resume = continuation 值的调用形态
+                    // ——走 Call 通道（脱糖后与普通调用同一路径分派）。
+                    // 控制转移语义：当前帧（H 执行帧）拆
+                    // 除——handler 体内 κ 调用之后的代码永不执行（B 恢复
+                    // 链自身的返回目标承接返回）
+                    Value::Continuation(rc) => {
+                        if args.len() != 1 {
+                            return Err(VmError::new_code(
+                                9,
+                                crate::messages::err_resume_arity(args.len()),
+                                span,
+                            ));
+                        }
+                        let v = args.into_iter().next().expect("上方已检查");
+                        let _h = frames.pop();
+                        pc = resume_continuation(&rc, v, program, frames, &mut stack, span)?;
+                    }
                     other => {
                         return Err(VmError::new(
                             format!("不可调用的值：{}", other.type_name()),
@@ -679,6 +745,21 @@ fn execute(
                             "跨路径闭包调用不支持（eval 闭包不可在 VM 中调用——双路径用于互查）",
                             span,
                         ))
+                    }
+                    // r25/42-f：尾位 resume——当前帧拆除（控制已转移：
+                    // 恢复的挂起帧链自身携带完整返回链，被拆帧的返回点
+                    // 不再被引用——同 TailCall 帧替换语义）
+                    Value::Continuation(rc) => {
+                        if args.len() != 1 {
+                            return Err(VmError::new_code(
+                                9,
+                                crate::messages::err_resume_arity(args.len()),
+                                span,
+                            ));
+                        }
+                        let v = args.into_iter().next().expect("上方已检查");
+                        let _old = frames.pop();
+                        pc = resume_continuation(&rc, v, program, frames, &mut stack, span)?;
                     }
                     other => {
                         return Err(VmError::new(
@@ -793,6 +874,192 @@ fn execute(
                 let _ = frame_idx;
                 return Ok(v);
             }
+            // ---- 效应（r25/42-f——effect-language-design D6/D8 帧编排）----
+            Op::InstallHandler {
+                handler: hp,
+                body: bp,
+                tag: tk,
+                trampoline: tp,
+            } => {
+                let hp = *hp as usize;
+                let bp = *bp as usize;
+                let tp = *tp as usize;
+                if hp >= program.protos.len()
+                    || bp >= program.protos.len()
+                    || tp >= program.protos.len()
+                {
+                    return Err(VmError::new(
+                        format!(
+                            "INSTALL_HANDLER 原型索引越界：handler {} / body {} / trampoline {}（共 {}）",
+                            hp,
+                            bp,
+                            tp,
+                            program.protos.len()
+                        ),
+                        span,
+                    ));
+                }
+                let tag_sym = match &program.consts[*tk as usize] {
+                    BcConst::SymLit(s) => Rc::clone(s),
+                    _ => return Err(VmError::new("INSTALL_HANDLER 标签操作数须为符号常量", span)),
+                };
+                if frames.len() + 2 > MAX_FRAMES {
+                    return Err(VmError::new(
+                        format!("调用帧超过上限 {}（失控递归）", MAX_FRAMES),
+                        span,
+                    ));
+                }
+                // 两原型捕获取自当前帧 F（与 Closure 同机制——共享单元格）
+                let h_captures = take_frame_captures(
+                    &program.protos[hp].capture_sources,
+                    frames,
+                    frame_idx,
+                    span,
+                )?;
+                let b_captures = take_frame_captures(
+                    &program.protos[bp].capture_sources,
+                    frames,
+                    frame_idx,
+                    span,
+                )?;
+                // ① 压 handler 帧：proto = trampoline（code=[Ret] 哨兵），
+                //    ret = (F 的原型, 本指令之后)；ext1 携分派数据
+                let handler_data = Rc::new(HandlerFrame {
+                    tag: tag_sym,
+                    handler_proto: hp as u32,
+                    captures: h_captures.clone(),
+                    stack_watermark: stack.len(),
+                });
+                frames.push(Frame {
+                    ret_proto: proto_idx,
+                    ret_pc: pc,
+                    proto: tp,
+                    locals: Vec::new(),
+                    captures: h_captures,
+                    ext: FrameExt {
+                        ext1: Some(handler_data),
+                        ext2: None,
+                        ext3: None,
+                    },
+                    call_span: span,
+                });
+                // ② 压 body thunk 帧：ret = (trampoline, 0)——body RET
+                //    经 trampoline 弹 handler 帧回到 F 的 handle 后续
+                //    （R11-return）；body 内尾调用拆 thunk 帧穿透（D8）
+                frames.push(Frame {
+                    ret_proto: tp,
+                    ret_pc: 0,
+                    proto: bp,
+                    locals: Vec::new(),
+                    captures: b_captures,
+                    ext: FrameExt::new(),
+                    call_span: span,
+                });
+                // ③ 转移执行 body（thunk 体 = lambda 体语义——尾位穿线）
+                pc = 0;
+            }
+            Op::Perform => {
+                // R10-perform：效应值出栈 → (tag . payload) 解构 → 最近
+                // handler 帧扫描 → continuation 快照 → 拆帧到边界 →
+                // handler 帧变形为 handler 体执行帧 → 栈截回水位
+                let v = pop!();
+                let (tag_val, payload) = match &v {
+                    Value::Pair(r) => match heap.get_pair(*r) {
+                        Some((car_slot, cdr_slot)) => {
+                            let tag_v = unbox_slot(car_slot, heap);
+                            let payload = unbox_slot(cdr_slot, heap);
+                            match tag_v {
+                                Value::Symbol(s) => (s, payload),
+                                other => {
+                                    return Err(VmError::new(
+                                        format!(
+                                            "perform 效应值 tag 位需要符号，实际 {}",
+                                            other.type_name()
+                                        ),
+                                        span,
+                                    ))
+                                }
+                            }
+                        }
+                        None => {
+                            return Err(VmError::new(
+                                "perform 效应值应为 (tag . payload) 点对",
+                                span,
+                            ))
+                        }
+                    },
+                    other => {
+                        return Err(VmError::new(
+                            format!(
+                                "perform 效应值需要 (tag . payload) 点对，实际 {}",
+                                other.type_name()
+                            ),
+                            span,
+                        ))
+                    }
+                };
+                // 从帧栈顶向下扫描最近匹配 tag 的 handler 帧（D6）
+                let mut handler_idx: Option<usize> = None;
+                for (i, f) in frames.iter().enumerate().rev() {
+                    if let Some(hd) = &f.ext.ext1 {
+                        if hd.tag == tag_val {
+                            handler_idx = Some(i);
+                            break;
+                        }
+                    }
+                }
+                let hi = match handler_idx {
+                    Some(i) => i,
+                    None => {
+                        return Err(VmError::new_code(
+                            7,
+                            crate::messages::err_effect_unhandled(&tag_val),
+                            span,
+                        ))
+                    }
+                };
+                // continuation 快照：**含 handler 帧本身的挂起链**
+                // （handler/trampoline 帧 = B 链的返回目标——resume 时
+                // 必须恢复，否则 B 链 RET 后的帧序断裂：其返回点
+                // (trampoline, 0) 无帧承接）；完整数据栈 + 恢复点。
+                // 快照的 handler 帧 ext1 清除——浅处理（D2）：恢复后的
+                // perform 不回同一 handler（再匹配需外层嵌套 handle）
+                let mut snap = frames[hi..].to_vec();
+                snap[0].ext.ext1 = None;
+                let cont = Rc::new(crate::value::ContinuationValue {
+                    frames: snap,
+                    stack: stack.clone(),
+                    resume_pc: pc,
+                    resume_proto: frames.last().map(|f| f.proto as u32).unwrap_or(0),
+                    consumed: std::cell::Cell::new(false),
+                    first_resume_span: std::cell::Cell::new(kerf_span::Span::dummy()),
+                });
+                // handler 帧变形：trampoline → H 执行帧（locals = [payload,
+                // κ]；ext1 清除——浅处理一次消费；ret 继承原 handler 帧
+                // 的返回点 = F 的 handle 后续）
+                let hf = frames[hi].clone();
+                let hd = hf.ext.ext1.as_ref().expect("上方已匹配").clone();
+                let h_frame = Frame {
+                    ret_proto: hf.ret_proto,
+                    ret_pc: hf.ret_pc,
+                    proto: hd.handler_proto as usize,
+                    locals: vec![
+                        Rc::new(GcCell::new(payload)),
+                        Rc::new(GcCell::new(Value::Continuation(Rc::clone(&cont)))),
+                    ],
+                    captures: hd.captures.clone(),
+                    ext: FrameExt::new(),
+                    call_span: hf.call_span,
+                };
+                frames.truncate(hi + 1);
+                frames[hi] = h_frame;
+                // 数据栈截回安装水位（挂起链中间值已存 continuation）
+                let watermark = hd.stack_watermark;
+                if stack.len() > watermark {
+                    stack.truncate(watermark);
+                }
+                pc = 0;
+            }
         }
 
         // GC 安全点（§19.4 陷阱 2：只在指令边界触发；每 256 条指令轮询；
@@ -856,6 +1123,40 @@ pub fn box_value(v: &Value, heap: &mut Heap) -> GcRef {
             any: rc.clone(),
             tracer: trace_foreign_value,
         }),
+        // r25/42-f（M5）：continuation 装箱——ForeignBox 承载 Rc（解箱
+        // 往返恒等 → eq? 按引用）+ 专用追踪器（标记阶段枚举数据栈
+        // 快照与帧链槽的堆子引用——同型先例 TD-010）
+        Value::Continuation(rc) => heap.alloc_foreign(ForeignBox {
+            any: rc.clone(),
+            tracer: trace_foreign_continuation,
+        }),
+    }
+}
+
+/// continuation 装箱追踪器（M5——堆内可达性：数据栈快照 + 帧链
+/// locals/captures 的堆引用全量入 out；嵌套 κ 递归 trace_value_refs
+/// ——visited 防环）。
+fn trace_foreign_continuation(any: &Rc<dyn Any>, out: &mut Vec<GcRef>) {
+    if let Some(cont) = any
+        .as_ref()
+        .downcast_ref::<crate::value::ContinuationValue>()
+    {
+        let mut visited: HashSet<usize> = HashSet::new();
+        for sv in &cont.stack {
+            trace_value_refs(sv, out, &mut visited);
+        }
+        for f in &cont.frames {
+            for cell in &f.locals {
+                if cell.has_heap() {
+                    trace_value_refs(&cell.get(), out, &mut visited);
+                }
+            }
+            for cell in &f.captures {
+                if cell.has_heap() {
+                    trace_value_refs(&cell.get(), out, &mut visited);
+                }
+            }
+        }
     }
 }
 
@@ -879,6 +1180,10 @@ pub fn unbox_slot(r: GcRef, heap: &Heap) -> Value {
             }
             if let Ok(f) = b.any.clone().downcast::<BuiltinFn>() {
                 return Value::Builtin(f);
+            }
+            // r25/42-f：continuation 解箱（往返恒等——M5 存活验证面）
+            if let Ok(k) = b.any.clone().downcast::<crate::value::ContinuationValue>() {
+                return Value::Continuation(k);
             }
             // 防御：未知 Foreign 载体（不发生于当前装箱方——上游不变式）
             Value::Nil
@@ -934,9 +1239,120 @@ fn collect_value_roots(v: &Value, roots: &mut Vec<GcRef>, visited: &mut HashSet<
                 }
             }
         }
+        // r25/42-f（M5）：continuation = GC 第六来源（活跃 continuation
+        // 帧——effect-language-design D12「GC 五来源扩展为六」）。帧链
+        // 的 locals/captures 与数据栈快照均可能持堆引用；visited 防嵌套
+        // continuation（κ 存于帧链槽内）与共享环
+        Value::Continuation(rc) => {
+            let key = Rc::as_ptr(rc) as usize;
+            if visited.insert(key) {
+                for sv in &rc.stack {
+                    collect_value_roots(sv, roots, visited);
+                }
+                for f in &rc.frames {
+                    for cell in &f.locals {
+                        if cell.has_heap() {
+                            collect_value_roots(&cell.get(), roots, visited);
+                        }
+                    }
+                    for cell in &f.captures {
+                        if cell.has_heap() {
+                            collect_value_roots(&cell.get(), roots, visited);
+                        }
+                    }
+                }
+            }
+        }
         // _ 臂理由：即时值（Unit/Nil/Bool/Int/Float/Str/Builtin）无堆子引用，无需入根集
         _ => {}
     }
+}
+
+/// 取原型捕获单元（`Closure`/`InstallHandler` 共用——从当前帧按
+/// 捕获源描述符取共享单元格；r25/42-f 抽公用）。
+fn take_frame_captures(
+    capture_sources: &[kerf_compiler::CaptureSource],
+    frames: &[Frame],
+    frame_idx: usize,
+    span: Span,
+) -> Result<Vec<Rc<GcCell>>, VmError> {
+    let f = &frames[frame_idx];
+    let mut captures: Vec<Rc<GcCell>> = Vec::with_capacity(capture_sources.len());
+    for src in capture_sources {
+        let cell = match src {
+            kerf_compiler::CaptureSource::Local(i) => Rc::clone(
+                f.locals
+                    .get(*i as usize)
+                    .ok_or_else(|| VmError::new("捕获源局部槽越界", span))?,
+            ),
+            kerf_compiler::CaptureSource::Captured(i) => Rc::clone(
+                f.captures
+                    .get(*i as usize)
+                    .ok_or_else(|| VmError::new("捕获源捕获槽越界", span))?,
+            ),
+        };
+        captures.push(cell);
+    }
+    Ok(captures)
+}
+
+/// 恢复 continuation（R10-resume——`Call`/`TailCall` 的 Continuation
+/// 臂共用；返回恢复点 pc）。
+///
+/// 线性唯一性（D3/E0008）：首次恢复置 `consumed` + 记录首恢位置；
+/// 二次恢复报结构化码错误。帧链/数据栈整栈还原后压入实参（= perform
+/// 表达式的值）。跨程序 continuation（原型索引越界）显式报错——
+/// 与 `call_closure` 同型防御（§2.3-4 报错>静默）。
+fn resume_continuation(
+    rc: &Rc<crate::value::ContinuationValue>,
+    arg: Value,
+    program: &BcProgram,
+    frames: &mut Vec<Frame>,
+    stack: &mut Vec<Value>,
+    span: Span,
+) -> Result<u32, VmError> {
+    if rc.consumed.get() {
+        return Err(VmError::new_code(
+            8,
+            crate::messages::err_continuation_resumed_twice(&format!(
+                "{}",
+                rc.first_resume_span.get()
+            )),
+            span,
+        ));
+    }
+    rc.consumed.set(true);
+    rc.first_resume_span.set(span);
+    // 越界防御：恢复帧链的全部原型索引须在本 program 内
+    for f in &rc.frames {
+        if f.proto >= program.protos.len() {
+            return Err(VmError::new(
+                format!(
+                    "continuation 恢复帧原型索引越界：proto {} / 共 {}（跨程序 continuation 不可恢复）",
+                    f.proto,
+                    program.protos.len()
+                ),
+                span,
+            ));
+        }
+    }
+    if rc.resume_proto as usize >= program.protos.len() {
+        return Err(VmError::new(
+            format!(
+                "continuation 恢复点原型越界：proto {} / 共 {}（跨程序 continuation 不可恢复）",
+                rc.resume_proto,
+                program.protos.len()
+            ),
+            span,
+        ));
+    }
+    // 帧链恢复（挂起点帧 → handler 边界——按栈序 push）
+    frames.extend(rc.frames.iter().cloned());
+    // 数据栈整栈还原 + 实参即 perform 表达式的值
+    stack.clear();
+    stack.extend(rc.stack.iter().cloned());
+    stack.push(arg);
+    Ok(rc.resume_pc)
 }
 
 /// Foreign 装箱值的 GC 追踪器（TD-010）：标记阶段由 Heap::children

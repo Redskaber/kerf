@@ -58,6 +58,19 @@ pub enum IrNode {
         exports: Vec<Symbol>,
         body: Vec<NodeId>,
     },
+    /// 效应执行（r25/42-f——effect-language-design §2.1/R10 直译）。
+    Perform {
+        effect: NodeId,
+    },
+    /// 效应处理（浅处理——两绑定器 payload/resume 引入 fresh scope
+    /// 作用域，与 Lambda 同型；tag 为符号字面量同型 `Rc<str>`）。
+    Handle {
+        tag: Rc<str>,
+        payload_var: Symbol,
+        resume_var: Symbol,
+        handler_body: NodeId,
+        body: NodeId,
+    },
 }
 
 /// 字面量结构键（可哈希共享的最小形式；运行期值由编译器常量池承载）。
@@ -318,6 +331,35 @@ fn lower_expr(graph: &mut IrGraph, e: &CoreExpr, scopes: &mut ScopeSet) -> NodeI
             // 保持；编译期权限验证在 driver front 管线完成，非 IR 职责）
             let _ = span;
             graph.add_shared_literal(LiteralKey::from_value(&LiteralValue::Nil), meta)
+        }
+        CoreExpr::Perform { effect, .. } => {
+            let e = lower_expr(graph, effect, scopes);
+            graph.add_node(IrNode::Perform { effect: e }, meta)
+        }
+        CoreExpr::Handle {
+            tag,
+            payload_var,
+            resume_var,
+            handler_body,
+            body,
+            ..
+        } => {
+            // 两绑定器 fresh scope（镜像 Lambda 的作用域语义——TD-004）
+            let scope = fresh_scope();
+            scopes.add(scope);
+            let h = lower_expr(graph, handler_body, scopes);
+            let b = lower_expr(graph, body, scopes);
+            scopes.remove(scope);
+            graph.add_node(
+                IrNode::Handle {
+                    tag: tag.clone(),
+                    payload_var: *payload_var,
+                    resume_var: *resume_var,
+                    handler_body: h,
+                    body: b,
+                },
+                meta,
+            )
         }
     }
 }

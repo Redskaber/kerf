@@ -44,6 +44,13 @@ pub enum Keyword {
     DefineSyntax,
     SyntaxRules,
     Require,
+    /// `perform`（r25/42-f——效应执行核心原语，D1 表面语法二形式之一）。
+    Perform,
+    /// `handle`（效应处理核心原语——浅处理，D2）。
+    Handle,
+    /// `resume`（continuation 调用的表面关键字——脱糖为 `(κ v)` App，D4
+    /// 非独立原语）。
+    Resume,
 }
 
 impl Keyword {
@@ -72,6 +79,9 @@ impl Keyword {
             Keyword::DefineSyntax => "define-syntax",
             Keyword::SyntaxRules => "syntax-rules",
             Keyword::Require => "require",
+            Keyword::Perform => "perform",
+            Keyword::Handle => "handle",
+            Keyword::Resume => "resume",
         }
     }
 
@@ -100,6 +110,9 @@ impl Keyword {
             "define-syntax" => Keyword::DefineSyntax,
             "syntax-rules" => Keyword::SyntaxRules,
             "require" => Keyword::Require,
+            "perform" => Keyword::Perform,
+            "handle" => Keyword::Handle,
+            "resume" => Keyword::Resume,
             _ => return None,
         })
     }
@@ -148,6 +161,11 @@ impl SymbolTable {
             Keyword::DefineSyntax,
             Keyword::SyntaxRules,
             Keyword::Require,
+            // r25/42-f：效应三关键字（预内部化——keyword_symbol 查表
+            // 完备性随枚举同步）
+            Keyword::Perform,
+            Keyword::Handle,
+            Keyword::Resume,
         ] {
             let sym = table.intern(kw.as_str());
             table.keywords.insert(kw, sym);
