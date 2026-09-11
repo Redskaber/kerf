@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-10（v5.2：补四项接口预留契约位置指引（#26））
-> **Version**: v5.2
+> **Version**: v6.2
 > **Status**: Active
 
 > 本文件收录自举进程的核心策略：自举的数学本质与通用自举流水线模式（原 §2.1）、自举流水线的三个常见陷阱（原 §2.3）、以及 Stage 1+ 语言演化策略全文（原 §18：从宿主语言到完全自举，含混合期构成、阶段切换信号、宿主语言角色变化与完全自举的核心收益）。历史案例参考（Rust/Guix/Racket/Julia/C）见 [00-总览 §4](./00-overview.md)；实施节奏与周级任务见 [12-路线图](./12-roadmap.md)；能力引入时机的进程视角见同文件 §2。
@@ -81,7 +81,7 @@ flowchart TD
 ├── Reader（新语言子集）       ← r6 已交付（B3）：reader.krf 全 kerf 源码，
 │                                 生产读路径切换（compile_front 经自举 Reader）；
 │                                 种子 Rust Reader 保留为引导实现 + parity oracle
-├── Expander（新语言子集）     ← E1-β 已交付（r15：expander.krf 宏收口——syntax-rules 全模式面 + 卫生 α + 深度 500 + Span 代次守卫；生产切换——读+展开两段全自举（r14 E1-α 影子路径先行，r15 收口））
+├── Expander（新语言子集）     ← E1-β 已交付（r15：expander.krf 宏收口——syntax-rules 全模式面（单层省略号边界内——v6.2 限定：嵌套省略号/syntax-parse 按 TD-005 推迟 Stage 2）+ 卫生 α + 深度 500 + Span 代次守卫；生产切换——读+展开两段全自举（r14 E1-α 影子路径先行，r15 收口））
 └── 基础宏定义                 ← E1-β（随宏收口与模块系统，TD-021 联动）
 
 宿主语言编写的部分（原生执行）：
@@ -93,7 +93,7 @@ flowchart TD
 ```
 
 > **B3 交付注记（r6）**：Reader 已以 kerf 源码重写（`kerf-driver/src/bootstrap/
-> reader.krf`，~430 行：词法 + 语法 + 高阶函数序章），经种子管线编译为字节码后
+> reader.krf`，471 行（v6.2 更正：原文 ~430 为 r6 时点口径，r15 序章扩展后实测 471；词法 + 语法 + 高阶函数序章），经种子管线编译为字节码后
 > 在 Stage 0 VM 上运行——`lex-src`/`parse-tokz` 两入口（与种子 `lex_source`/
 > `parse_tokens` 接口形状对齐，§11）。宿主桥（`kerf-driver/src/bootstrap.rs`）：
 > VM 宿主调用（`call_closure`）+ 值树 ↔ Token/Stx 转换 + 数字文本同源 parse

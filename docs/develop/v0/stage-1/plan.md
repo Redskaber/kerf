@@ -161,4 +161,22 @@ flowchart TD
 
 ---
 
+### r15 后注记（2026-09-11，批次 E 收口——Stage 1 交付终态）
+
+批次 E 全部交付（Task 34-x，r13-r15）：TD-004 ✅ → E1-α 自举 Expander ✅ → E1-β 宏收口 + 生产切换 + TD-021 + Stage 1 门审查 APPROVED ✅（553:0:0 + §6.3 五角色全票 GO——详见 §5 批次 E 行与 RELEASE_NOTES r15 节）。**本计划六批次全部关闭。**
+
+**衔接**：[stage-2/plan.md](../stage-2/plan.md) 已落位（Task 35-c）——§21.5 切换信号核对发现深审环缺口（§14.5/§14.8/§14.9/§14.6 未执行 + Stage 1 性能基线未单独建立），**批次 F（Stage 1 深审收尾环，Task 36-x）定为 Stage 2 主体批次的前置**。
+
+---
+
 *遵循条款：§21（阶段规划先行）、§17.2（强制扫描——8 文档全查）、§18.1（四项依赖审查）、§13.1（设计对齐 10 文档映射）、§4.1（MUV 六字段齐全）、§8.4.5（决策附条款号）。*
+
+---
+
+### 批次 F 执行注记（2026-09-11，r16——Stage 1 深审收尾环实录）
+
+- **36-a（§14.5 深审）**：deep-review-round1.md 落位——D1-D8 三段式 + 委员会投票 GO-WITH-CONDITIONS（5.5/5.5）+ §14.8 偏差清单 17 项（TD-002 符号家族三篇滞后 + 批次 E 文档同步不均 + 12 矩阵两行失真 + 登记册目标时机过期家族）；P0/P1 = 0，P2×2（**TD-023 gc_stress 回归新登记**（+29~46% 超线性，绑定批次 I2）+ 登记册口径），自举切换零性能代价实证（fib +0.8% 噪声带）
+- **36-b（§14.8 回写）**：lang-design v6.1→**v6.2**（01/03/05/06/07/09/10/11/12/00 十篇回写——偏差清单 17 项落位）+ 登记册 v0.3.0-r16（索引补全 23 行 + TD-012 resolved + 六条改判 Stage 2 + TD-019/020 断档 + TD-023 新增）
+- **36-c（§14.9 整理）**：C1-C6 检查 + 两处注释级失真修正（driver.rs:263 切换守护方向 + kerf-runtime lib.rs 四类根→五来源）——零语义变化约束下 553 等价复跑
+- **36-d（§14.6 四审 + 基线）**：architecture-review / design-impl-test-coverage / hidden-problems / refactoring-optimality + performance-baseline（含自举 vs 种子前段开销实测）+ final-assessment + pipeline-test-coverage 全量重写
+- **36-e（收尾交付）**：r16 tar.gz（包内自举验证）+ web 同步 + E2E

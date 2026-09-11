@@ -1,10 +1,10 @@
 # Stage 0 最小内置库边界
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.6：r8 批次 D——I/O 六内置能力门控（require 声明 + R9/E0006 + 令牌授权面）+ FS-4 read-line 元数校验补齐；v5.5：r7 批次 C——TD-016 收紧：链式比较全操作数前置校验（运行时 + 静态面同步）；v5.4：r6 B3 交付——高阶函数四件套以 kerf 源码实现于 reader.krf 序章（经自举桥直测）；+4 自举 Reader 原语；用户面 hof 注入推迟批次 E（TD-021））
-> **Version**: v5.6
+> **Date**: 2026-09-11（v6.2：批次 F 深审回写——TD-021 hofs 用户面已 r15 解决（kerf-prelude 模块/opt-in import）注记；v5.6：r8 批次 D——I/O 六内置能力门控（require 声明 + R9/E0006 + 令牌授权面）+ FS-4 read-line 元数校验补齐；v5.5：r7 批次 C——TD-016 收紧：链式比较全操作数前置校验（运行时 + 静态面同步）；v5.4：r6 B3 交付——高阶函数四件套以 kerf 源码实现于 reader.krf 序章（经自举桥直测）；+4 自举 Reader 原语；用户面 hof 注入推迟批次 E（TD-021））
+> **Version**: v6.2
 > **Status**: Active
-> **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：高阶函数**用户面注入**（preamble/模块机制——批次 E，TD-021；P1 源码拼接/P3 跨程序全局合并/P5 builtin 调闭包三方案已否决）、中缀运算符宏（Stage 1+）、能力模型 I/O（Stage 2）
+> **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：~~高阶函数用户面注入~~（**已解决 r15**——kerf-prelude 模块承载，见 §2 v6.2 注记）、中缀运算符宏（Stage 2）、能力模型 I/O（Stage 2）、字符串全序比较（TD-011，Stage 2）
 
 > 本文件界定 Stage 0 的内置库边界：**语言核心零内置**——算术、比较、序对、谓词、I/O 与 print 等内置函数全部由 driver（宿主侧启动器）在启动时注册为全局函数，而不进入语言核心。设计依据提取自 stage0.md §8.8（最小 I/O）与 §14.5（语言规范与文档流程），并遵循 [01-核心原语 §2](./01-core-forms.md) 的核心冻结原则。相关实现：I/O 与分配器接口见 [05-运行时](./05-runtime.md)，操作码级能力见 [04-字节码 VM §1](./04-bytecode-vm.md)，12 个能力模型矩阵见 [13-能力矩阵](./13-capability-matrix.md)（其 §2.8 为本文件 §2 的规范副本）。
 
@@ -63,6 +63,15 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 > id 不可比 + 原型索引程序局部）/ P5 builtin 调闭包（VM 递归 re-entry 越界 §11）三方案
 > 已否决——正确载体是模块系统（批次 E Expander 重写时设计）。在此之前 hofs 仅为
 > Reader 内部全局（用户程序引用 `map` 报未绑定变量）——TD-021。
+>
+> **v6.2 / r15 解决注记（TD-021 已闭环）**：用户面注入已随 E1-β 交付——
+> `kerf-prelude` 模块（`bootstrap/preamble.krf`）导出 map/filter/foldl/for-each
+> （reader.krf 序章同源）；用户程序 `(module 名 (import kerf-prelude) ...)`
+> 声明后以普通全局函数可调用（forms 级合并注入单一编译单元——独立 file_id，
+> Span 指向 preamble.krf 自身，无源码拼接诊断污染；P1/P3/P5 三否决方案全规避）。
+> **opt-in 语义**：无 import 声明仍报未绑定（显式失败优于静默遮蔽）；同名
+> define 显式报「重复定义」。测试锚点 prelude_tests 7 case。上段「报未绑定」
+> 描述的是 r15 之前的边界，保留作历史口径。
 
 > **表面名与通道名的区分**（v5.2 澄清）：语言层用连字符命名（`read-line`/`str-append`——与 kerf 标识符规则一致）；通道层用 Rust snake_case（`read_line_stdin`/`write_line_stdout`）；谓词是 `null?`（非 `nil?`）。该清单为 Stage 0 的**最小骨架**：仅保证自举与测试所需（同 [12-路线图 §1.1](./12-roadmap.md) 里程碑验证清单的要求）；标准库的完整生长（列表操作、字符串处理、基本 I/O 的库化）是 Stage 1 → Stage 2 的阶段切换信号之一（见 [07-自举策略 §3.3](./07-bootstrap-strategy.md)）。完整清单以 `kerf-driver` 实现为准（δ 函数表）。`and`/`or`/`when`/`unless` 等是**语法糖**（[01-核心原语 §2](./01-core-forms.md) 推导表，展开期处理），不在内置函数表内。
 

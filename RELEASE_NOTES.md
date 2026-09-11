@@ -1,3 +1,43 @@
+## v0.3.0-r16（2026-09-11）——批次 F：Stage 1 深审收尾环（§14 阶段末全协议 + §14.6 阶段间验证 GO + TD-023 登记 + lang-design v6.2）
+
+### 交付一：§14.5 D1-D8 深度审查（deep-review-round1.md + 委员会投票 GO-WITH-CONDITIONS）
+
+- **P0/P1 = 0**；P2×2（TD-023 gc_stress 回归新登记 + 登记册目标时机过期家族）；P3×9；**无系统性 B3「实现违反设计」**——全部偏差为「实现前进、文档滞后」方向
+- 偏差清单 17 项（子代理 36-a-facts 独立扫描 20 篇 lang-design + 主代理亲验五项抽查全中）+ 无偏差确认 12 组（40 操作码/52 内置/parity 36/28/预留 14 项等核心契约面全对上）
+- §6.3 批次 F 批准补票（stage-2/plan「规划批准中」悬空项）：五角色加权 5.5/5.5 = 100%
+- §3.2 基线 clean 全量复验：build 9.86s 零告警 / check 0/0 / fmt 0 diff / clippy 0 / **553:0:0**（25s）+ CLI 冒烟
+
+### 交付二：§14.8 设计回写（lang-design v6.1→v6.2 十篇 + 登记册 v0.3.0-r16）
+
+- **TD-002 符号值家族三篇**：05（HeapObj 七变体/八入口/三通道函数/TD-023 注记）、06（值域十变体 + 语义字段限定）、01（literal_value + Symbol）
+- **批次 E 滞后四面**：09（TD-021 r15 解决注记）、11（553 口径）、07（471 行 + 全模式面限定）、03（ExpandCtxt 四字段）
+- **12-roadmap 两行矩阵改写**：元循环求值器（保持 Rust 参考，eval 自举滑入 Stage 2）/ 宏系统（E1-β 收口 ✅，调试工具 Stage 2+）；10-toolchain 补 CLI 11 子命令清单（B4 收口）
+- **登记册全量对账**：索引补全 23 行（TD-015+ 此前无索引行的结构性缺口修复）+ TD-012 resolved（批次 B 六文件实证）+ TD-013/009/010/014/017/018 改判 Stage 2（附门放行裁定）+ TD-019/020 断档登记（禁复用）+ **TD-023 新增（P2——绑定批次 I2）**
+
+### 交付三：§14.6 阶段间深度验证（六篇 + 自举 vs 种子前段实测）
+
+- **architecture-review**（32✅/3⚠️/0❌——Stage 0 ⚠️×4 收敛 2）/**design-impl-test-coverage**（B1 全登记零未登记缺口 + 三者不一致零项）/**hidden-problems-assessment**（复杂度 ≥2× 强制修复触发 0 项）/**refactoring-optimality-review**（7 重构 7 优 0 hack）/**performance-baseline**/**final-assessment**（GO + 门审 checklist 增补：登记册核对 + 对账面六面清单）
+- **自举 vs 种子前段开销实测**（§21.5 信号 4 补录）：**比值 69×（fib）/157×（宏）/116×/388×（300-defines）** + 冷启动 16.1ms + fib bench 89.4~89.6ms（**自举切换零性能代价 +0.8% 噪声带**）——**stage-2 DAG 的 H2→I1 次序被实测验证**（TCO 是编译器本体迁移的实质前置）
+- **gc_stress 回归**（+29~46% 超线性，超 §14.6.4 10% 阈值）：TD-023 登记（per-cycle HashSet 分配 + Value 宽度候选根因）→ 批次 I2（TD-008 分代同轮）；正确性无影响不阻塞
+- pipeline-test-coverage.md 全量重写（294→553 口径 + Stage 1 套件 11 行 + parity 印证节 + catch-all 42→1 通配实测）
+
+### 交付四：§14.9 C1-C6 代码整理（零语义变化）
+
+- 三处注释级修正（driver.rs 切换守护方向反写 / kerf-runtime「四类根」→五来源 / 堆语义注释过时）——**553 零断言修改逐一等价复跑实证**（探针临时部署/移除各一次全绿）
+- C1-C6 全维检查：TODO/FIXME 0、glob 0、//! 66/66、§11 五项合规、真通配 catch-all 1 处（带臂级注释）
+
+### 交付五：质量口径与收尾
+
+- **§3.2 六命令实跑全绿**（clean 420 files → build 9.86s → check 0/0 → fmt 0 diff → clippy -D 0 → test **553:0:0**）；双审计集 EXIT 0（41 + 50）；探针移除后全量复验 553:0:0
+- 文档同步：v0.5-roadmap Stage 1 行 ✅ + matrix r16 对账（表体两行尾差修复）+ stage-1/plan 批次 F 注记 + stage-2/plan TD 绑定行（G2←TD-013 / I2←TD-023 / H2←TD-017）
+- r16 tar.gz（§19.4 整目录 + 包内自举验证 553:0:0 + CLI 一致）+ web 同步 + E2E + git commit（r13-r16 积欠统一入账 per §6.4）
+
+### 下一步（Stage 2 主体——批次 G 起）
+
+G3 FFI 所有权模型定义（§21.3 阻塞项先行）→ G1 QBE 后端 PoC（QBE 二进制按 §3.1 链位安装）∥ G2 HM 推断设计轮（+ TD-013 多错误恢复绑定）；H2（TCO + TD-007 + TD-022 + TD-017——**I1 实质前置，性能基线实测锚定**）；I2（TD-008 分代 + TD-023 根扫描对症）。
+
+---
+
 ## v0.3.0-r15（2026-09-11）——批次 E 收口：E1-β 宏系统 + 生产切换 + TD-021 prelude + Stage 1 门审查 APPROVED（553 全绿）
 
 ### 交付一：E1-β 宏收口——expander.krf 完整宏系统（syntax-rules 卫生宏，VM 上运行）

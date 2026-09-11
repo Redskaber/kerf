@@ -1,8 +1,8 @@
 # 宏系统：相位分离与卫生宏
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.2：instantiate Stage 0 简化改述（#9）+ visit 循环依赖检测已实现回填 + syntax-rules 单层省略号边界注记（#1）+ Transformer 接口标注（#4））
-> **Version**: v5.2
+> **Date**: 2026-09-11（v6.2：批次 F 深审回写——ExpandCtxt 契约块补 next_scope 第 4 字段 + 「全模式面」限定词；2026-09-10（v5.2：instantiate Stage 0 简化改述（#9）+ visit 循环依赖检测已实现回填 + syntax-rules 单层省略号边界注记（#1）+ Transformer 接口标注（#4））)
+> **Version**: v6.2
 > **Status**: Active
 > **处理程度**：P1（卫生保证与展开核心 Stage 0 已实现；syntax-parse 等宏组合机制推迟）｜ **所属 Stage**：Stage 0（骨架）→ Stage 1+（组合） ｜ **推迟项**：syntax-parse 类结构化宏 DSL、宏展开调试工具、迭代式工作表展开（TD-007）
 
@@ -72,7 +72,7 @@ impl ModuleRegistry {
 
 **能力边界（P1 处理程度的精确划定）**：
 - ✅ 已实现：syntax-rules 宏（模式/字面量/省略号/模板实例化）、Rust 内置变换器（语法糖推导，[01-核心原语 §3](./01-core-forms.md) 推导表）、卫生重命名（引入标识符唯一化）、宏自引用（递归宏）、展开深度上限保护
-- ✅ **E1-β（r15）**：宏系统整体以 kerf 源码重写并切换为**生产路径**（expander.krf——define-syntax/syntax-rules 全模式面 + 卫生 α + 深度 500 + Span 并集代次守卫；Rust 种子保留为 parity oracle + 自举引导；parity 36 测试）
+- ✅ **E1-β（r15）**：宏系统整体以 kerf 源码重写并切换为**生产路径**（expander.krf——define-syntax/syntax-rules 全模式面（**单层省略号边界内**——v6.2 限定，与 §2.3 边界声明对齐：嵌套省略号/syntax-parse 推迟 TD-005）+ 卫生 α + 深度 500 + Span 并集代次守卫；Rust 种子保留为 parity oracle + 自举引导；parity 36 测试）
 - ⛔ Stage 0 推迟：`syntax-parse` 类结构化宏 DSL（Stage 2+）、宏展开调试工具（宏展开逐步跟踪，Stage 2+）、过程宏（任意 Rust 代码作为变换器——信任模型未定，[13-能力矩阵 §3.2](./13-capability-matrix.md)）
 
 ### 2.1 变换器契约（Stage 0 冻结，kerf-expander/src/macro_sys.rs）
@@ -130,6 +130,9 @@ pub struct ExpandCtxt {
     pub table: SymbolTable,                            // 共享符号表（唯一可信数据源）
     transformers: HashMap<Symbol, Transformer>,        // 变换器注册表（Phase 1 世界）
     depth: u32,                                        // 当前宏展开深度
+    next_scope: ScopeId,                               // v6.2 补注（TD-004/r13）：作用域分配器
+                                                       // ——绑定形式 fresh scope 唯一发放处，
+                                                       // 全局单调递增保证 ScopeId 不重号
 }
 
 impl ExpandCtxt {

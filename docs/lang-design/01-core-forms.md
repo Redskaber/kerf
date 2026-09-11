@@ -1,8 +1,8 @@
 # 最小自举单元的能力模型：九个核心原语
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v6.0：新增 §8 内部语法设计——next3.md 第七轮吸收：类型安全 ADT 三原则 + 当前实现合规核验 + 旧→新迁移映射；v5.5：新增 §7 核心原语理论最小性与 2026 演进对照——next2.md 五轮吸收；v5.4：新增 §6 声明形式 require + 核心冻结边界精确化裁定；v5.2：糖推导示例「非穷举」注记（#5））
-> **Version**: v6.0
+> **Date**: 2026-09-11（v6.2：批次 F 深审回写——literal_value 补 Symbol 变体（TD-002 r5）+ 作用域元数据增补措辞限定）；v6.0：新增 §8 内部语法设计——next3.md 第七轮吸收：类型安全 ADT 三原则 + 当前实现合规核验 + 旧→新迁移映射；v5.5：新增 §7 核心原语理论最小性与 2026 演进对照——next2.md 五轮吸收；v5.4：新增 §6 声明形式 require + 核心冻结边界精确化裁定；v5.2：糖推导示例「非穷举」注记（#5））
+> **Version**: v6.2
 > **Status**: Active（核心冻结对象，全生命周期不变）
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-core/src/expr.rs）｜ **所属 Stage**：Stage 0 定义、全生命周期冻结 ｜ **推迟项**：无（原语集合自身不变；周边能力的分级见 [13-能力矩阵](./13-capability-matrix.md)）
 
@@ -39,7 +39,12 @@ and literal_value =
   | Int of int | Float of float | String of string
   | Bool of bool | Nil
   | Pair of literal_value * literal_value
+  | Symbol of string    (* v6.2 补注：TD-002 r5 新增——quote 符号 datum 的
+                        字面量形态；实现存储剥离卫生后缀的基名（Racket 语义近似）；
+                        LiteralKey::Symbol 为图 IR 共享去重键 *)
 ```
+
+> **v6.2 作用域元数据注记**：r13 作用域集解析（TD-004）为部分原语增补了**解析元数据字段**——`VarRef`/`SetBang` 携带引用作用域集、`Lambda` 携带 `param_scopes` 绑定作用域集；属位置/解析元数据而非语义字段（06 §1.1 同口径限定）。语义字段（原语行为规范）仍与本定义一致。
 
 **设计约束**：必须正交、必须完备、必须稳定（核心冻结原则——一旦定义，在整个语言生命周期内不变，[17-设计原则 §1 原则 9](./17-principles.md)）。九原语的小步归约规则（行为规范）见 [06-操作语义 §2](./06-operational-semantics.md)；运行时的归约状态与值域见同文件 §1。
 

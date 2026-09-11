@@ -1,8 +1,8 @@
 # 操作语义形式化定义
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.2：值域补 Unit（#14）+ App 求值顺序双路径修复后确认（#13）+ 测试锚点随负测扩张同步）
-> **Version**: v5.2
+> **Date**: 2026-09-11（v6.2：批次 F 深审回写——值域补符号值（十变体）+「逐字段一致」措辞限定（作用域元数据增补））；v5.2：值域补 Unit（#14）+ App 求值顺序双路径修复后确认（#13）+ 测试锚点随负测扩张同步）
+> **Version**: v6.2
 > **Status**: Active（规范锚点，冻结）
 > **处理程度**：P0（必须实现——Stage 0 已落地）｜ **所属 Stage**：Stage 0 定义、全生命周期冻结 ｜ **推迟项**：并发内存模型语义（Stage 3，[13-能力矩阵 §4](./13-capability-matrix.md)）
 
@@ -14,7 +14,7 @@
 
 ### 1.1 语法域（归约的对象）
 
-归约规则的左端对象是展开产物 `CoreExpr`（[01-核心原语 §2](./01-core-forms.md) 的九个正交原语）。九原语与 `literal_value` 的定义在 Stage 0 已冻结（`kerf-core/src/expr.rs`，与 stage0.md §3.2 的 OCaml 定义逐字段一致）：`Lambda / App / If / VarRef / Literal / SetBang / Define / Begin / Module`。**`quote` 不独立成原语**——Reader 将 `'x` 简写读取为 `(quote x)`，Expander 将其归约为 `Literal`（点对结构在 `literal_value` 中承载），故 quote 的语义即 R4（字面量恒等归约）。
+归约规则的左端对象是展开产物 `CoreExpr`（[01-核心原语 §2](./01-core-forms.md) 的九个正交原语）。九原语与 `literal_value` 的定义在 Stage 0 已冻结（`kerf-core/src/expr.rs`，与 stage0.md §3.2 的 OCaml 定义**语义字段一致**——v6.2 措辞限定：r13 作用域集解析为 VarRef/SetBang/Lambda 增补引用/绑定作用域集元数据字段（TD-004），属位置/解析元数据而非语义字段）：`Lambda / App / If / VarRef / Literal / SetBang / Define / Begin / Module`。**`quote` 不独立成原语**——Reader 将 `'x` 简写读取为 `(quote x)`，Expander 将其归约为 `Literal`（点对结构在 `literal_value` 中承载；符号 datum 归约为 `Literal(Symbol)`（r5）），故 quote 的语义即 R4（字面量恒等归约）。
 
 ### 1.2 运行时域
 
@@ -26,7 +26,7 @@ C   ::= 共享捕获单元格组（Rc<RefCell<Value>> 槽的有限序列）     
 b   ::= 内置函数句柄（driver 注册，见 [09-标准库 §2](./09-stdlib.md)）
 ```
 
-- **值 `v`**：布尔、整数、浮点、字符串、nil、**unit**、点对（堆分配）、闭包（`⟨λ(x₁…xₙ).e, ρ, C⟩`：代码 + 定义环境 + 捕获单元格组）、内置函数——与 `kerf-vm/src/value.rs` 的 `Value` **九变体一一对应**（v5.2 补 `unit`：`Value::Unit` 是「未定义返回值」的占位值，与 Nil 语义区分以支持未来的多值/效应扩展——此前文档漏列使「一一对应」声明为假，deep-review R1 偏差 #14）。
+- **值 `v`**：布尔、整数、浮点、字符串、**符号**、nil、**unit**、点对（堆分配）、闭包（`⟨λ(x₁…xₙ).e, ρ, C⟩`：代码 + 定义环境 + 捕获单元格组）、内置函数——与 `kerf-vm/src/value.rs` 的 `Value` **十变体一一对应**（v6.2 补 `symbol`：`Value::Symbol(Rc<str>)` 为 quote 符号 datum 的运行时形态（TD-002 r5，按名相等——`eq?` 同名符号相等），此前文档停在九变体口径；v5.2 补 `unit`：`Value::Unit` 是「未定义返回值」的占位值，与 Nil 语义区分以支持未来的多值/效应扩展——deep-review R1 偏差 #14）。
 - **环境 `ρ`**：有限映射，实现为词法父子链（`Env::child / lookup / define / set`）。`lookup` 沿链向父级搜索；`define` 在**当前**层新增绑定；`set` 修改链上**已有的**绑定（未绑定则失败）。
 - **堆 `σ`**：点对等对象在堆上分配；根集 `R`（**五来源**：VM 栈、帧局部槽、帧捕获槽、全局环境、外部登记引用，见 [05-运行时 §3.2](./05-runtime.md)）决定可达性。
 

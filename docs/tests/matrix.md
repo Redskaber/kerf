@@ -5,8 +5,9 @@
 > **r12 增量**（2026-09-11）：+20 接口预留扩展测试（单元 8：reserved/ Probe 冻结——toolchain 3 + ffi 3 + codegen 2；集成 12：reserved_ext_tests——P0 位置跨 crate 断言 + 14 项 API 可达性 + 形状行为含负向）——480 → **500**。
 > **r13 增量**（2026-09-11，批次 E 首个 MUV——TD-004 作用域集解析收口）：+9 集成（scope_set_tests——Racket 式 `(name, scopes ⊆)` 双路径语义锚点：嵌套 shadowing/闭包捕获/set! 词法命中 4 正 + 作用域不匹配未绑定 VM/eval/set! 3 负 + 宏引入不捕获 + 子集对照）——500 → **509**。
 > **r14 增量**（2026-09-11，批次 E / E1-α 自举 Expander）：+19 集成（bootstrap_expander_tests——expander.krf（核心形式 + 九糖，VM 上运行）与 Rust 种子 parity：结构+Span+作用域集+param_scopes 递归一致 / 错误消息+Span 逐字一致 / define-syntax E1-α 边界 / 行为面端到端可执行）——509 → **528**。
+> **r16 增量**（2026-09-11，批次 F / Stage 1 深审收尾环）：零测试变更（纯审查 + 文档 + 注释轮——**553 零断言修改逐一等价复跑**：探针临时部署/移除各一次全绿验证）；本行 + 表体两行对账（bootstrap_expander_tests 19→36 的 r15 尾差 + prelude_tests 行补录——31-e 起 header 增量与表体同步义务的漏网，36-d 发现）。
 > **r15 增量**（2026-09-11，批次 E / E1-β 宏收口 + 生产切换 + TD-021）：+24 集成（bootstrap_expander_tests 19→36：宏 parity 17——define-syntax/syntax-rules/卫生 α 重命名/省略号（零/多段/复合）/字面量/多子句/糖覆盖/深度上限/向量模式 + prelude_tests 7——TD-021 hofs 用户面/组合管道/双路径/opt-in/显式失败/未知导入）+ +1 单元（driver 生产切换守护 production_expander_is_bootstrap——独立线程活性探针 + 展开代次标记）——528 → **553**。
-> **Version**: v0.1.0-r15
+> **Version**: v0.1.0-r16
 > **Status**: Active
 
 ## 总量
@@ -64,7 +65,8 @@
 | **test_runner_tests（r8，批次 D）** | tests/v0/stage1/plan/test_runner_tests.rs | **18** |
 | **reserved_ext_tests（r12，预留扩展）** | tests/v0/stage1/plan/reserved_ext_tests.rs | **12**（P0 位置断言 4 + API 可达 1 + 形状行为 7——含负向：空目标拒绝/空片段类型检查失败/rename 错误面） |
 | **scope_set_tests（r13，批次 E·TD-004）** | tests/v0/stage1/plan/scope_set_tests.rs | **9**（双路径正例 5：shadowing/嵌套 shadowing/闭包捕获/set! 词法命中/子集对照；负例 4：作用域不匹配未绑定 VM/eval/set! 三锚 + 宏引入不捕获） |
-| **bootstrap_expander_tests（r14，批次 E·E1-α）** | tests/v0/stage1/plan/bootstrap_expander_tests.rs | **19**（parity 正例 8 套件：字面量/符号引用/嵌套作用域/if-set!-define-begin/quote/九糖/let 族/module-require/内部 define 提升；负例 6 套件：核心形式/提升路径/quote 向量/糖/module-require-关键字；边界 1：define-syntax；行为面 3：算术闭包/cond-while-fib/内部定义） |
+| **bootstrap_expander_tests（r14/r15，批次 E·E1-α + E1-β 宏收口）** | tests/v0/stage1/plan/bootstrap_expander_tests.rs | **36**（r14 E1-α：parity 正例 8 + 负例 6 + 边界 1 + 行为面 3；r15 +17 宏 parity：define-syntax/syntax-rules 全模式面/卫生 α/省略号零-多段-复合/字面量/多子句/糖覆盖/深度上限消息逐字/向量模式 + retag 代次守卫） |
+| **prelude_tests（r15，批次 E·TD-021）** | tests/v0/stage1/plan/prelude_tests.rs | **7**（hofs 用户面可见/组合管道 filter→map→foldl=50/for-each 副作用/双路径一致/opt-in 负例/名字捕获显式失败/未知导入） |
 
 ### 负向测试规模与正负比（§9.4.3 对账）
 

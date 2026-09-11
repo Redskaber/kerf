@@ -258,9 +258,10 @@ fn resolve_prelude_imports(
 ///
 /// **E1-β 生产切换**：读 **与展开** 均经自举实现（VM 上 reader.krf +
 /// expander.krf）——「语言能表达自身前端」的完整生产命题；Rust 种子
-/// 保留双角色：自举引导（reader.krf/expander.krf 的编译）+ parity
-/// oracle（测试对照）。切换守护：`production_expander_is_bootstrap`
-/// （宏产物 CoreExpr Span 展开代次 = 0——种子路径恒 ≥1）。
+/// 保留双角色：自举引导（reader.krf/expander.krf/preamble.krf 的编译）+
+/// parity oracle（测试对照）。切换守护：`production_expander_is_bootstrap`
+/// （独立线程活性探针 is_loaded 前后翻转 + 宏产物 CoreExpr Span 展开
+/// 代次 ≥1——桥侧 retag 统一 +1，输入恒源码代次 0——双信号，实测判别）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 fn compile_front(source: &str, filename: &str) -> Result<FrontOutput, DriverError> {
     let mut sm = SourceMap::new();

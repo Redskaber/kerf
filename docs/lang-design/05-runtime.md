@@ -1,8 +1,8 @@
 # 运行时：最小 I/O 与标记-清除 GC
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-10（v5.2：HeapObj 六变体对齐 + alloc_boxed 第 7 入口 + 根集五来源 + GC 冷却数值冻结 + 分配算法描述对齐（slot-Vec + 空闲表 + 显式工作栈））
-> **Version**: v5.2
+> **Date**: 2026-09-11（v6.2：批次 F 深审回写——TD-002 符号值家族对齐：HeapObj 七变体/八入口 + I/O 通道三函数 + gc_stress 回归基线注记；v5.2：HeapObj 六变体对齐 + alloc_boxed 第 7 入口 + 根集五来源 + GC 冷却数值冻结 + 分配算法描述对齐（slot-Vec + 空闲表 + 显式工作栈））
+> **Version**: v6.2
 > **Status**: Active
 > **处理程度**：GC 为 P0（安全关键组件，Stage 0 已实现）；最小 I/O 为 P1（传统全局函数，能力模型 I/O 接口预留）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：分代/增量/并发 GC（Stage 2）、能力模型 I/O（Stage 2，[13-能力矩阵 §3.1.3](./13-capability-matrix.md)）、屏障接口实现（Stage 0 no-op）
 
@@ -14,6 +14,8 @@
 
 仅 `read_line()` 和 `write_line()`，通过全局函数（非能力模型）。Stage 0 不引入能力模型 I/O，但 VM 栈帧和分配器接口必须预留 `register_foreign_ref` 等接口（Stage 0 可为 no-op），以便 Stage 1+ 升级到能力模型时无需破坏接口。
 
+> **v6.2 通道面注记**：通道层实为**三函数**——r5 标准库批次新增 `write_stdout(s)`（`write-string` 内置的无换行通道载体，io.rs 注记在案；09-stdlib v5.4 已记载该通道名，本文件此前未同步）。升级路径不受影响（三函数同被能力对象分发覆盖）。
+
 **I/O 通道契约（Stage 0 冻结，kerf-runtime/src/io.rs）**：
 
 ```rust
@@ -24,6 +26,9 @@ pub struct RuntimeError { pub message: String }
 pub fn write_line_stdout(s: &str) -> Result<(), RuntimeError>;
 /// 全局 stdin 行读取（EOF 返回 None；副作用唯一出口之二）。
 pub fn read_line_stdin() -> Result<Option<String>, RuntimeError>;
+/// 全局 stdout 原文写入（无换行——`write-string` 的通道层载体，r5 新增；
+/// v6.2 补注第 3 通道函数）。
+pub fn write_stdout(s: &str) -> Result<(), RuntimeError>;
 ```
 
 **升级路径（扩展预留接口）**：Stage 2 升级到能力模型 I/O 时，本二函数由 `ReadCapability / WriteCapability` trait（[13-能力矩阵 §3.1.3](./13-capability-matrix.md) 冻结签名）的实例替换——内置函数 δ 表（[09-标准库 §2](./09-stdlib.md)）从直接调用全局函数改为经能力对象分发，调用点接口不变（[17-设计原则 §1 原则 28](./17-principles.md)：渐进替换）。
@@ -44,12 +49,13 @@ pub fn read_line_stdin() -> Result<Option<String>, RuntimeError>;
 /// GC 引用（堆槽句柄——u32 索引，非裸指针：句柄稳定性不依赖内存布局）。
 pub struct GcRef(pub u32);
 
-/// 堆对象种类（**六变体**，v5.2 对齐冻结实现：Pair/Str/Int/Float/Bool/Nil）。
+/// 堆对象种类（**七变体**，v6.2 对齐冻结实现：Pair/Str/Int/Float/Bool/Nil/Symbol。
+/// Symbol(Rc<str>) 为 r5 批次 B TD-002 符号值的槽位形态（v6.2 前文档停在六变体口径）。
 /// 早期版本误写 Boxed(BoxedInput) 变体——实际不存在：闭包/内置函数不可装箱
 /// 是显式裁定（序对元素为闭包/内置时以标记字符串占位，TD-010 登记，
-/// Stage 1 以 HeapObj::Foreign 承载）。
+/// Stage 2 以 HeapObj::Foreign 承载——目标时机随批次 F 深审改判，见登记册）。
 pub enum HeapObj { /* Pair(GcRef, GcRef) | Str(Rc<str>) | Int(i64) | Float(f64)
-                     | Bool(bool) | Nil */ }
+                     | Bool(bool) | Nil | Symbol(Rc<str>) */ }
 
 /// 堆槽（分配粒度单位：对象载荷 + 标记位；空闲表为堆级 `free: Vec<GcRef>`，
 /// 不在槽内——清除阶段全量重建）。
@@ -62,15 +68,18 @@ pub struct Heap {
 }
 
 impl Heap {
-    /// 类型化分配（**七入口**——调用方携带类型信息，非统一 alloc(size)）：
-    /// 六个类型化入口 + alloc_boxed（即时值统一描述入口，按 BoxedInput
-    /// 分派到 Str/Int/Float/Bool/Nil 五类——v5.2 补注第 7 入口）。
+    /// 类型化分配（**八入口**——调用方携带类型信息，非统一 alloc(size)）：
+    /// 七个类型化入口 + alloc_boxed（即时值统一描述入口，按 BoxedInput
+    /// 分派到 Str/Int/Float/Bool/Nil 五类——符号走 alloc_symbol 直通，
+    /// 不在 BoxedInput 内——v6.2 对齐 r5 实现）。
     pub fn alloc_pair(&mut self, car: GcRef, cdr: GcRef) -> GcRef;
     pub fn alloc_str(&mut self, s: Rc<str>) -> GcRef;
     pub fn alloc_int(&mut self, v: i64) -> GcRef;
     pub fn alloc_float(&mut self, v: f64) -> GcRef;
     pub fn alloc_bool(&mut self, v: bool) -> GcRef;
     pub fn alloc_nil(&mut self) -> GcRef;
+    /// 符号分配（v6.2 补注第 8 入口——TD-002 r5：quote 符号值入堆）。
+    pub fn alloc_symbol(&mut self, s: Rc<str>) -> GcRef;
     pub fn alloc_boxed(&mut self, v: BoxedInput) -> GcRef;
 
     /// 读取访问（不可变查询：unbox/get_pair/get）。
@@ -99,6 +108,8 @@ impl Heap {
 **堆对象统一头格式（Slot 结构的语义）**：每个槽携带「对象载荷 + 标记位」。从保守 GC 演进到精确/分代/增量 GC 时：(1) 标记位可直接升级为分代号（低 1-2 位复用）；(2) 堆级空闲表（`free: Vec<GcRef>`）可升级为分代空闲链（v5.2 注：空闲表在堆级而非槽内 `next_free` 指针——以实现为准）；(3) `GcRef` 句柄格式不变——「数据结构的留白是廉价的」（[17-设计原则 §1 原则 20](./17-principles.md)）。
 
 **分配触发协议（v5.2 数值冻结）**：分配计数驱动（`allocs_since_gc > gc_threshold`，**默认阈值 gc_threshold = 1024**，测试可调 `Heap::with_threshold`）+ **GC 冷却退避**（归属 **VM 侧**执行循环：安全点轮询间隔 `GC_POLL_INTERVAL = 256` 条指令；回收收益 < 25%（`total_freed × 4 < slots`）时置冷却计数 `GC_COOLDOWN_MULTIPLIER = 64` 个轮询周期；深递归场景连续触发回收的 O(n²) 消退——worklog Task 4-c 的关键性能修复：122s → 3.4s）。退避仅影响触发时机，不影响语义（[06-操作语义 §4 引理 L-GC](./06-operational-semantics.md)：GC 不可观测）。
+
+> **v6.2 回归基线注记（TD-023）**：批次 F 深审实测 gc_stress（3×10^5 分配 + 30k 深递归）单轮 207~235ms，较 Stage 0 基线 160.4ms 回归 +29~46%（超 §14.6.4 的 10% 阈值），且超线性缩放（spin 15000→59.5ms：2× 分配 → 3.6× 耗时）——冷却四参数未变，候选根因为根集遍历 per-cycle `HashSet<usize>` 去重分配与 Value 枚举宽度增长的缓存效应。登记 TD-023（P2），绑定 Stage 2 批次 I2（与 TD-008 分代/压缩评估同轮——对症路径）；完整口径见 [stage-1/performance-baseline](../develop/v0/stage-1/performance-baseline.md)。
 
 **运行时错误与堆栈追踪（v5.2 补注）**：VM 路径运行时错误在 `run_program` 错误出口统一生成调用点追踪（`VmError.trace`：帧链快照的**最内 16 帧**（`MAX_TRACE_FRAMES = 16`——深递归下外层无信息量，防诊断爆炸），经 debug_info 反查 Span 后渲染为 note 行）；eval 路径错误经 driver 包装为 E0004 诊断——两路径错误事实一致，消息文本存在已存档的分裂面（TD-014 相关，[06-操作语义 §5.3](./06-operational-semantics.md)）。
 
