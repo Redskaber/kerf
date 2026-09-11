@@ -18,7 +18,7 @@ use std::rc::Rc;
 
 use kerf_compiler::compile_module;
 use kerf_core::CoreExpr;
-use kerf_driver::{eval_source, run_source};
+use kerf_driver::{run_source, run_source_seed};
 use kerf_runtime::Heap;
 use kerf_span::Span;
 use kerf_syntax::{ScopeId, ScopeSet, SymbolTable};
@@ -68,7 +68,7 @@ fn mismatched_lambda(binder: ScopeId, ref_scope: ScopeId) -> Vec<Rc<CoreExpr>> {
 fn shadowing_resolves_innermost_dual_path() {
     let src = "(define x 10) ((lambda (x) x) 20)";
     let a = run_source(src, "s1.krf").unwrap();
-    let b = eval_source(src, "s1.krf").unwrap();
+    let b = run_source_seed(src, "s1.krf").unwrap();
     assert_eq!(int_of(&a.value), 20, "VM 路径内层绑定胜出");
     assert_eq!(int_of(&b.value), 20, "eval 路径内层绑定胜出");
 }
@@ -80,7 +80,7 @@ fn shadowing_resolves_innermost_dual_path() {
 fn nested_shadowing_innermost_wins_dual_path() {
     let src = "(define x 0) ((lambda (x) ((lambda (x) x) 2)) 1)";
     let a = run_source(src, "s2.krf").unwrap();
-    let b = eval_source(src, "s2.krf").unwrap();
+    let b = run_source_seed(src, "s2.krf").unwrap();
     assert_eq!(int_of(&a.value), 2);
     assert_eq!(int_of(&b.value), 2);
 }
@@ -92,7 +92,7 @@ fn nested_shadowing_innermost_wins_dual_path() {
 fn closure_capture_by_scope_set_dual_path() {
     let src = "((lambda (x) ((lambda (y) (+ x y)) 2)) 1)";
     let a = run_source(src, "s3.krf").unwrap();
-    let b = eval_source(src, "s3.krf").unwrap();
+    let b = run_source_seed(src, "s3.krf").unwrap();
     assert_eq!(int_of(&a.value), 3, "VM 捕获经子集匹配");
     assert_eq!(int_of(&b.value), 3, "eval 捕获经子集匹配");
 }
@@ -104,7 +104,7 @@ fn closure_capture_by_scope_set_dual_path() {
 fn setbang_hits_lexical_not_global_dual_path() {
     let src = "(define g 0) (begin ((lambda (x) (set! x 5) x) 9) g)";
     let a = run_source(src, "s4.krf").unwrap();
-    let b = eval_source(src, "s4.krf").unwrap();
+    let b = run_source_seed(src, "s4.krf").unwrap();
     assert_eq!(int_of(&a.value), 0, "VM：set! 命中形参，g 不变");
     assert_eq!(int_of(&b.value), 0, "eval：set! 命中形参，g 不变");
 }
@@ -215,7 +215,7 @@ fn macro_introduced_binding_does_not_capture_user_binding() {
         ((lambda (t) (self7)) 99)
     "#;
     let a = run_source(src, "s5.krf").unwrap();
-    let b = eval_source(src, "s5.krf").unwrap();
+    let b = run_source_seed(src, "s5.krf").unwrap();
     assert_eq!(int_of(&a.value), 7, "VM：宏引入 t 不被用户 t 捕获");
     assert_eq!(int_of(&b.value), 7, "eval：宏引入 t 不被用户 t 捕获");
 }

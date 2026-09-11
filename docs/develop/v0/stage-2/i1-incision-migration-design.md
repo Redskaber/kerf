@@ -2,8 +2,8 @@
 
 > **Author**: Super Z（ARCH-A 主导 + DEV-A 实现盘点——L3 多角色会话）
 > **Date**: 2026-09-11（批次 I 执行启动 r20 / MUV 42-a）
-> **Version**: v1.2
-> **Status**: Active（切口裁定 + 段序 + parity 三门 + 切换点设计——42-b/c/d 执行蓝图；r21/42-b 已执行 S1 段：compiler.krf 八臂 + 桥 + 门 A parity 全绿（基础组 ≥8 超额）——INC4 实现期修订见 §2 注记；**r22/42-c 已执行 S2 段**：module/require 两臂 + 糖全管线 + 宏 + prelude 注入序 + examples 六件双路径——门 A 扩展组 46 case 全绿（≥12 超额），边界不对称消除；S2 执行注记见 §2 INC4 后 v1.2 注——module 首原型名覆写值等价无操作（Rust pm.name = Symbol(u32::MAX-1) 与 proto 0 创建/回写值恒等）；42-d/42-e/42-f/42-g/42-h 待续）
+> **Version**: v1.3
+> **Status**: Active（切口裁定 + 段序 + parity 三门 + 切换点设计——42-b/c/d 执行蓝图；r21/42-b 已执行 S1 段：compiler.krf 八臂 + 桥 + 门 A parity 全绿（基础组 ≥8 超额）——INC4 实现期修订见 §2 注记；r22/42-c 已执行 S2 段：module/require 两臂 + 糖全管线 + 宏 + prelude 注入序 + examples 六件双路径——门 A 扩展组 46 case 全绿（≥12 超额），边界不对称消除；S2 执行注记见 §2 INC4 后 v1.2 注；**r23/42-d 已执行 S3 段（I1 收口交付闭环）**：CompilerKind 生产切换 + 门 B fixpoint 首跑全过（B₁/B₂ 四程序 bytecode_equal + SHA-256 一致——§21.3 条件 2 达成）+ eval 退役终态（INC7 兑现——T1 新口径 + TD-017/TD-009 注销 + 12 §2.5 行 299 回写）+ 缓存分桶 B11 实测——S3 执行注记见 §2 INC4 后 v1.3 注（跨链符号值实测裁定）；42-e/42-f/42-g/42-h 待续）
 > **输入**: plan.md §5a（42-x 八 MUV）；[12-roadmap §2.5 演进矩阵](../../lang-design/12-roadmap.md)（行 299 元循环求值器「重写升级 + 被编译器替换（I1 范围）」/ 行 309 类型检查器「迁移评估」）；[07-bootstrap §3.2/§3.3](../../lang-design/07-bootstrap-strategy.md)（混合期构成 + 阶段切换信号）；[15-architecture-layers §5.3](../../lang-design/15-architecture-layers.md)（五正交轴）；sop.md §21.3（四条件——条件 1/2 为 I1 对象）；r6/r14/r15 三件套先例（reader/expander 自举）；r18 TCO（尾位穿线——parity 必含面）
 > **上游**: r19 批间插入轮（41-a~c——批次 I 细化 + 638:0:0 基线）
 
@@ -106,6 +106,31 @@ require → 空——与 kerf-core expr.rs:358/365 一致），S2 零改动通�
 比「同形语料」更强的验收口径）；⑤ 语料语义边界实测两处：条件位严格 bool
 （行为面 (and 1 2 3) 触 E0004——parity 不受影响，编译段不类型检查）+ 同层 let
 重名是展开器错误（lambda 形参重名拒绝）。
+
+**v1.3 S3 执行注记（r23/42-d——实测发现，与 INC4/v1.2 同型登记）**：
+① **门 B fixpoint 首跑全过**（硬门判据零修正通过）：B₁/B₂ 四程序
+（reader/expander/compiler/preamble）`bytecode_equal` 全结构一致 + SHA-256
+摘要一致（Debug 结构序确定序列化——全字段 Vec/Option/原语无哈希迭代序）；
+B₂ 语义经三自举模块新增 `install_state`/`reset_state` 钩子实现（状态构造提取
+共享 `build_state`——单一实现，种子加载与安装同径）；隔离纪律 §7.4 落地
+（关缓存 + fresh 状态——缓存命中返回 B₁ 条目的假阳性防线显式排除）；
+② **跨链符号值实测裁定**：宏自由件（compiler.krf）B₀/B₁ 全结构
+bytecode_equal **不成立**——两链符号表各自 intern 序不保证一致（按名反汇编
+已证结构 + 名 + span 位置全等；差异仅 Symbol 数值）——§7.3「名字是唯一
+稳定口径」预判的实证；**跨链终验口径 = 按名反汇编**（加强判据），全结构
+判据在同链（B₁/B₂）下成立（硬门）；
+③ eval 退役（P5/INC7 兑现）：生产面 = CLI eval 子命令移除 + driver
+`eval_source` 删除；kerf-vm eval.rs 存档为 Rust 参考实现（scope_set_tests
+语义 oracle 消费面保留）；T1 新口径 = `run_source`（生产链）vs
+`run_source_seed`（种子链——新增 pub 参考入口）+ `compile_source_seed`
+（fixpoint B₀ 基准）；TD-017/TD-009 联动注销（INC7 清单兑现）；
+④ 缓存分桶（B11/P4）落地口径：CompilerKind 维度入 `cache_key` 的
+config_fingerprint 构成层（**CacheKey 冻结字段结构不动**——v5.2 接口预留
+纪律；生产入口恒 Bootstrap）；种子路径不经缓存（不查不存）——键区分 +
+跨桶隔离双测试实测（风险表「缓存混享」缓解项的显式验证）；
+⑤ 附加可执行面：`gate_b_b1_programs_execute_as_bootstrap_chain`——B₁
+字节码 install 后作为自举 Compiler 实际运转（「产物编译自身」不止字节一致，
+行为级同证 = 种子链结果）。
 
 ## 3. 段切分与依赖图（DAG 无环证明）
 

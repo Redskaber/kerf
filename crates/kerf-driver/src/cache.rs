@@ -32,7 +32,7 @@ use std::rc::Rc;
 use kerf_compiler::BcProgram;
 use kerf_core::CoreExpr;
 
-use crate::driver::FrontOutput;
+use crate::driver::{CompilerKind, FrontOutput};
 use crate::hash::content_hash64;
 use crate::reserved::{CacheKey, CachedResult, CompilationCache};
 
@@ -184,12 +184,21 @@ pub fn with_cache<R>(f: impl FnOnce(&mut InMemoryCompilationCache) -> R) -> R {
     CACHE.with(|c| f(&mut c.borrow_mut()))
 }
 
-/// 构造缓存键（源文本 + 文件名 → 内容寻址键）。
-pub fn cache_key(source: &str, filename: &str) -> CacheKey {
+/// 构造缓存键（源文本 + 文件名 + 编译器种类 → 内容寻址键）。
+///
+/// **CompilerKind 维度（B11/P4——i1-design §6 切换点）**：种子与自举
+/// 产物不得混享缓存条目——维度入 `config_fingerprint` 构成层（
+/// `CacheKey` 冻结字段结构不动——v5.2 接口预留纪律；生产入口恒
+/// Bootstrap，种子参考路径不经缓存，键区分是防御性分桶实测面）。
+pub fn cache_key(source: &str, filename: &str, kind: CompilerKind) -> CacheKey {
+    let kind_tag = match kind {
+        CompilerKind::Bootstrap => "bootstrap",
+        CompilerKind::Seed => "seed",
+    };
     CacheKey {
         source_hash: content_hash64(source.as_bytes()),
         config_fingerprint: content_hash64(
-            format!("{}|{}", COMPILE_CONFIG_SEED, filename).as_bytes(),
+            format!("{}|{}|{}", COMPILE_CONFIG_SEED, filename, kind_tag).as_bytes(),
         ),
     }
 }
@@ -241,6 +250,9 @@ fn empty_program() -> BcProgram {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kerf_expander::phase::ModuleRegistry;
+    use kerf_span::SourceMap;
+    use kerf_syntax::SymbolTable;
 
     /// 规格条款 1/2：store → get_cached 命中；产物逐字段等价。
     #[test]
@@ -309,13 +321,51 @@ mod tests {
     /// 键性质：源文本区分 + 文件名区分 + 配置种子区分。
     #[test]
     fn cache_key_discriminates() {
-        let a = cache_key("(+ 1 2)", "a.krf");
-        let a2 = cache_key("(+ 1 2)", "a.krf");
-        let b = cache_key("(+ 1 3)", "a.krf");
-        let f = cache_key("(+ 1 2)", "b.krf");
+        let a = cache_key("(+ 1 2)", "a.krf", CompilerKind::Bootstrap);
+        let a2 = cache_key("(+ 1 2)", "a.krf", CompilerKind::Bootstrap);
+        let b = cache_key("(+ 1 3)", "a.krf", CompilerKind::Bootstrap);
+        let f = cache_key("(+ 1 2)", "b.krf", CompilerKind::Bootstrap);
         assert_eq!(a, a2);
         assert_ne!(a, b);
         assert_ne!(a, f);
+    }
+
+    /// B11/P4：CompilerKind 分桶——同源同名异 kind 键不同（种子与
+    /// 自举产物不混享条目——键层防御实测；i1-design §6 P4 + 风险表
+    /// 「缓存混享」缓解项的显式测试）。
+    #[test]
+    fn cache_key_buckets_by_compiler_kind() {
+        let prod = cache_key("(+ 1 2)", "a.krf", CompilerKind::Bootstrap);
+        let seed = cache_key("(+ 1 2)", "a.krf", CompilerKind::Seed);
+        assert_ne!(
+            prod, seed,
+            "同源同名异 CompilerKind 键必须不同（B11 分桶——混享即种子产物污染生产缓存）"
+        );
+    }
+
+    /// B11/P4 集成面：种子键条目不被生产查询命中（lookup_front 跨
+    /// kind 未中——即使同源同名）。
+    #[test]
+    fn seed_bucket_entry_not_served_to_production_lookup() {
+        let mut c = InMemoryCompilationCache::new();
+        let seed_key = cache_key("(+ 1 2)", "k.krf", CompilerKind::Seed);
+        let prod_key = cache_key("(+ 1 2)", "k.krf", CompilerKind::Bootstrap);
+        let front = FrontOutput {
+            core: Vec::new(),
+            program: empty_program(),
+            source_map: SourceMap::new(),
+            table: SymbolTable::new(),
+            registry: ModuleRegistry::new(),
+        };
+        c.store_front(seed_key, front);
+        assert!(
+            c.lookup_front(&prod_key).is_none(),
+            "生产查询不得返回种子桶条目（B11：种子命中后自举路径不得返回种子产物）"
+        );
+        // 同键命中（快照语义自检——种子桶自身可命中）
+        assert!(c
+            .lookup_front(&cache_key("(+ 1 2)", "k.krf", CompilerKind::Seed))
+            .is_some());
     }
 
     /// trait 产物级条目不服务管线富查询（Front 缺位按未中处理）。

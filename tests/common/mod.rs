@@ -4,7 +4,7 @@
 //! 模块以 `use crate::common` 消费不同子集；未用助手按公共库语义允许
 //! dead_code。
 
-use kerf_driver::{run_source, run_source_rendered, RunOutcome};
+use kerf_driver::{run_source, run_source_rendered, run_source_seed, RunOutcome};
 use kerf_vm::Value;
 
 /// 编译 + VM 执行（返回最终值）。
@@ -28,17 +28,19 @@ pub fn run_rendered(src: &str) -> String {
     run_source_rendered(src, "test.krf").unwrap_or_else(|e| format!("<error:{}>", e))
 }
 
-/// 双路径互查：VM 与 eval 的渲染结果必须一致（§21.8 Phase 1 核心验证）。
+/// 双路径互查（T1——42-d 新口径）：生产链（自举读+展+编 + VM）与
+/// 种子链（Rust 三段 + VM）的渲染结果必须一致（§21.8 Phase 1 核心
+/// 验证；eval 元循环求值器退役——P5，种子链为替代 oracle 面）。
 #[allow(dead_code)]
 pub fn dual_path_agrees(src: &str) -> bool {
     let vm = match run_source_rendered(src, "test.krf") {
         Ok(s) => s,
         Err(e) => format!("<error:{}>", e),
     };
-    let ev = kerf_driver::eval_source(src, "test.krf")
+    let seed = run_source_seed(src, "test.krf")
         .map(|o| kerf_vm::render_value(&o.value, &o.heap))
         .unwrap_or_else(|e| format!("<error:{}>", e));
-    vm == ev
+    vm == seed
 }
 
 /// 断言运行结果为指定整数。

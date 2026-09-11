@@ -11,7 +11,7 @@
 //! - 用户接管豁免：define 同名不误报（零误报纪律）；
 //! - examples/usage/io.krf 实跑（require 前缀形态）。
 
-use kerf_driver::{check_source, eval_source, run_source, Stage};
+use kerf_driver::{check_source, run_source, run_source_seed, Stage};
 use kerf_vm::Value;
 
 const FNAME: &str = "cap.krf";
@@ -70,11 +70,12 @@ fn read_line_eof_returns_nil_via_subprocess() {
     let _ = std::fs::remove_file(&tmp);
 }
 
-/// require 求值恒 nil + 双路径一致（T1：VM 与 eval 同口径）。
+/// require 求值恒 nil + 双路径一致（T1 新口径 42-d：生产链与种子链
+/// 同口径——require 零运行时语义）。
 #[test]
 fn require_form_evals_nil_both_paths() {
     let a = run("(require io write)").unwrap();
-    let b = eval_source("(require io write)", FNAME).unwrap();
+    let b = run_source_seed("(require io write)", FNAME).unwrap();
     assert!(matches!(a.value, Value::Nil));
     assert!(matches!(b.value, Value::Nil));
 }
@@ -141,10 +142,10 @@ fn read_declaration_does_not_open_write() {
     assert!(e.rendered.contains("write"));
 }
 
-/// eval 路径同门控（front 单一验证点——管线面任意节点）。
+/// 种子链同门控（front 单一验证点——管线面任意节点；42-d 口径迁移）。
 #[test]
-fn eval_path_gated_identically() {
-    let e = eval_source("(print 1)", FNAME).unwrap_err();
+fn seed_path_gated_identically() {
+    let e = run_source_seed("(print 1)", FNAME).unwrap_err();
     assert_eq!(e.stage, Stage::Compile);
     assert!(e.rendered.contains("error[E0006]"));
 }

@@ -3601,3 +3601,116 @@ Stage Summary:
 - **批次 I 执行 r21（42-b）交付闭环**：三件套第三实例就位——compiler.krf 八臂全量（作用域机 + 闭包捕获 + 回填 + 常量池 + TCO 尾位逐语义镜像）+ 桥 + 门 A parity 19 测试全绿（bytecode_equal 全结构判据——基础组 ≥8 超额）+ R4 三方冻结修正；657:0:0 零回归；42-b 边界 = parity 影子路径（生产未切换——module/require 显式边界错误）
 - 遵循：§12（最优>最小——shadow-pop 口径逐位镜像而非「修正」种子行为）、§2.3-11（先实测禁臆测——语言陷阱/括号/消息三处实跑暴露）、§9.4.3（正负成对）、R4（代码为准 + 本次修正文档）、§7/B8（入口复位确定性——双跑测试实证）、§19.4（打包 + 包内自举验证）
 - 下一步：42-c I1 中段——module/require 两臂迁移（inline/PushNil）+ 糖九件 + module 边界语料端到端 parity（门 A 扩展组 ≥12 + 全管线 parity）
+---
+Task ID: 43-a
+Agent: Super Z (main) — DEV-A 主导 + QA-A（parity 扩展组）+ ARCH-A（设计注记）（L3 多角色会话）
+Task: MUV 43-a（= plan 42-c）：I1 中段糖/module/require 面全迁移——compiler.krf 两臂 + 门 A 扩展组 46 case（r22）
+
+Work Log:
+- PHASE 1 路由：读 sop.md §1 + docs/worklog.md 最近 3 条（r20 42-a/z +
+  r21 42-b）——冲突检测：git clean ee56668（r21 终态），无半成品；
+  上 session 设计定稿因环境工具中断未动手（恢复点有效——本 session
+  实施即其方案的逐语义落地）
+- 实锚复核（§2.3-11）：compile.rs:416-439 Module/Require 臂语义——
+  Module 体 inline 逐项 tail=false（**区别于 begin 末项继承**）+ 中间
+  Pop 携项 Span + 空体 PushNil 携 module Span + 首原型名覆写
+  Symbol(u32::MAX-1)；Require = PushNil（R9 在 driver 前端——编译段
+  零感知）；**实锚关键发现：proto 0 创建（:235）即置 Symbol(u32::MAX-1)
+  → Module 臂名覆写值恒等**——krf 侧 proto 0 名形创建/回写均 '(main)
+  （桥映射同值）→ 镜像实现不引入冗余突变（值等价无操作注记——
+  设计 v1.2 ①）；fvo 面（kerf-core expr.rs:358/365）42-b 已预置零改动
+- **compiler.krf 两臂迁移**：module 臂 = compile-module-body +
+  compile-module-seq（无 tail 参数——逐项恒非尾位语义的形态化）+
+  require 臂 = emit PushNil（携 require 自身 Span）；42-b 边界 cerr
+  两处移除——边界不对称消除（生产切换 CompilerKind 属 42-d）；
+  头部契约注释同步（module 字段序：名/导入/导出/体——桥 :293-308 实锚）
+- **门 A 扩展组（bootstrap_compiler_tests 19→27 函数 / 46 parity
+  case ≥12 超额）**：①module/require 正例组（多项体 Pop + 导入/导出
+  面 + 尾位非继承 + 确定性双跑）；②糖三组全管线 parity（let 家族 8
+  + cond/when/unless 9 + and/or/while 10——expander 脱糖 → 双编译
+  路径 bytecode_equal）；③宏语料 3（swap!（let+set!）/ my-or（递归
+  省略号）/ def-twice（begin 多模式））；④prelude 注入序 2
+  （**preamble.krf 全文真实语料**——生产前端 import kerf-prelude 实际
+  注入的编译对象 + 用户 module import 面同编）；⑤examples/usage 全六件
+  双路径 bytecode_equal（fib/closures/higher_order/macros/gc_stress/
+  io——require/宏/GC 压力全谱系）；⑥行为面 +2 组（糖九件 + module
+  臂——自举编译段产物 VM 执行 = 生产管线含 registry 前端面）；⑦42-b
+  边界负例 parity_err_module_require_boundary 改写为正例
+  parity_module_require_arms（含确定性断言）
+- **语料实测勘误两处（GATE 1 诚实记录）**：①条件位严格 bool——
+  (and 1 2 3) 触 E0004「条件位置需要 bool」（kerf truthy 语义显式
+  定义；行为语料改 (and true true 3)；parity 不受影响——编译段不
+  类型检查）；②同层 let 重名绑定是展开器错误（lambda 形参重名拒绝
+  ——语料改跨层嵌套遮蔽）。另：include_str! 需字面量路径（concat!
+  循环变量不可用——六件显式展开）
+- 验证：cargo test 665:0:0（657 零回归 + 8 净增）；套件内循环两轮
+  语料修正后 27/27 全绿
+
+Stage Summary:
+- 42-c 交付：module/require 两臂 kerf 化（逐语义镜像 + 值等价注记）+
+  门 A 扩展组全臂 parity（46 case 超额——糖九件全管线 + 宏 + prelude
+  真实语料 + examples 六件双路径）+ 行为面糖/module；**全臂 parity
+  就绪，边界不对称消除**（I1 编译段实现面完成——余 42-d 生产切换 +
+  fixpoint）
+- 遵循：§12（最优>最小——module 恒非尾位逐语义镜像而非「修正」）、
+  §2.3-11（先实测禁臆测——值等价发现 + 语料勘误两处实跑暴露）、
+  §9.4.3（正负成对——边界负例改写为更强正例）、§7/B8（确定性双跑
+  断言维持）、INC5（bytecode_equal 全结构判据——含 name 字段实证
+  值等价结论）
+- 下一步：43-z r22 收尾交付（§3.2 + 对账 + tar.gz + web + git + 树压实）
+---
+Task ID: 43-z
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，批次 I 执行 r22 收尾交付）
+Task: MUV 43-z：r22 收尾交付（§3.2 六命令 + 对账六面 + r22 tar.gz 包内自举验证 + web 同步 + git + 树压实）
+
+Work Log:
+- **§3.2 六命令全绿（clean 起步终验）**：cargo clean（369.7MiB）→
+  build --release 12.87s 零告警 → check 0 errors 0 warnings → fmt
+  --check 零 diff（格式化一轮）→ clippy --all-targets -- -D
+  warnings 0 → test --release --workspace **665:0:0**（单元 202 +
+  集成 463；36.6s；逐模块实测汇总 463 = awk 权威口径）
+- CLI 冒烟六路径 + 负例：VM run fib ⇒ 75025/144 + macros ⇒ (2 1)/42
+  + io 门控端到端（print 两行 + ⇒ 42）+ check ok（2 原型/9 常量/
+  5 全局引用/38 指令）+ native fib exit 144（QBE SSA→汇编→可执行）
+  + E0006 负例（print 未声明 require——R9 fail-closed 拒绝）；双审计
+  集 EXIT 0（stage0 41 case + stage1 50 case APPROVED——七类全覆盖）
+- **对账六面**：RELEASE_NOTES v0.4.0-r22（三交付节——预插入头部）/
+  matrix v0.1.0-r22（657→665 净 +8 集成；单元 202 + 集成 463 + r22
+  增量行 + **表体对账补齐**：Stage 2 五行（qbe 24/恢复 16/tco 12/
+  hm 15/bootstrap_compiler 27）+ cache 14→13 实测修正——r16 同型
+  header-表体同步义务漏网，本轮发现路径 = --list 权威计数）/
+  pipeline v0.4.0-r22（Tier 2 表体 bootstrap_compiler 双行补齐——
+  r21 头部有表体漏的 R4 同型修正 + 463 基线）/ plan.md Status（42-c
+  交付 r22 + 42-d 执行待续）/ v0.5-roadmap 批次 I 行（r20-r22 三步
+  递进改写）/ i1-design v1.2（S2 执行注记五项——值等价 + 恒非尾位 +
+  fvo 零改动 + preamble 真实语料 + 语料语义边界）
+- **r22 tar.gz**（303 条目/1.6MB——§19.4 命令：src/crates/tests/docs/
+  examples/tools/scripts + Cargo 三件 + README/RELEASE_NOTES；根
+  worklog.md 不入包——PHASE 5 规则；包内 worklog 止于 42-b 条目 =
+  r21 先例时序）+ **包内自举验证**：/tmp 解包 → 全新 cargo build
+  --release 12.51s → 全量测试 **665:0:0 复跑** + CLI 四路径一致
+  （VM fib 75025/144 + macros (2 1)⇒42 + native 144 + check ok）
+- web 同步：kerf-data.ts（Stage 2 status r21-r22 + points 三条新
+  节点 + HERO_FEATURES「编译段自举（门 A 全臂 parity）」+ PACKAGE_
+  CONTENTS r22 四条）+ site-footer.tsx v6.2（两段 r22 文案）+
+  download/README.md r22 节（对账惯例延续）；/api/download 按 mtime
+  自动选取 r22 包（r6 修复口径）；bun run lint EXIT 0
+- git 入账（kerf 仓库 + web 仓库双轨）+ rec 树压实（02 层 06_r22
+  rec + 02 层 l 双行补账——06 新行 + 05 r21 漏行一并补齐 + 根 l
+  未压实区间 r22 终态）
+
+Stage Summary:
+- **批次 I 执行 r22（43-a + 43-z）交付闭环**：module/require 两臂
+  迁移（逐语义镜像 + 值等价注记 + 边界不对称消除）+ 门 A 扩展组
+  全臂 parity（46 case + 行为面糖/module）+ 收尾（665:0:0 零回归 +
+  §3.2 全绿 + 对账六面 + 表体补齐三处 + r22 包内自举 + web + git +
+  树压实）
+- 遵循：GATE 1（实测口径——语料勘误两处如实入档）、§19.4（打包 +
+  包内验证 + r21 时序先例）、§8.4.5（六面对账 + 计数交叉验证——
+  --list 权威口径发现表体三处漂移）、§8.6（rec 树三原语——l 稀疏
+  路由更新 + r21 漏行补账）
+- 下一步：42-d I1 收口（CompilerKind::{Seed,Bootstrap} 切换 + 守护
+  production_compiler_is_bootstrap + 门 B fixpoint 两次编译自身
+  字节一致（§21.3 条件 2 SHA-256 终验）+ eval 退役终态裁定（TD-017
+  终验 + 12 §2.4/§2.5 回写 + T1 收口）+ 缓存键分桶 B11——下一
+  session）

@@ -2,8 +2,8 @@
 
 > **Author**: Super Z（QA-A 角色）
 > **Date**: 2026-09-11（r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
-> **Version**: v0.4.0-r22
-> **Status**: Active（r22 对账：665 基线（批次 I 执行 42-c +8——bootstrap_compiler_tests 19→27：module/require 两臂正例 + 糖九件全管线 46 case + 宏 + prelude 注入序 + examples 六件双路径 + 行为面糖/module；Tier 2 表体 bootstrap_compiler_tests 行补齐——r21 头部有表体漏的 R4 同型修正；matrix 表体 Stage 2 五行 + cache 13 对账同步）；r21 对账：657 基线（批次 I 执行 42-b +19——bootstrap_compiler_tests 门 A parity：bytecode_equal 全结构判据 13 + 42-c 边界负例 2 + 行为面 4；操作码冻结测试修正 40→41 零计数变更）；r20 对账：638 基线零增量（设计轮——批次 I 执行启动 42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](../develop/v0/stage-2/i1-incision-migration-design.md) §5 parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）；r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
+> **Version**: v0.4.0-r23
+> **Status**: Active（r23 对账：670 基线（批次 I 执行 42-d +5——bootstrap_compiler_tests 27→29：门 B fixpoint（B₁/B₂ 四程序 bytecode_equal + SHA-256——§21.3 条件 2 终验）+ B₁ 产物可执行面；单元 +3：driver 64→67 生产编译守护 + 缓存 CompilerKind 分桶 ×2（B11/P4）；T1 双路径面全量迁移（eval → 种子链对拍——十测试文件 + common + 双审计集；表体 driver 单元行 58→67 实测修正）；r22 对账：665 基线（批次 I 执行 42-c +8——bootstrap_compiler_tests 19→27：module/require 两臂正例 + 糖九件全管线 46 case + 宏 + prelude 注入序 + examples 六件双路径 + 行为面糖/module；Tier 2 表体 bootstrap_compiler_tests 行补齐——r21 头部有表体漏的 R4 同型修正；matrix 表体 Stage 2 五行 + cache 13 对账同步）；r21 对账：657 基线（批次 I 执行 42-b +19——bootstrap_compiler_tests 门 A parity：bytecode_equal 全结构判据 13 + 42-c 边界负例 2 + 行为面 4；操作码冻结测试修正 40→41 零计数变更）；r20 对账：638 基线零增量（设计轮——批次 I 执行启动 42-a：I1 切口评估与迁移设计——[i1-incision-migration-design.md](../develop/v0/stage-2/i1-incision-migration-design.md) §5 parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）；r19 对账：638 基线（批间插入轮 +4——capability_model Probe 4；集成计数勘误 438→436——矩阵 r18 版内部矛盾修正）
 
 ## 1. 测试目标
 
@@ -13,7 +13,7 @@
 
 ## 2. 三层覆盖记录（§9.5.1 格式：Tier / 名称 / 覆盖阶段 / 预期输出 / 状态）
 
-### Tier 1 —— 阶段内（单元测试，202 函数，crates 内联——r9 起 runner 化仅集成侧；r17 +13：backend 9 + expander recover 4；r18 +2：reserved Probe 拆分；**r19 +4：capability_model Probe（driver 60→64）**）
+### Tier 1 —— 阶段内（单元测试，205 函数，crates 内联——r9 起 runner 化仅集成侧；r17 +13：backend 9 + expander recover 4；r18 +2：reserved Probe 拆分；r19 +4：capability_model Probe（driver 60→64）；**r23 +3：生产编译守护 + 缓存分桶 ×2（driver 64→67）**）
 
 | ID | 名称 | 覆盖阶段 | 预期输出 | 状态 |
 |----|------|---------|---------|------|

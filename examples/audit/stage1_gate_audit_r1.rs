@@ -41,7 +41,7 @@
 //! 遵循条款：§7.3.1/§7.3.2（配比与边界）、§2.3-11（实测禁臆测——
 //! 全部断言经生产管线真实运行）。
 
-use kerf_driver::{check_source, compile_source, eval_source, run_source, Stage};
+use kerf_driver::{check_source, compile_source, run_source, run_source_seed, Stage};
 use kerf_span::DiagnosticCode;
 
 /// 审计源文件名（诊断渲染位置断言用）。
@@ -664,18 +664,19 @@ fn run_negative(c: &Case, stage: Stage, msg: &str) -> CaseResult {
     if !err.rendered.contains(FNAME) {
         return fail(format!("渲染输出缺文件名 {}（位置摘录缺失）", FNAME));
     }
-    // eval 双路径：同 Err（而非静默成功/挂起）且消息子串一致
-    match eval_source(c.src, FNAME) {
-        Ok(_) => fail("期望 Err，eval 路径返回 Ok（双路径分裂）".to_string()),
+    // 种子链双路径（T1 新口径 42-d：eval 退役——种子链为对拍 oracle）：
+    // 同 Err（而非静默成功/挂起）且阶段 + 消息子串一致
+    match run_source_seed(c.src, FNAME) {
+        Ok(_) => fail("期望 Err，种子链返回 Ok（双路径分裂）".to_string()),
         Err(e2) => {
             if e2.stage != stage {
                 fail(format!(
-                    "eval 阶段不匹配：期望 {:?} 实际 {:?}",
+                    "种子链阶段不匹配：期望 {:?} 实际 {:?}",
                     stage, e2.stage
                 ))
             } else if !e2.rendered.contains(msg) {
                 fail(format!(
-                    "eval 消息不含「{}」：{}",
+                    "种子链消息不含「{}」：{}",
                     msg,
                     first_line(&e2.rendered)
                 ))
@@ -689,19 +690,22 @@ fn run_negative(c: &Case, stage: Stage, msg: &str) -> CaseResult {
 fn run_positive_dual(c: &Case, want: &str) -> CaseResult {
     let a = match run_source(c.src, FNAME) {
         Ok(o) => o,
-        Err(e) => return fail(format!("VM 路径 Err：{}", first_line(&e.rendered))),
+        Err(e) => return fail(format!("生产链 Err：{}", first_line(&e.rendered))),
     };
-    let b = match eval_source(c.src, FNAME) {
+    let b = match run_source_seed(c.src, FNAME) {
         Ok(o) => o,
-        Err(e) => return fail(format!("eval 路径 Err：{}", first_line(&e.rendered))),
+        Err(e) => return fail(format!("种子链 Err：{}", first_line(&e.rendered))),
     };
     let ra = kerf_vm::render_value(&a.value, &a.heap);
     let rb = kerf_vm::render_value(&b.value, &b.heap);
     if ra != want || rb != want {
-        return fail(format!("值不匹配：期望 {}，VM {} / eval {}", want, ra, rb));
+        return fail(format!(
+            "值不匹配：期望 {}，生产 {} / 种子 {}",
+            want, ra, rb
+        ));
     }
     if !a.value.eq_value(&b.value) {
-        return fail(format!("双路径值不一致：VM {} vs eval {}", ra, rb));
+        return fail(format!("双路径值不一致：生产 {} vs 种子 {}", ra, rb));
     }
     pass(format!("双路径同值 ⇒ {}", ra))
 }

@@ -426,11 +426,12 @@ fn bootstrap_pipeline_read_error_rendered() {
 }
 
 #[test]
-fn bootstrap_pipeline_eval_path_agrees() {
-    // T1 双路径：eval 路径同样经自举 Reader 读——两路径结果一致
+fn bootstrap_pipeline_seed_path_agrees() {
+    // T1 双路径（42-d 新口径）：生产链（自举 Reader）vs 种子链（Rust
+    // Reader）——两链结果一致
     let src = "(define (f x) (+ x 1)) (f 41)";
     let a = kerf_driver::run_source(src, "t.krf").unwrap();
-    let b = kerf_driver::eval_source(src, "t.krf").unwrap();
+    let b = kerf_driver::run_source_seed(src, "t.krf").unwrap();
     assert!(a.value.eq_value(&b.value));
 }
 

@@ -133,16 +133,24 @@ fn load_bootstrap() -> Result<BootstrapState, ReadError> {
             Span::dummy(),
         )
     })?;
-    let mut table = front.table;
+    build_state(front.program, front.table, front.source_map)
+}
+
+/// 由前段产物构建 Reader 状态（种子加载与 [`install_state`] 共享——
+/// 单一状态构造实现：注册内置 + 卫生回退 + 顶层执行 + 入口 intern）。
+fn build_state(
+    program: BcProgram,
+    mut table: SymbolTable,
+    source_map: SourceMap,
+) -> Result<BootstrapState, ReadError> {
     // reader.krf 无 I/O 引用（纯词法数据变换）——空授权（R9 已验证
     // 无门控引用；fail-closed：I/O 内置不进自举环境）
     let mut globals = register_globals(&mut table, &crate::capability::IoGrant::none());
-    let program = front.program;
     // 卫生回退解析（reader.krf 无宏——空操作；保持与 run_source 管线一致性）
     crate::builtins::resolve_hygiene_fallbacks(&program, &mut table, &mut globals);
     let mut heap = Heap::new();
     let outcome = run_program(&program, &mut globals, &mut heap)
-        .map_err(|e| vm_error_to_read(&e, &front.source_map))?;
+        .map_err(|e| vm_error_to_read(&e, &source_map))?;
     let _ = outcome; // 主原型仅执行顶层定义（值无意义）
     let lex_sym = table.intern("lex-src");
     let parse_sym = table.intern("parse-tokz");
@@ -152,9 +160,31 @@ fn load_bootstrap() -> Result<BootstrapState, ReadError> {
         table,
         lex_sym,
         parse_sym,
-        source_map: front.source_map,
+        source_map,
         heap,
     })
+}
+
+/// 安装给定产物为当前线程的 Reader 状态（门 B fixpoint——B₂ 轮的
+/// 「以 B₁ 为新 bootstrap 程序」语义：自举链产物替换种子加载状态；
+/// i1-design §5 门 B + §7.4 隔离运行纪律）。
+///
+/// 产物须为 reader.krf 源编译所得（入口 `lex-src`/`parse-tokz`
+/// 存在性由状态构造实测）。
+pub fn install_state(
+    program: BcProgram,
+    table: SymbolTable,
+    source_map: SourceMap,
+) -> Result<(), ReadError> {
+    let state = build_state(program, table, source_map)?;
+    BOOTSTRAP.with(|cell| *cell.borrow_mut() = Some(state));
+    Ok(())
+}
+
+/// 卸载当前线程 Reader 状态（fixpoint 隔离运行——§7.4 fresh 形态；
+/// 后续调用触发惰性种子重载）。
+pub fn reset_state() {
+    BOOTSTRAP.with(|cell| *cell.borrow_mut() = None);
 }
 
 /// 调用 Reader 入口函数（宿主信任层程序化调用——§11 与 run_program 同级）。

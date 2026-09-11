@@ -30,7 +30,7 @@
 use crate::common;
 
 use common::dual_path_agrees;
-use kerf_driver::{eval_source, run_source, Stage};
+use kerf_driver::{run_source, run_source_seed, Stage};
 use kerf_vm::Value;
 
 /// 通用断言：src 失败于 Run 阶段（E0004 载体），含消息子串。
@@ -50,17 +50,14 @@ fn expect_run_err(src: &str, msg: &str) -> kerf_driver::DriverError {
     err
 }
 
-/// 双路径 Err 事实断言：VM 与 eval 都必须失败（消息文本允许分裂，
-/// 但失败事实与阶段必须一致——T1 的错误吸收形态）。
+/// 双路径 Err 事实断言：生产链与种子链都必须失败（消息文本允许分裂，
+/// 但失败事实与阶段必须一致——T1 的错误吸收形态；42-d 新口径：
+/// 种子链替代 eval 为对拍 oracle）。
 fn expect_dual_err(src: &str) {
+    assert!(run_source(src, "neg.krf").is_err(), "生产链应报错：{}", src);
     assert!(
-        run_source(src, "neg.krf").is_err(),
-        "VM 路径应报错：{}",
-        src
-    );
-    assert!(
-        eval_source(src, "neg.krf").is_err(),
-        "eval 路径应报错：{}",
+        run_source_seed(src, "neg.krf").is_err(),
+        "种子链应报错：{}",
         src
     );
 }
@@ -391,10 +388,10 @@ fn t1_regression_global_storage_semantics() {
 fn t1_regression_app_evaluation_order() {
     // fn 位未绑定先于参数位报错（span 判定见 vm_tests 同名测试）
     let src = "((undefined-a) undefined-b)";
-    let vm = run_source(src, "o.krf").expect_err("VM 应报错");
-    let ev = eval_source(src, "o.krf").expect_err("eval 应报错");
-    assert!(vm.diagnostic.primary_span.start < 16, "VM 应报 fn 位");
-    assert!(ev.diagnostic.primary_span.start < 16, "eval 应报 fn 位");
+    let vm = run_source(src, "o.krf").expect_err("生产链应报错");
+    let ev = run_source_seed(src, "o.krf").expect_err("种子链应报错");
+    assert!(vm.diagnostic.primary_span.start < 16, "生产链应报 fn 位");
+    assert!(ev.diagnostic.primary_span.start < 16, "种子链应报 fn 位");
     // fn 位类型错误先于参数位（fn 表达式自身报错）
     expect_dual_err("((car 1) undefined-b)");
     let vm2 = run_source("((car 1) undefined-b)", "o.krf").err().unwrap();
@@ -448,7 +445,7 @@ fn scope_closure_negatives() {
     let vm_err = run_source("(+ 'x 1)", "q.krf").expect_err("符号算术应报错（VM）");
     assert_eq!(vm_err.stage, Stage::Run);
     assert!(vm_err.rendered.contains("+ 需要 int"));
-    let ev_err = eval_source("(+ 'x 1)", "q.krf").expect_err("符号算术应报错（eval）");
+    let ev_err = run_source_seed("(+ 'x 1)", "q.krf").expect_err("符号算术应报错（种子链）");
     assert!(ev_err.rendered.contains("int"));
 }
 
@@ -509,11 +506,8 @@ fn d2_eq_string_content_semantics() {
     let src = "(eq? \"a\" \"a\")";
     let vm = common::run(src).expect("VM 应 Ok");
     assert!(matches!(vm, Value::Bool(true)), "VM 同内容应 true");
-    let ev = kerf_driver::eval_source(src, "d2.krf").expect("eval 应 Ok");
-    assert!(
-        matches!(ev.value, Value::Bool(true)),
-        "eval 同内容应 true（修复前 false）"
-    );
+    let ev = kerf_driver::run_source_seed(src, "d2.krf").expect("种子链应 Ok");
+    assert!(matches!(ev.value, Value::Bool(true)), "种子链同内容应 true");
     // 构造字符串 vs 字面量：内容相等 → true（双路径一致）
     let src2 = "(eq? \"ab\" (str-append \"a\" \"b\"))";
     assert!(
@@ -530,13 +524,14 @@ fn d2_eq_string_content_semantics() {
     assert!(matches!(v3, Value::Bool(false)), "堆值（序对）仍按引用");
 }
 
-/// D7 回归：eval 路径错误保真（修复前逐层累积「求值失败：」前缀且
-/// Span 落最外调用点；修复后消息原样、Span 定位最内错误位）。
+/// D7 回归：参考链错误保真（修复前 eval 逐层累积「求值失败：」前缀且
+/// Span 落最外调用点；修复后消息原样、Span 定位最内错误位——42-d
+/// 口径迁移：种子链对拍同判据）。
 #[test]
 fn d7_eval_error_fidelity() {
-    // f→g→+ 类型错：eval 消息无「求值失败：」前缀（与 VM 消息形态一致）
+    // f→g→+ 类型错：种子链消息无「求值失败：」前缀（与生产链消息形态一致）
     let src = "(define (f n) (+ n \"s\")) (define (g) (f 1)) (g)";
-    let ev = eval_source(src, "d7.krf").expect_err("eval 应报错");
+    let ev = run_source_seed(src, "d7.krf").expect_err("种子链应报错");
     assert!(
         !ev.rendered.contains("求值失败"),
         "eval 错误不应累积包装前缀：\n{}",
@@ -578,10 +573,10 @@ fn d6_macro_calls_macro_hygiene_fallback() {
     // 两路径一致 ⇒ 42
     let vm = common::run(src).expect("VM 路径应 Ok");
     assert!(matches!(vm, Value::Int(42)), "VM 宏调宏应解析：{:?}", vm);
-    let ev = kerf_driver::eval_source(src, "d6.krf").expect("eval 路径应 Ok");
+    let ev = kerf_driver::run_source_seed(src, "d6.krf").expect("种子链应 Ok");
     assert!(
         matches!(ev.value, Value::Int(42)),
-        "eval 宏调宏应解析（基名回退）：{:?}",
+        "种子链宏调宏应解析（基名回退）：{:?}",
         ev.value
     );
     assert!(common::dual_path_agrees(src));

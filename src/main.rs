@@ -1,8 +1,10 @@
 //! kerf CLI（根 crate 入口——编排 kerf-driver）。
 //!
 //! 子命令：
-//! - `run <file>`：编译 + VM 执行（生产路径），打印最终值；
-//! - `eval <file>`：元循环求值器执行（参考路径）；
+//! - `run <file>`：编译 + VM 执行（生产路径，前段三段均自举——I1
+//!   生产切换 42-d），打印最终值；
+//! - `eval <file>`：**已退役**（42-d P5——自举编译器 + VM 为唯一
+//!   生产路径；参考路径由库 API `run_source_seed` 承担，CLI 面移除）；
 //! - `check <file>`：干编译（仅诊断）；
 //! - `tokens / stx / core / ir / bc / code <file>`：管线各级 dump
 //!   （§16 人类可感知输出 + §14.9 编译器自调试工具）；
@@ -15,8 +17,8 @@ use std::rc::Rc;
 use kerf_backend::{build_native, find_qbe, gen_il, lower_program, run_native};
 use kerf_core::CodeValue;
 use kerf_driver::{
-    cache_stats, check_source_recover, compile_source, dump_stx, dump_tokens, eval_source,
-    run_source, test_source,
+    cache_stats, check_source_recover, compile_source, dump_stx, dump_tokens, run_source,
+    test_source,
 };
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -28,7 +30,6 @@ fn main() {
     let file = args.get(2).map(|s| s.as_str());
     let exit = match (cmd, file) {
         ("run", Some(f)) => cmd_run(f),
-        ("eval", Some(f)) => cmd_eval(f),
         ("check", Some(f)) => cmd_check(f),
         ("test", Some(f)) => cmd_test(f),
         ("tokens", Some(f)) => cmd_tokens(f),
@@ -40,7 +41,15 @@ fn main() {
         ("bench", Some(f)) => cmd_bench(f, args.get(3).and_then(|n| n.parse::<u32>().ok())),
         ("anf", Some(f)) => cmd_anf(f),
         ("native", Some(f)) => cmd_native(f),
-        ("run", None) | ("eval", None) | ("check", None) | ("test", None) => {
+        ("eval", Some(_)) => {
+            // eval 退役（42-d P5：自举编译器 + VM 为唯一生产路径——
+            // CLI 参考路径面移除；库 API run_source_seed 承担 T1 对拍）
+            eprintln!(
+                "错误：eval 子命令已退役（r23 / 42-d：自举编译器 + VM 为唯一生产路径）；请使用 run"
+            );
+            2
+        }
+        ("run", None) | ("check", None) | ("test", None) => {
             eprintln!("错误：{} 需要文件参数", cmd);
             2
         }
@@ -62,8 +71,8 @@ fn print_usage() {
     eprintln!("用法：kerf <子命令> <文件.krf>");
     eprintln!();
     eprintln!("子命令：");
-    eprintln!("  run <file> [N]       编译 + VM 执行（打印最终值）");
-    eprintln!("  eval <file>          元循环求值器执行（参考路径）");
+    eprintln!("  run <file> [N]       编译 + VM 执行（打印最终值；前段均自举——I1）");
+    eprintln!("  eval                  已退役（42-d：自举编译器 + VM 唯一生产路径——用 run）");
     eprintln!("  check <file>         干编译（read→expand→compile，仅诊断）");
     eprintln!("  test <file>          用例运行器（表达式形式=用例；短路+错误恢复）");
     eprintln!("  tokens <file>        Token 流 dump");
@@ -138,23 +147,6 @@ fn cmd_run(path: &str) -> i32 {
     }
 }
 
-fn cmd_eval(path: &str) -> i32 {
-    let src = match read_file(path) {
-        Ok(s) => s,
-        Err(c) => return c,
-    };
-    match eval_source(&src, path) {
-        Ok(outcome) => {
-            println!("⇒ {}", kerf_vm::render_value(&outcome.value, &outcome.heap));
-            0
-        }
-        Err(e) => {
-            eprintln!("{}", e);
-            1
-        }
-    }
-}
-
 fn cmd_check(path: &str) -> i32 {
     let src = match read_file(path) {
         Ok(s) => s,
@@ -162,7 +154,7 @@ fn cmd_check(path: &str) -> i32 {
     };
     // TD-013 恢复模式（38-e）：expand 形式级恢复——E0002（展开）+
     // E0005（类型）全量报告（单错误短路保留在库 API check_source；
-    // run/eval 执行路径不变——r7 设计 §5 消费面表格）
+    // run 执行路径不变——r7 设计 §5 消费面表格）
     match check_source_recover(&src, path) {
         Ok(report) => {
             let cache_note = if report.cache_hit {

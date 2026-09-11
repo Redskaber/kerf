@@ -3,27 +3,29 @@
 //! 入口（§10.1 规则 1 自由函数）：
 //! - `compile_source`：源文本 → `CompileOutput`（完整管线含图 IR——
 //!   dump/检查/CodeValue 消费方入口，TD-015 分流的完整出口）；
-//! - `run_source`：编译前段 + VM 执行（生产路径，不构造图 IR）；
-//! - `eval_source`：编译前段 + 元循环求值器执行（参考路径，同上）。
+//! - `run_source`：编译前段 + VM 执行（生产路径，不构造图 IR——
+//!   前段三段（读/展开/编译）均自举实现：I1 生产切换 42-d）；
+//! - `run_source_seed`/`compile_source_seed`：种子管线（Rust 三段）
+//!   参考路径——T1 双路径互查的 oracle 面（eval 元循环求值器已
+//!   退役：42-d P5，自举编译器 + VM 为唯一生产路径）。
 //!
 //! 错误统一为 `DriverError`：阶段标识 + 已渲染诊断（含位置摘录，
 //! §2.2 原则 16：人类可感知输出是一等公民）。
 
 use std::rc::Rc;
 
-use kerf_compiler::{compile_module, disassemble_program, BcProgram};
+use kerf_compiler::{disassemble_program, BcProgram};
 use kerf_core::{lower_program, CoreExpr, IrGraph};
 use kerf_expander::{expand_program, phase::ModuleRegistry, ExpandCtxt, ExpandError};
 use kerf_reader::{read_source, ReadError, TokenKind};
 use kerf_runtime::Heap;
 use kerf_span::{render_diagnostic, Diagnostic, DiagnosticCode, FileId, Severity, SourceMap, Span};
 use kerf_syntax::{Stx, Symbol, SymbolTable};
-use kerf_vm::{run_program, Env, Value, VmError};
+use kerf_vm::{run_program, Value, VmError};
 
 use crate::builtins::{builtin_sigs, register_globals, resolve_hygiene_fallbacks};
 use crate::cache::{cache_enabled, cache_key, with_cache};
 use crate::capability::{verify_io_capabilities, IoGrant, IoRequirements};
-use std::collections::HashMap;
 
 /// 管线阶段标识。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,7 +151,7 @@ impl CompileOutput {
 
 /// 编译前段产物（read → expand → 相位簿记 → 字节码；**不含图 IR lowering**）。
 ///
-/// TD-015 偿还：run/eval 生产路径消费本形态——`IrGraph` 仅在消费方
+/// TD-015 偿还：run 生产路径消费本形态——`IrGraph` 仅在消费方
 /// （`kerf ir` 子命令 / CodeValue 检查 / 完整 dump）经 [`compile_source`]
 /// 按需计算，生产执行路径不再旁路构造后丢弃（恒定开销消除）。
 ///
@@ -252,16 +254,18 @@ fn resolve_prelude_imports(
 /// crate::bootstrap 桥接）——生产管线入口。自举 Reader 本身的编译走
 /// 种子路径 [`compile_front_seed`]（无递归：种子编译自举实现）。
 ///
-/// [`compile_source`]（完整管线，含图 IR）与 [`run_source`]/[`eval_source`]
-/// （生产执行路径，无需 IR）共用本前段——单一编译逻辑，两分流出口
-/// （字节码产物一致性由 `fast_path_bytecode_matches_full_compile` 守护）。
+/// [`compile_source`]（完整管线，含图 IR）与 [`run_source`]（生产执行
+/// 路径，无需 IR）共用本前段——单一编译逻辑，两分流出口（字节码产物
+/// 一致性由 `fast_path_bytecode_matches_full_compile` 守护）。
 ///
 /// **E1-β 生产切换**：读 **与展开** 均经自举实现（VM 上 reader.krf +
-/// expander.krf）——「语言能表达自身前端」的完整生产命题；Rust 种子
-/// 保留双角色：自举引导（reader.krf/expander.krf/preamble.krf 的编译）+
-/// parity oracle（测试对照）。切换守护：`production_expander_is_bootstrap`
-/// （独立线程活性探针 is_loaded 前后翻转 + 宏产物 CoreExpr Span 展开
-/// 代次 ≥1——桥侧 retag 统一 +1，输入恒源码代次 0——双信号，实测判别）。
+/// expander.krf）；**I1 生产切换（42-d）**：编译段同样经自举实现（VM
+/// 上 compiler.krf）——「语言能表达自身前端 + 编译器」的完整生产命题；
+/// Rust 种子保留双角色：自举引导（三 krf + preamble 的编译）+ parity
+/// oracle（测试对照）。切换守护：`production_expander_is_bootstrap` +
+/// `production_compiler_is_bootstrap`（独立线程活性探针双信号，实测
+/// 判别）；自举一致性（两次编译自身字节一致）由门 B fixpoint 测试
+/// 守护（bootstrap_compiler_tests——§21.3 条件 2）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 fn compile_front(source: &str, filename: &str) -> Result<FrontOutput, DriverError> {
     let mut sm = SourceMap::new();
@@ -274,15 +278,25 @@ fn compile_front(source: &str, filename: &str) -> Result<FrontOutput, DriverErro
     let forms = crate::bootstrap::read_source(source, file_id, &mut table)
         .map_err(|e| DriverError::from_read(&e, &sm))?;
 
-    front_from_forms(forms, table, sm, main_sym, file_id, ExpanderKind::Bootstrap)
+    front_from_forms(
+        forms,
+        table,
+        sm,
+        main_sym,
+        file_id,
+        ExpanderKind::Bootstrap,
+        CompilerKind::Bootstrap,
+    )
 }
 
-/// 种子编译前段（Rust Reader + Rust Expander——自举实现的引导编译与
-/// parity oracle）。
+/// 种子编译前段（Rust Reader + Rust Expander + Rust Compiler——自举
+/// 实现的引导编译与 parity oracle）。
 ///
-/// 消费方：bootstrap 加载（编译 reader.krf/expander.krf/preamble.krf）+
-/// parity 测试对照基准。逻辑与 [`compile_front`] 完全同构——read 与
-/// expand 两入口均为种子实现（无递归：种子编译自举实现）。
+/// 消费方：bootstrap 加载（编译 reader.krf/expander.krf/compiler.krf/
+/// preamble.krf）+ parity 测试对照基准（[`run_source_seed`]/
+/// [`compile_source_seed`]）。逻辑与 [`compile_front`] 完全同构——
+/// read/expand/compile 三入口均为种子实现（无递归：种子编译自举
+/// 实现——bootstrap 加载恒种子路径，P1 硬约定）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
 pub(crate) fn compile_front_seed(source: &str, filename: &str) -> Result<FrontOutput, DriverError> {
     let mut sm = SourceMap::new();
@@ -294,7 +308,15 @@ pub(crate) fn compile_front_seed(source: &str, filename: &str) -> Result<FrontOu
     let forms =
         read_source(source, file_id, &mut table).map_err(|e| DriverError::from_read(&e, &sm))?;
 
-    front_from_forms(forms, table, sm, main_sym, file_id, ExpanderKind::Seed)
+    front_from_forms(
+        forms,
+        table,
+        sm,
+        main_sym,
+        file_id,
+        ExpanderKind::Seed,
+        CompilerKind::Seed,
+    )
 }
 
 /// 前段展开器选择（E1-β 生产切换：生产 = 自举 Expander；种子路径 =
@@ -304,6 +326,21 @@ enum ExpanderKind {
     /// 自举 Expander（expander.krf 在 VM 上运行——生产路径）。
     Bootstrap,
     /// Rust 种子 Expander（引导编译 + parity oracle）。
+    Seed,
+}
+
+/// 前段编译器选择（I1 生产切换 42-d——i1-design §6 P1：分派位在
+/// [`front_from_core`] 第 4 步，镜像 `ExpanderKind`）。
+///
+/// 生产 = 自举 Compiler（compiler.krf 在 VM 上运行）；种子路径 =
+/// Rust Compiler（bootstrap 加载引导 + parity oracle——「自举种子
+/// 经典角色」07 §3.2）。缓存口径（B11/P4）：键含本维度——种子与
+/// 自举产物不得混享缓存条目。
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CompilerKind {
+    /// 自举 Compiler（VM 上 compiler.krf——生产路径）。
+    Bootstrap,
+    /// Rust 种子 Compiler（引导编译 + parity oracle）。
     Seed,
 }
 
@@ -319,6 +356,7 @@ fn front_from_forms(
     main_sym: Symbol,
     file_id: FileId,
     expander: ExpanderKind,
+    compiler: CompilerKind,
 ) -> Result<FrontOutput, DriverError> {
     // 1.5 TD-021 prelude 模块注入（import 解析——read 后、expand 前：
     // forms 级合并，单一编译单元；Span 指向 preamble.krf（独立 file））
@@ -342,7 +380,7 @@ fn front_from_forms(
         }
     };
 
-    front_from_core(core, table, sm, main_sym)
+    front_from_core(core, table, sm, main_sym, file_id, compiler)
 }
 
 /// 前段核心段（expand 之后：R9 验证 → 相位簿记 → 字节码——
@@ -352,12 +390,14 @@ fn front_from_forms(
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
 fn front_from_core(
     core: Vec<Rc<CoreExpr>>,
-    table: SymbolTable,
+    mut table: SymbolTable,
     sm: SourceMap,
     main_sym: Symbol,
+    file_id: FileId,
+    compiler: CompilerKind,
 ) -> Result<FrontOutput, DriverError> {
     // 2.5 R9 能力权限验证（r8——13 §3.1.3 条款 3「编译期错误」：
-    // front 管线全路径生效 run/eval/check/compile；首个违规即阻断
+    // front 管线全路径生效 run/check/compile；首个违规即阻断
     // fail-closed；E0006 家族与 E0005 静态检查分离）
     verify_io_capabilities(&core, &table, &sm)?;
 
@@ -429,8 +469,20 @@ fn front_from_core(
         }
     })?;
 
-    // 4. Compile：CoreExpr 树 → 字节码（lower 仅完整入口执行——见下）
-    let program = compile_module(&core).map_err(|e| DriverError::from_compile(&e, &sm))?;
+    // 4. Compile：CoreExpr 树 → 字节码（I1 生产切换 42-d：分派
+    // CompilerKind——镜像 ExpanderKind（i1-design §6 P1）；lower 仅
+    // 完整入口执行——见下）
+    let program = match compiler {
+        // 种子臂理由：Rust 编译器 = 引导 + parity oracle（bootstrap
+        // 加载恒种子路径——无递归，B5/P1 硬约定）
+        CompilerKind::Seed => kerf_compiler::compile_module(&core),
+        // 自举臂理由：compiler.krf 在 VM 上运行（compile_front 生产
+        // 路径——桥经 bootstrap_compiler）
+        CompilerKind::Bootstrap => {
+            crate::bootstrap_compiler::compile_module(&core, file_id, &mut table)
+        }
+    }
+    .map_err(|e| DriverError::from_compile(&e, &sm))?;
 
     Ok(FrontOutput {
         core,
@@ -454,7 +506,10 @@ pub(crate) fn compile_front_cached(
     if !cache_enabled() {
         return Ok((compile_front(source, filename)?, false));
     }
-    let key = cache_key(source, filename);
+    // 键含 CompilerKind 维度（B11/P4——i1-design §6：种子与自举产物
+    // 不混享缓存条目；本入口恒生产（Bootstrap）；种子参考路径
+    // （compile_front_seed）不经缓存）
+    let key = cache_key(source, filename, CompilerKind::Bootstrap);
     if let Some(front) = with_cache(|c| c.lookup_front(&key)) {
         return Ok((front, true));
     }
@@ -549,8 +604,9 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
     let expand_count = recovered.diags.len();
     let core = recovered.core;
     // 3. 部分产物 → 后续管线（R9 fail-closed + 簿记 + 字节码——共享
-    // front_from_core：短路边界如上文档）
-    let front = front_from_core(core, table, sm, main_sym)?;
+    // front_from_core：短路边界如上文档；编译段 = 生产口径（自举
+    // Compiler——check 为生产子命令面））
+    let front = front_from_core(core, table, sm, main_sym, file_id, CompilerKind::Bootstrap)?;
     // 4. 类型检查（部分产物）+ 诊断合并 + 排序
     let io_req = IoRequirements::from_core(&front.core);
     let mut table = front.table;
@@ -604,15 +660,33 @@ const EXPAND_DIAG_CAP: usize = kerf_expander::MAX_DIAGNOSTICS;
 /// 编译源文本（全管线，不执行）。
 ///
 /// 管线：read → expand（含相位 declare/visit 簿记）→ lower（图 IR）
-/// → compile（字节码）。instantiate 簿记在执行入口（run/eval）完成。
+/// → compile（字节码）。instantiate 簿记在执行入口（run）完成。
 ///
 /// 消费方：`kerf ir`/`code`/`bc`/`check` 等 dump 与检查子命令、测试、
-/// CodeValue 检查——需要图 IR 或完整产物的场景。纯执行路径（run/eval）
+/// CodeValue 检查——需要图 IR 或完整产物的场景。纯执行路径（run）
 /// 走 [`compile_front`] 快路径（TD-015 分流）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 pub fn compile_source(source: &str, filename: &str) -> Result<CompileOutput, DriverError> {
     let (front, _hit) = compile_front_cached(source, filename)?;
     // Lower：CoreExpr → 图 IR（结构化形式 + 共享节点）——仅消费方按需计算
+    let ir = lower_program(&front.core);
+    Ok(CompileOutput {
+        core: front.core,
+        ir,
+        program: front.program,
+        source_map: front.source_map,
+        table: front.table,
+        registry: front.registry,
+    })
+}
+
+/// 种子管线完整编译（参考路径：Rust 三段（读/展开/编译）——门 B
+/// fixpoint 的 B₀ 基准与字节码 parity oracle（42-d）；与
+/// [`compile_source`] 同构但**不经缓存**（B11/P4：种子产物不入生产
+/// 缓存——种子与自举产物不混享条目）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+pub fn compile_source_seed(source: &str, filename: &str) -> Result<CompileOutput, DriverError> {
+    let front = compile_front_seed(source, filename)?;
     let ir = lower_program(&front.core);
     Ok(CompileOutput {
         core: front.core,
@@ -645,149 +719,49 @@ impl std::fmt::Debug for RunOutcome {
 ///
 /// 走 [`compile_front_cached`] 快路径——不构造图 IR（TD-015：执行路径
 /// 无 IR 消费，旁路计算为恒定开销浪费）；同源重复执行命中编译缓存
-/// （批次 C——内容寻址键，产物等价性由确定性编译保证）。
+/// （批次 C——内容寻址键，产物等价性由确定性编译保证）；前段三段
+/// 均自举（I1 生产切换 42-d）——执行段单一实现（[`run_front`]，与
+/// 种子参考路径 [`run_source_seed`] 共享）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
 pub fn run_source(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
     let (out, _cache_hit) = compile_front_cached(source, filename)?;
-    let mut table = out.table;
-    let grant = IoGrant::from_requirements(IoRequirements::from_core(&out.core));
+    run_front(out)
+}
+
+/// 种子管线执行（参考路径：Rust 三段（读/展开/编译）+ VM）。
+///
+/// T1 双路径互查的 oracle 面（42-d P5——eval 元循环求值器退役后的
+/// 替代对拍口径：生产链 [`run_source`]（自举三段）vs 种子链本入口，
+/// 两独立实现同源同果）。**不经编译缓存**（B11/P4：种子产物不入
+/// 生产缓存——种子与自举产物不混享条目）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+pub fn run_source_seed(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
+    let front = compile_front_seed(source, filename)?;
+    run_front(front)
+}
+
+/// 前段产物执行核心（值语义——run_source 与 run_source_seed 共享：
+/// 两入口仅前段（自举/种子）不同，执行段单一实现）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+fn run_front(front: FrontOutput) -> Result<RunOutcome, DriverError> {
+    let mut table = front.table;
+    let grant = IoGrant::from_requirements(IoRequirements::from_core(&front.core));
     let mut globals = register_globals(&mut table, &grant);
+    let program = front.program;
+    let source_map = front.source_map;
     // 卫生回退解析（$hyg$N 后缀剥离）
-    let program = out.program;
-    let source_map = out.source_map;
-    let registry = out.registry;
     resolve_hygiene_fallbacks(&program, &mut table, &mut globals);
     let mut heap = Heap::new();
     // instantiate 簿记（Phase 0 执行）
-    instantiate_registry(registry);
+    instantiate_registry(front.registry);
     run_program(&program, &mut globals, &mut heap)
         .map(|value| RunOutcome { value, heap })
         .map_err(|e| DriverError::from_vm(&e, &source_map, &table))
 }
 
-/// 求值源文本（参考路径：编译前段 + 元循环求值器）。
-///
-/// 同 [`run_source`]：走 [`compile_front_cached`] 快路径，不构造图 IR
-/// （TD-015）；与 VM 路径共享同一编译缓存（T1 双路径的产物同源）。
-#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——非性能热路径，错误体积可接受
-pub fn eval_source(source: &str, filename: &str) -> Result<RunOutcome, DriverError> {
-    let (out, _cache_hit) = compile_front_cached(source, filename)?;
-    let mut table = out.table;
-    let grant = IoGrant::from_requirements(IoRequirements::from_core(&out.core));
-    let globals = register_globals(&mut table, &grant);
-    // eval 路径全局经根环境注入（宿主信任代码：内置名互不重复，
-    // define 返回值在此无需检查——E6 只约束用户程序的同层重复定义）
-    let root = Env::new();
-    for (sym, v) in &globals {
-        let _ = root.define(*sym, v.clone());
-    }
-    // 卫生回退解析（eval 路径与 VM 路径一致——T1 定理：宏引入的
-    // 全局引用双路径必须同解；见 resolve_eval_hygiene_fallbacks）
-    resolve_eval_hygiene_fallbacks(&out.core, &mut table, &globals, &root);
-    let mut heap = Heap::new();
-    heap.set_gc_enabled(false); // eval 路径不触发回收（根集不完整，TD-009）
-    let registry = out.registry;
-    instantiate_registry(registry);
-    let core = out.core;
-    let source_map = out.source_map;
-    kerf_vm::eval_program(&core, &root, &mut heap)
-        .map(|value| RunOutcome { value, heap })
-        .map_err(|e| {
-            DriverError::from_vm(
-                &VmError {
-                    message: e.message,
-                    span: e.span,
-                    trace: vec![],
-                },
-                &source_map,
-                &table,
-            )
-        })
-}
-
 fn instantiate_registry(mut registry: ModuleRegistry) {
     for entry in registry.entries().to_vec() {
         let _ = registry.instantiate(entry.name);
-    }
-}
-
-/// eval 路径的卫生回退解析（与 VM 路径的 `resolve_hygiene_fallbacks`
-/// 语义对齐——T1 定理：宏引入的全局引用双路径一致解析）。
-///
-/// VM 路径在字节码 `global_refs` 上解析（run_source）；eval 路径在核心
-/// 表达式树上解析：收集 VarRef/SetBang/Define 中的 `name$hyg$N` 符号
-/// （与编译器 intern_global 口径一致），基名命中全局（内置）时在根
-/// 环境预定义别名（宿主信任注入，不触发 E6——与 VM 路径静默别名
-/// 行为一致）。
-fn resolve_eval_hygiene_fallbacks(
-    core: &[Rc<CoreExpr>],
-    table: &mut SymbolTable,
-    globals: &HashMap<Symbol, Value>,
-    root: &Rc<Env>,
-) {
-    let mut refs: Vec<Symbol> = Vec::new();
-    for e in core {
-        collect_global_refs(e, &mut refs);
-    }
-    for sym in refs {
-        if globals.contains_key(&sym) {
-            continue;
-        }
-        let owned = table.name(sym).to_string();
-        if let Some((base, suffix)) = owned.rsplit_once("$hyg$") {
-            // 截取剩余后缀必须是数字（保守判定——与 VM 侧一致）
-            if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) {
-                let base_sym = table.intern(base);
-                if let Some(v) = globals.get(&base_sym).cloned() {
-                    let _ = root.define(sym, v);
-                }
-            }
-        }
-    }
-}
-
-/// 收集表达式树中的全局引用符号（VarRef + SetBang + Define 的名字，
-/// 与编译器 intern_global 的收集口径一致——两路径回退语义互为镜像）。
-fn collect_global_refs(e: &CoreExpr, out: &mut Vec<Symbol>) {
-    match e {
-        CoreExpr::VarRef { name, .. } => out.push(*name),
-        CoreExpr::Lambda { body, .. } => collect_global_refs(body, out),
-        CoreExpr::App { fn_expr, args, .. } => {
-            collect_global_refs(fn_expr, out);
-            for a in args {
-                collect_global_refs(a, out);
-            }
-        }
-        CoreExpr::If {
-            cond,
-            then_branch,
-            else_branch,
-            ..
-        } => {
-            collect_global_refs(cond, out);
-            collect_global_refs(then_branch, out);
-            collect_global_refs(else_branch, out);
-        }
-        CoreExpr::SetBang { name, value, .. } => {
-            out.push(*name);
-            collect_global_refs(value, out);
-        }
-        CoreExpr::Define { name, value, .. } => {
-            out.push(*name);
-            collect_global_refs(value, out);
-        }
-        CoreExpr::Begin { body, .. } => {
-            for item in body {
-                collect_global_refs(item, out);
-            }
-        }
-        CoreExpr::Module { body, .. } => {
-            for item in body {
-                collect_global_refs(item, out);
-            }
-        }
-        // _ 臂理由：require 零运行时语义（无全局引用——R9 静态门控）
-        CoreExpr::Require { .. } | CoreExpr::Literal { .. } => {}
     }
 }
 
@@ -1084,12 +1058,48 @@ mod tests {
     }
 
     #[test]
-    fn eval_path_agrees_with_vm() {
-        // 双执行路径互查（§21.8 Phase 1 核心验证）
+    fn production_seed_paths_agree() {
+        // T1 双路径互查新口径（42-d P5——eval 退役）：生产链（自举
+        // 三段 + VM）vs 种子链（Rust 三段 + VM）同源同果——两独立
+        // 实现互查（§21.8 Phase 1 核心验证的 I1 后形态）
         let src = "(define (f x) (+ x 1)) (f 41)";
         let a = run_source(src, "t.krf").unwrap();
-        let b = eval_source(src, "t.krf").unwrap();
+        let b = run_source_seed(src, "t.krf").unwrap();
         assert!(a.value.eq_value(&b.value));
+    }
+
+    #[test]
+    fn production_compiler_is_bootstrap() {
+        // I1 生产切换守护（§2.3-11 实测判别，非推断——镜像
+        // production_expander_is_bootstrap）：独立线程内（thread_local
+        // 状态零残留）——编译前自举 Compiler 未加载，生产编译后已
+        // 加载 ⇒ compile_front 的编译段确实经 bootstrap_compiler
+        // （VM 上运行 compiler.krf）；第二信号：种子路径
+        // （compile_front_seed）不加载自举 Compiler（bootstrap 加载恒
+        // 种子路径——P1 硬约定的实测面）。
+        let prod = std::thread::spawn(|| {
+            let before = crate::bootstrap_compiler::is_loaded();
+            let src = "(define (seed-guard-42) 41) (seed-guard-42)";
+            let (front, _hit) = compile_front_cached(src, "guard.krf").expect("编译失败");
+            let after = crate::bootstrap_compiler::is_loaded();
+            (before, after, front.program.total_instructions() > 0)
+        })
+        .join()
+        .expect("探针线程失败");
+        assert!(!prod.0, "独立线程起始应未加载自举 Compiler");
+        assert!(prod.1, "生产编译后自举 Compiler 应已加载（VM 路径活性）");
+        assert!(prod.2, "生产产物应为非空字节码");
+        let seed = std::thread::spawn(|| {
+            let before = crate::bootstrap_compiler::is_loaded();
+            let front = compile_front_seed("(+ 40 2)", "seed-guard.krf");
+            let after = crate::bootstrap_compiler::is_loaded();
+            (before, after, front.is_ok())
+        })
+        .join()
+        .expect("种子探针线程失败");
+        assert!(!seed.0, "种子探针线程起始亦应未加载（隔离前提）");
+        assert!(!seed.1, "种子路径不得加载自举 Compiler（引导恒种子）");
+        assert!(seed.2, "种子编译应成功");
     }
 
     #[test]
@@ -1117,7 +1127,7 @@ mod tests {
 
     #[test]
     fn fast_path_bytecode_matches_full_compile() {
-        // TD-015 分流守护：run/eval 快路径（compile_front）与完整编译
+        // TD-015 分流守护：run 快路径（compile_front）与完整编译
         // （compile_source）对同一源必须产出一致字节码——防止两出口
         // 编译逻辑漂移（孤立正确 → 集成失败的 §7.2 防崩检查 Q2）。
         let src = "(define (f x) (+ x 1)) (f 2)";

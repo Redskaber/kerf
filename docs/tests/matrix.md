@@ -15,12 +15,14 @@
 >
 > **r16 增量**（2026-09-11，批次 F / Stage 1 深审收尾环）：零测试变更（纯审查 + 文档 + 注释轮——**553 零断言修改逐一等价复跑**：探针临时部署/移除各一次全绿验证）；本行 + 表体两行对账（bootstrap_expander_tests 19→36 的 r15 尾差 + prelude_tests 行补录——31-e 起 header 增量与表体同步义务的漏网，36-d 发现）。
 > **r15 增量**（2026-09-11，批次 E / E1-β 宏收口 + 生产切换 + TD-021）：+24 集成（bootstrap_expander_tests 19→36：宏 parity 17——define-syntax/syntax-rules/卫生 α 重命名/省略号（零/多段/复合）/字面量/多子句/糖覆盖/深度上限/向量模式 + prelude_tests 7——TD-021 hofs 用户面/组合管道/双路径/opt-in/显式失败/未知导入）+ +1 单元（driver 生产切换守护 production_expander_is_bootstrap——独立线程活性探针 + 展开代次标记）——528 → **553**。
-> **Version**: v0.1.0-r22
+> **Version**: v0.1.0-r23
 > **Status**: Active
+
+> **r23 增量**（2026-09-11，批次 I 执行 / 42-d I1 收口：生产切换 + 门 B fixpoint + eval 退役）：**665 → 670（净 +5）**——集成 +2（bootstrap_compiler_tests 27 → 29：**门 B fixpoint**（B₁/B₂ 四程序 bytecode_equal + SHA-256 摘要一致——§21.3 条件 2 终验）+ **B₁ 产物可执行面**（install 后自举链运转 = 种子链结果））+ 单元 +3（driver 64 → 67：生产编译守护 production_compiler_is_bootstrap（独立线程活性探针双信号）+ 缓存 CompilerKind 分桶 ×2（键区分 + 跨桶隔离——B11/P4））。口径：单元 202 → 205 + 集成 463 → 465；T1 双路径面全量迁移（eval → 种子链对拍——十测试文件 + common + 双审计集，断言迁移非删除：净零计数变更）。
 
 ## 总量
 
-**665 通过 / 0 失败 / 0 忽略**（665 个测试函数 = 单元 202 + 集成 463，逐二进制实测汇总；r10 +4 架构审计 + r12 +20 预留扩展 + r13 +9 作用域集锚点 + r14 +19 自举 Expander parity + r15 +25 宏收口/prelude/生产切换守护 + r17 +52 批次 G：QBE 后端 PoC 40 + TD-013 恢复 12 + r18 +29 批次 H：TCO 12 + HM PoC 15 + Probe 拆分 2 + r19 +4 批间插入轮：能力模型骨架 Probe 4 + r20 +0 设计轮：I1 切口设计（parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）+ r21 +19 批次 I·I1 前段：自举 Compiler 门 A parity（bytecode_equal 全结构判据）+ 42-c 边界负例 + 行为面端到端 + **r22 +8 批次 I·I1 中段：module/require 两臂 + 糖九件全管线 + 宏 + prelude 注入序 + examples 六件双路径（扩展组 46 case）+ 行为面糖/module**）。
+**670 通过 / 0 失败 / 0 忽略**（670 个测试函数 = 单元 205 + 集成 465，逐二进制实测汇总；r10 +4 架构审计 + r12 +20 预留扩展 + r13 +9 作用域集锚点 + r14 +19 自举 Expander parity + r15 +25 宏收口/prelude/生产切换守护 + r17 +52 批次 G：QBE 后端 PoC 40 + TD-013 恢复 12 + r18 +29 批次 H：TCO 12 + HM PoC 15 + Probe 拆分 2 + r19 +4 批间插入轮：能力模型骨架 Probe 4 + r20 +0 设计轮：I1 切口设计（parity 三门 A/B/C 为 42-b/c/d 增量测试的验收合同）+ r21 +19 批次 I·I1 前段：自举 Compiler 门 A parity（bytecode_equal 全结构判据）+ 42-c 边界负例 + 行为面端到端 + **r22 +8 批次 I·I1 中段：module/require 两臂 + 糖九件全管线 + 宏 + prelude 注入序 + examples 六件双路径（扩展组 46 case）+ 行为面糖/module** + **r23 +5 批次 I·I1 收口：门 B fixpoint（B₁/B₂ 字节一致 + SHA-256）+ B₁ 可执行面 + 生产编译守护 + 缓存分桶 ×2（CompilerKind 生产切换 42-d）**）。
 §3.2 release 验收基线 204（r2）→ r3 负向测试扩张 + 审计集就位 + FS-1 守卫修复 + 糖正向锚点 + T17-a 六缺陷修复回归后 297 → r4（Stage 1 批次 A）304 → r5（批次 B TD-002 符号值 + 标准库最小集）324 → r6（批次 B 收官 B3 自举 Reader）356 → r7（批次 C 类型检查器 + 编译缓存 + TD-016）408 → **r8（批次 D 能力 I/O + 内部效应 + 用例运行器）476** → **r10（架构合规审计 +4）480**：+24 capability_tests（require 声明面 + E0006 三路径门控 + 豁免/形状/令牌 + EOF 子进程探针）+ +18 test_runner_tests（前置切分 + PASS 判定 + 短路/恢复/隔离 + front 错误面）+ +25 kerf-driver 单元（effects.rs 12：逃逸层/最近匹配/载荷保真/穿透契约 + capability.rs 13：R9 验证/豁免/编组）+ +1 negative_vm_tests（read_line_arity 自 ignore 激活——**FS-4 修复**，能力参数化重写时补齐元数校验）→ **r12（接口预留完整性扩展 +20）500**：+8 单元（reserved/ 模块 Probe 冻结——「测试实现体编译通过 = 契约冻结」先例沿用）+ +12 集成 reserved_ext_tests（P0 数据结构位置六项断言 + 预留 API 跨 crate 可达 + 负向形状：空目标拒绝/空片段类型检查失败/rename 错误面）→ **r13（批次 E·TD-004 作用域集解析收口 +9）509**：+9 集成 scope_set_tests（双路径语义锚点 + 作用域不匹配负例——见 docs/tests/v0/stage1/plan/scope-set.md）→ **r14（批次 E·E1-α 自举 Expander +19）528**：+19 集成 bootstrap_expander_tests（expander.krf 与 Rust 种子 parity——结构/Span/作用域集/param_scopes/错误消息逐字一致 + 行为面端到端；见 docs/tests/v0/stage1/plan/bootstrap-expander.md）→ **r15（批次 E·E1-β 宏收口 + 生产切换 + TD-021 prelude +25）553**：+17 宏 parity（镜像 macro_sys.rs：变换器注册表单表语义/卫生基名回退/省略号/字面量/Span 并集代次守卫（expansion_id 镜像——节点第 4 字段 + retag +1）/深度上限 500 消息逐字）+ +7 prelude_tests（TD-021 模块/import 承载——forms 级合并注入单一编译单元）+ +1 单元生产切换守护（compile_front 展开段经 bootstrap_expander——独立线程活性探针实测）。**全套件经自举 Reader + 自举 Expander（均 kerf 源码，VM 上运行）执行——生产管线读+展开两段全自举（E1-β）。**
 
 > **r7 计数修正**（r8 对账发现，§8.4.5 规则 2——以实测为准）：r7 版本矩阵的分套件表存在陈旧数（头部「集成 173 函数」为 r3 时代口径；单元表 130 实为 150——driver 14→25 / expander 26→28 / compiler 12→15 的 r4-r7 增长未回写；cache_tests 13 实为 14；negative_vm 29 为排除 ignore 的口径）。r7 实际 = 150 单元 + 260 集成函数（259 通过 + 1 ignore）= 408:0:1 ✓（总量正确、分项陈旧）。r8 起全部逐二进制实测。
@@ -44,7 +46,7 @@
 | kerf-compiler 单元 | crate 内联 | crates/kerf-compiler/src/*.rs | 15 |
 | kerf-runtime 单元 | crate 内联 | crates/kerf-runtime/src/*.rs | 9 |
 | kerf-vm 单元 | crate 内联 | crates/kerf-vm/src/*.rs | 18 |
-| kerf-driver 单元 | crate 内联 | crates/kerf-driver/src/*.rs | **58（r8 +25：effects.rs 12 + capability.rs 13；r12 +8：reserved/ Probe 冻结；r17：codegen 契约 2 迁移 kerf-backend + 兼容锚 1——净效应由逐二进制实测吸收）** |
+| kerf-driver 单元 | crate 内联 | crates/kerf-driver/src/*.rs | **67（r23 实测修正：r22 版 64（r15 +1 生产切换守护 / r19 +4 capability_model Probe / r12 +8 reserved Probe / r8 +25 effects+capability——表体 58 为 r12 时代陈旧数，本轮 --list 权威计数对账）；r23 +3：production_compiler_is_bootstrap 生产编译守护 + cache 分桶 ×2（B11））** |
 | kerf-backend 单元 | crate 内联 | crates/kerf-backend/src/*.rs | **9（r17 新 crate：codegen 契约迁移 3 + qbe 2 + aot 4）** |
 
 ### 集成测试（463 函数，tests/ 阶段树——r9 起经 runner.rs 单一总入口组织；r10 +4 审计；r12 +12 预留扩展；r13 +9 作用域集锚点；r14 +19 自举 Expander parity；r22 +8：bootstrap_compiler 扩展组）
@@ -80,7 +82,7 @@
 | **multi_error_recovery_tests（r17，批次 G·G2）** | tests/v0/stage2/plan/multi_error_recovery_tests.rs | **16**（种子恢复 6 + driver 8 + 双路径同构 1 + 执行路径不变 1——TD-013 双路径恢复 + 合并报告） |
 | **tco_tests（r18，批次 H·H2）** | tests/v0/stage2/plan/tco_tests.rs | **12**（TCO 正例 8（105_001 恒定帧/相互尾递归/if 两臂/begin 末项三层/let 糖/内建隐式 RET/闭包值尾位/自举 10_000 深度链）+ 负例 4（指令预算护栏/尾调用 arity/非可调用/非尾深递归仍帧上限）） |
 | **hm_inference_tests（r18，批次 H·H4）** | tests/v0/stage2/plan/hm_inference_tests.rs | **15**（双门：超集门 29 程序 + 零误报门（examples 六件套 + 动态边界）+ 四类缺口检出 + occurs/值限制/let-letrec 泛化/多错误 Span 序/Dynamic 逃生舱/512 预算） |
-| **bootstrap_compiler_tests（r21/r22，批次 I·I1 自举 Compiler）** | tests/v0/stage2/plan/bootstrap_compiler_tests.rs | **27**（r21 门 A 基础组：bytecode_equal 全结构 parity 13 + 负例 2（define 位置 D1 逐字）+ 行为面 4；r22 扩展组：module/require 两臂正例组 + 糖九件全管线 46 case + 宏 3 + prelude 注入序 2（preamble.krf 真实语料）+ examples 六件双路径 + 行为面糖/module 2 组——42-b 边界负例改写正例（两臂迁移落地）） |
+| **bootstrap_compiler_tests（r21/r22/r23，批次 I·I1 自举 Compiler）** | tests/v0/stage2/plan/bootstrap_compiler_tests.rs | **29**（r21 门 A 基础组：bytecode_equal 全结构 parity 13 + 负例 2（define 位置 D1 逐字）+ 行为面 4；r22 扩展组：module/require 两臂正例组 + 糖九件全管线 46 case + 宏 3 + prelude 注入序 2（preamble.krf 真实语料）+ examples 六件双路径 + 行为面糖/module 2 组——42-b 边界负例改写正例（两臂迁移落地）；r23 门 B：fixpoint 两次编译自身字节一致（B₁/B₂ 四程序 + SHA-256 + 加强判据按名反汇编）+ B₁ 产物可执行面（install 后自举链 = 种子链结果）） |
 
 ### 负向测试规模与正负比（§9.4.3 对账）
 

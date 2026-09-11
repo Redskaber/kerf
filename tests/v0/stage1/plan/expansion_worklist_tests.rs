@@ -4,7 +4,7 @@
 //! 单元级深链测试（2_000 层构造链）见 kerf-expander 内联；本文件
 //! 覆盖真实源码路径（reader 嵌套上限 256 内的最大链深）。
 
-use kerf_driver::{eval_source, run_source, Stage};
+use kerf_driver::{run_source, run_source_seed, Stage};
 use kerf_vm::Value;
 
 /// 正例：200 层嵌套透传宏链（源码嵌套 ≤ 256 reader 上限内）端到端
@@ -32,7 +32,7 @@ fn deep_macro_chain_dual_path_agrees() {
         ")".repeat(depth)
     );
     let a = run_source(&src, "chain.krf").unwrap();
-    let b = eval_source(&src, "chain.krf").unwrap();
+    let b = run_source_seed(&src, "chain.krf").unwrap();
     assert!(a.value.eq_value(&b.value));
 }
 

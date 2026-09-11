@@ -14,7 +14,7 @@
 //! 遵循条款：§9.4.3（正负例成对）、§7.1（集成验证 ≥3）、§2.3-11
 //! （先实测禁臆测——全部断言经真实管线运行）。
 
-use kerf_driver::{eval_source, run_source, RunOutcome};
+use kerf_driver::{run_source, run_source_seed, RunOutcome};
 
 fn value_of(o: &RunOutcome) -> String {
     kerf_vm::render_value(&o.value, &o.heap)
@@ -55,11 +55,11 @@ fn prelude_for_each_side_effect() {
 
 #[test]
 fn prelude_dual_execution_paths_agree() {
-    // T1 双路径一致：注入产物在 VM 与 eval 路径同果
+    // T1 双路径一致（42-d 新口径）：注入产物在生产链与种子链同果
     let src = r#"(module user (import kerf-prelude)
                   (foldl (lambda (acc x) (+ acc x)) 0 (list 1 2 3 4)))"#;
     let a = run_source(src, "prelude.krf").expect("VM 路径失败");
-    let b = eval_source(src, "prelude.krf").expect("eval 路径失败");
+    let b = run_source_seed(src, "prelude.krf").expect("种子链失败");
     assert!(a.value.eq_value(&b.value), "双路径应一致");
     assert_eq!(value_of(&a), "10");
 }

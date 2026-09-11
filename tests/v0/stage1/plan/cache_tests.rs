@@ -9,8 +9,8 @@
 
 use kerf_driver::{
     cache_enabled, cache_entry_count, cache_invalidate_all, cache_key, cache_reset, cache_stats,
-    check_source, compile_source, eval_source, run_source, run_source_rendered, set_cache_enabled,
-    InMemoryCompilationCache,
+    check_source, compile_source, run_source, run_source_rendered, run_source_seed,
+    set_cache_enabled, CompilerKind, InMemoryCompilationCache,
 };
 use kerf_driver::{sha256_hex, CacheKey, CachedResult, CompilationCache};
 
@@ -39,7 +39,7 @@ fn sha256_public_api_vectors() {
 #[test]
 fn trait_spec_store_get_idempotent() {
     let mut c = InMemoryCompilationCache::new();
-    let key = cache_key("(+ 1 2)", "spec.krf");
+    let key = cache_key("(+ 1 2)", "spec.krf", CompilerKind::Bootstrap);
     assert!(c.get_cached(&key).is_none(), "空缓存不应命中");
     // 经真实管线产物写入（trait 面）
     let out = compile_source("(+ 1 2)", "spec.krf").expect("编译失败");
@@ -70,7 +70,7 @@ fn trait_spec_store_get_idempotent() {
 #[test]
 fn trait_spec_invalidate() {
     let mut c = InMemoryCompilationCache::new();
-    let key = cache_key("(if true 1 2)", "inv.krf");
+    let key = cache_key("(if true 1 2)", "inv.krf", CompilerKind::Bootstrap);
     let out = compile_source("(if true 1 2)", "inv.krf").expect("编译失败");
     c.store(
         key.clone(),
@@ -88,10 +88,10 @@ fn trait_spec_invalidate() {
 /// 键语义：源变更 → 键变（规格「源变更由键哈希自然区分」）。
 #[test]
 fn key_discriminates_source_and_location() {
-    let k1 = cache_key("(+ 1 2)", "a.krf");
-    let k1b = cache_key("(+ 1 2)", "a.krf");
-    let k2 = cache_key("(+ 1 3)", "a.krf");
-    let k3 = cache_key("(+ 1 2)", "b.krf");
+    let k1 = cache_key("(+ 1 2)", "a.krf", CompilerKind::Bootstrap);
+    let k1b = cache_key("(+ 1 2)", "a.krf", CompilerKind::Bootstrap);
+    let k2 = cache_key("(+ 1 3)", "a.krf", CompilerKind::Bootstrap);
+    let k3 = cache_key("(+ 1 2)", "b.krf", CompilerKind::Bootstrap);
     assert_eq!(k1, k1b, "同源同位置 → 同键（内容寻址）");
     assert_ne!(k1, k2, "源变更 → 键变");
     assert_ne!(k1, k3, "文件名参与配置指纹（SourceMap 位置一致性）");
@@ -129,14 +129,26 @@ fn pipeline_source_change_misses() {
     assert_eq!(cache_entry_count(), 2, "两条目并存");
 }
 
-/// eval 路径共享缓存（T1 双路径产物同源——run 存 eval 取）。
+/// 种子链缓存隔离（B11/P4——42-d：种子参考路径不经生产缓存——
+/// 不查不存；生产条目不服务种子路径、种子编译不污染生产缓存）。
 #[test]
-fn pipeline_eval_shares_cache() {
+fn pipeline_seed_path_cache_isolated() {
     cache_reset();
     let src = "(define (g x) (+ x 1)) (g 41)";
     let _ = run_source(src, "cache-c.krf").expect("run 失败");
-    let outcome = eval_source(src, "cache-c.krf").expect("eval 失败");
-    assert_eq!(cache_stats().hits, 1, "eval 应命中 run 存入的条目");
+    let stats_before = cache_stats();
+    assert_eq!(stats_before.misses, 1, "生产首轮应未中并写入");
+    let outcome = run_source_seed(src, "cache-c.krf").expect("种子链失败");
+    let stats_after = cache_stats();
+    assert_eq!(stats_after.hits, 0, "种子路径不得命中生产条目（B11 隔离）");
+    assert_eq!(
+        stats_after.misses, 1,
+        "种子路径不得查询生产缓存（不查不存）"
+    );
+    assert_eq!(
+        stats_after.stores, stats_before.stores,
+        "种子路径不得写入缓存"
+    );
     assert_eq!(kerf_vm::render_value(&outcome.value, &outcome.heap), "42");
 }
 
@@ -224,6 +236,6 @@ fn cache_key_public_shape() {
     };
     assert_eq!(k.source_hash, 42);
     assert_eq!(k.config_fingerprint, 7);
-    let k2 = cache_key("x", "y.krf");
+    let k2 = cache_key("x", "y.krf", CompilerKind::Bootstrap);
     assert!(k2.source_hash != 0 || k2.config_fingerprint != 0);
 }

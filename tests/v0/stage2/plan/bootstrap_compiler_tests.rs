@@ -1,7 +1,7 @@
-//! I1 自举 Compiler parity 套件（Stage 2 批次 I / Task 42-b + 42-c）。
+//! I1 自举 Compiler parity 套件（Stage 2 批次 I / Task 42-b + 42-c + 42-d）。
 //!
-//! 验收门（plan §5a 42-b/42-c 行 + i1-incision-migration-design §4 S1/S2
-//! / §5 门 A 基础组 + 扩展组）：
+//! 验收门（plan §5a 42-b/42-c/42-d 行 + i1-incision-migration-design
+//! §4 S1/S2/S3 + §5 三层门）：
 //! - **结构 parity（门 A）**：自举 Compiler（compiler.krf，VM 上运行）
 //!   与种子 Compiler（kerf-compiler/compile.rs，Rust）在同一 CoreExpr
 //!   输入上——`BcProgram::bytecode_equal` 全结构一致（INC5：含
@@ -15,25 +15,36 @@
 //! - **行为面**：自举编译段产物经 VM 执行 = 生产管线（自举前端 + 种子
 //!   编译段）运行结果——编译段可执行性的端到端证明（42-c 扩展：糖
 //!   + module 语义）；
-//! - **确定性纪律**（§7/B8）：同输入两次自举编译字节一致；42-b 边界
-//!   = parity 影子路径（生产未切换——CompilerKind 切换点属 42-d；
-//!   module/require 两臂 42-c 已迁——边界不对称消除，正例 parity
-//!   全綠）。
+//! - **门 B 自举一致性（42-d / §21.3 条件 2）**：自举链两次编译自身
+//!   字节一致（B₁/B₂ 逐程序 bytecode_equal + SHA-256 摘要）——I1
+//!   生产切换后的自举终局判据（隔离纪律：关缓存 + fresh 状态，
+//!   i1-design §7.4）；加强判据（非硬门）：B₀ 种子链 vs B₁ 自举链
+//!   全链 parity 在编译器自身源上的终验（反汇编按名 + 宏自由件全
+//!   结构）；
+//! - **确定性纪律**（§7/B8）：同输入两次自举编译字节一致。
 //!
 //! 遵循条款：§9.4.3（正负例成对）、§7.1（集成验证 ≥3）、§2.3-11
 //! （先实测禁臆测——全部断言经双实现实跑比对）、§21.3（门 A 为
-//! 条件 2 的段级前置判据）。
+//! 条件 2 的段级前置判据；门 B 为条件 2 的终验）。
 
 use std::rc::Rc;
 
-use kerf_compiler::compile_module as seed_compile;
+use kerf_compiler::{compile_module as seed_compile, BcProgram};
 use kerf_core::CoreExpr;
 use kerf_driver::bootstrap::read_source as bootstrap_read;
+use kerf_driver::bootstrap::{install_state as install_reader, reset_state as reset_reader};
 use kerf_driver::bootstrap_compiler::compile_module as bootstrap_compile;
+use kerf_driver::bootstrap_compiler::{
+    install_state as install_compiler, reset_state as reset_compiler,
+};
 use kerf_driver::bootstrap_expander::expand_program as bootstrap_expand;
+use kerf_driver::bootstrap_expander::{
+    install_state as install_expander, reset_state as reset_expander,
+};
 use kerf_driver::builtins::register_globals;
 use kerf_driver::capability::IoGrant;
 use kerf_driver::run_source;
+use kerf_driver::{compile_source, compile_source_seed, set_cache_enabled, sha256_hex};
 use kerf_expander::{expand_program as seed_expand, ExpandCtxt};
 use kerf_runtime::Heap;
 use kerf_syntax::SymbolTable;
@@ -521,5 +532,174 @@ fn behavior_module_42c() {
            (define (make-adder n) (lambda (x) (+ x n)))
            (define add5 (make-adder 5))
            (let ((r (add5 37))) r))",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// 门 B：自举一致性（§21.3 条件 2 终验——I1 收口 42-d / i1-design §5）
+// ---------------------------------------------------------------------------
+
+/// 确定性程序摘要（SHA-256 输入——`BcProgram` Debug 结构序：全字段
+/// Vec/Option/原语，无哈希迭代序输入 → `format!("{:?}")` 逐字节确定，
+/// §7.2 确定性纪律的可哈希口径）。
+fn program_digest(program: &BcProgram) -> String {
+    sha256_hex(format!("{:?}", program).as_bytes())
+}
+
+/// 按名解析（魔法符号口径——镜像 driver.rs `resolve_symbol`：main/匿名
+/// lambda 原型名不 intern，渲染为固定名；其余经表取名）。
+fn resolve_sym(s: kerf_syntax::Symbol, table: &SymbolTable) -> String {
+    match s.0 {
+        x if x == u32::MAX - 1 => "<main>".to_string(),
+        x if x == u32::MAX - 2 => "<lambda>".to_string(),
+        _ => table.name(s).to_string(),
+    }
+}
+
+/// 门 B：自举链两次编译自身字节一致（I1 终局判据）。
+///
+/// 链语义（i1-design §5 门 B）：B₁ = 生产链（自举读+展+编——首次状态
+/// 惰性种子加载）编译自举三件 + preamble；B₂ = **以 B₁ 产物为新自举
+/// 状态**（三件 install_state——「产物编译自身」的字面语义）再编译
+/// 同源。判据：
+/// - **硬门**：`bytecode_equal(B₁[i], B₂[i])` 逐程序成立（四程序：
+///   reader/expander/compiler/preamble——INC5 全结构含 debug_spans）
+///   + SHA-256 摘要一致（§21.3 条件 2 的终验口径）；
+/// - **加强判据（非硬门）**：B₀（种子链产物）vs B₁——反汇编文本按名
+///   一致（两链符号表独立 intern——名字是唯一稳定口径，§7.3；span
+///   位置参与、E1 边界 expansion_id 不参与）+ 宏自由件（compiler/
+///   preamble）全结构 bytecode_equal（无宏源两链 intern 序一致 →
+///   Symbol 值对齐——实测裁定入档）。
+///
+/// 隔离纪律（§7.4）：关缓存（B₂ 若缓存命中会返回 B₁ 条目——假阳性
+/// 防线）+ fresh 状态起步（三件 reset——惰性种子重载起步）。
+#[test]
+fn gate_b_fixpoint_two_self_compiles_byte_identical() {
+    let sources: [(&str, &str); 4] = [
+        (
+            include_str!("../../../../crates/kerf-driver/src/bootstrap/reader.krf"),
+            "reader.krf",
+        ),
+        (
+            include_str!("../../../../crates/kerf-driver/src/bootstrap/expander.krf"),
+            "expander.krf",
+        ),
+        (
+            include_str!("../../../../crates/kerf-driver/src/bootstrap/compiler.krf"),
+            "compiler.krf",
+        ),
+        (
+            include_str!("../../../../crates/kerf-driver/src/bootstrap/preamble.krf"),
+            "preamble.krf",
+        ),
+    ];
+    let names = ["reader", "expander", "compiler", "preamble"];
+    set_cache_enabled(false);
+    reset_reader();
+    reset_expander();
+    reset_compiler();
+
+    // B₀（种子链——Rust 三段对照基准）+ B₁（生产链——自举三段）
+    let b0: Vec<_> = sources
+        .iter()
+        .map(|(s, n)| compile_source_seed(s, n).expect("种子链（B₀）编译失败"))
+        .collect();
+    let b1: Vec<_> = sources
+        .iter()
+        .map(|(s, n)| compile_source(s, n).expect("自举链（B₁）编译失败"))
+        .collect();
+
+    // B₂：以 B₁ 产物为新自举状态（三段接管——「产物编译自身」），再编译同源
+    install_reader(
+        b1[0].program.clone(),
+        b1[0].table.clone(),
+        b1[0].source_map.clone(),
+    )
+    .expect("B₁ Reader 状态安装失败");
+    install_expander(
+        b1[1].program.clone(),
+        b1[1].table.clone(),
+        b1[1].source_map.clone(),
+    )
+    .expect("B₁ Expander 状态安装失败");
+    install_compiler(
+        b1[2].program.clone(),
+        b1[2].table.clone(),
+        b1[2].source_map.clone(),
+    )
+    .expect("B₁ Compiler 状态安装失败");
+    let b2: Vec<_> = sources
+        .iter()
+        .map(|(s, n)| compile_source(s, n).expect("自举链（B₂）编译失败"))
+        .collect();
+
+    // 硬门判据 1：逐程序 bytecode_equal（全结构——含 debug_spans）
+    for (i, name) in names.iter().enumerate() {
+        assert!(
+            b1[i].program.bytecode_equal(&b2[i].program),
+            "门 B 失败：{} 的 B₁/B₂ 字节不一致\n== B₁ ==\n{}\n== B₂ ==\n{}",
+            name,
+            kerf_compiler::disassemble_program(&b1[i].program, &|s| resolve_sym(s, &b1[i].table)),
+            kerf_compiler::disassemble_program(&b2[i].program, &|s| resolve_sym(s, &b2[i].table)),
+        );
+        // 硬门判据 2：SHA-256 摘要一致（§21.3 条件 2 终验口径）
+        assert_eq!(
+            program_digest(&b1[i].program),
+            program_digest(&b2[i].program),
+            "门 B 失败：{} 的 B₁/B₂ SHA-256 摘要不一致",
+            name
+        );
+    }
+
+    // 加强判据（非硬门——实测入档）：B₀ vs B₁ 全链 parity（编译器自身
+    // 源上的终验）——反汇编文本按名比较（E1 边界：expansion_id 不
+    // 参与判据——种子展开器恒 0、自举链宏产物 ≥1，宏承载件差异为
+    // 已知边界；span 位置与结构序参与）
+    for (i, name) in names.iter().enumerate() {
+        let t0 =
+            kerf_compiler::disassemble_program(&b0[i].program, &|s| resolve_sym(s, &b0[i].table));
+        let t1 =
+            kerf_compiler::disassemble_program(&b1[i].program, &|s| resolve_sym(s, &b1[i].table));
+        assert_eq!(
+            t0, t1,
+            "加强判据失败：{} 的 B₀/B₁ 反汇编文本（按名）不一致——种子-自举全链 parity 回归",
+            name
+        );
+    }
+    // 跨链符号值口径（42-d 实测裁定——GATE 1 诚实入档）：宏自由件
+    // （compiler.krf）B₀/B₁ 全结构 bytecode_equal **实测不成立**——
+    // 两链符号表各自 intern，序不保证一致（按名反汇编已证结构 + 名
+    // + span 位置全等；差异仅 Symbol 数值——i1-design §7.3 预判
+    // 「名字是唯一稳定口径」的实证）。全结构判据在同链（B₁/B₂）下
+    // 成立（上方硬门）；跨链终验口径 = 按名反汇编（上方加强判据）。
+}
+
+/// 门 B 附加面：B₁ 产物可执行性（install 后的自举链不止字节一致——
+/// B₁ 字节码作为自举实现实际运转，读+展+编三段全经 B₁ 产物执行；
+/// 行为级证明：以 B₁ 状态编译的程序在 VM 上运行结果 = 种子链结果）。
+#[test]
+fn gate_b_b1_programs_execute_as_bootstrap_chain() {
+    let src = "(define (sq x) (* x x)) (sq 7)";
+    set_cache_enabled(false);
+    reset_reader();
+    reset_expander();
+    reset_compiler();
+    // 参照：种子链执行结果
+    let expected = kerf_driver::run_source_seed(src, "b1exec.krf").expect("种子链执行失败");
+    // B₁ 产物安装（compiler.krf 经生产链编译 → 作为 Compiler 状态）
+    let b1 = compile_source(
+        include_str!("../../../../crates/kerf-driver/src/bootstrap/compiler.krf"),
+        "compiler.krf",
+    )
+    .expect("自举链（B₁）compiler.krf 编译失败");
+    install_compiler(b1.program.clone(), b1.table.clone(), b1.source_map.clone())
+        .expect("B₁ Compiler 状态安装失败");
+    // 生产链编译（此时编译段 = B₁ 产物在 VM 上运行）+ VM 执行
+    let actual = run_source(src, "b1exec.krf").expect("B₁ 编译段执行失败");
+    assert!(
+        actual.value.eq_value(&expected.value),
+        "B₁ 编译段产物执行结果不一致：{:?} vs {:?}",
+        kerf_vm::render_value(&actual.value, &actual.heap),
+        kerf_vm::render_value(&expected.value, &expected.heap)
     );
 }

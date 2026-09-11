@@ -7,7 +7,7 @@
 use crate::common;
 
 use kerf_core::CodeValue;
-use kerf_driver::{compile_source, eval_source, run_source, Stage};
+use kerf_driver::{compile_source, run_source, run_source_seed, Stage};
 
 /// 全管线快照：编译 → 执行 → 渲染。
 #[test]
@@ -97,11 +97,15 @@ fn diagnostics_render_per_stage() {
     assert!(e3.rendered.contains("d3.krf"));
 }
 
-/// eval 路径可用（参考语义路径完整）。
+/// 种子链参考路径可用（T1 新口径 42-d——eval 退役：生产链对拍 oracle
+/// 面完整；种子链与生产链同果）。
 #[test]
-fn eval_path_complete() {
-    let o = eval_source("(let ((x 3)) (* x x))", "e.krf").unwrap();
+fn seed_reference_path_complete() {
+    let o = run_source_seed("(let ((x 3)) (* x x))", "e.krf").unwrap();
     assert!(matches!(o.value, kerf_vm::Value::Int(9)));
+    // 与生产链同果（双路径互查）
+    let p = run_source("(let ((x 3)) (* x x))", "e.krf").unwrap();
+    assert!(p.value.eq_value(&o.value));
 }
 
 /// 内置函数全集合（§9 stdlib：核心零内置，driver 注入）。

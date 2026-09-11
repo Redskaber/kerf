@@ -447,18 +447,15 @@ fn frame_limit_deep_recursion_vm_path() {
     expect_run_err(src, "调用帧超过上限 100000（失控递归）");
 }
 
-/// 深递归 eval 路径结构化深度上限（D3 修复）：eval 参考路径在
-/// MAX_EVAL_DEPTH=4096 报结构化错误（修复前 Rust 栈溢出 abort）。
+/// 深尾递归生产路径（42-d 口径重写——TD-017 终验：eval 参考路径
+/// 退役，其 256 深度上限域随路径注销；生产 VM 路径经 TCO 帧复用
+/// 无深度上限——105_000 层尾递归正确终止）。
 #[test]
-fn deep_recursion_eval_path_structured_error() {
-    let src = "(define (c n) (if (= n 0) 0 (c (- n 1)))) (c 105001)";
-    let ev = kerf_driver::eval_source(src, "neg.krf").unwrap_err();
-    assert!(
-        ev.rendered.contains("求值深度超过上限 256"),
-        "eval 路径应报结构化深度上限：\n{}",
-        ev.rendered
-    );
-    // 边界正例：安全深度内 eval 与 VM 一致（fib(10)）
+fn deep_tail_recursion_production_path_tco() {
+    let src = "(define (c n) (if (= n 0) 0 (c (- n 1)))) (c 105000)";
+    let o = kerf_driver::run_source(src, "neg.krf").expect("生产路径应经 TCO 成功");
+    assert!(matches!(o.value, kerf_vm::Value::Int(0)));
+    // 双路径一致正例（种子链同果——fib(10)）
     assert!(common::dual_path_agrees(
         "(define (f n) (if (< n 2) n (+ (f (- n 1)) (f (- n 2))))) (f 10)"
     ));
@@ -469,8 +466,8 @@ fn deep_recursion_eval_path_structured_error() {
 fn mod_i64_min_structured_error() {
     expect_run_err("(mod -9223372036854775808 -1)", "整数取模溢出");
     expect_run_err("(/ -9223372036854775808 -1)", "整数除法溢出");
-    // eval 路径共享内置（两路径同报）
-    let ev = kerf_driver::eval_source("(mod -9223372036854775808 -1)", "neg.krf").unwrap_err();
+    // 种子链共享内置（两路径同报——T1 新口径 42-d）
+    let ev = kerf_driver::run_source_seed("(mod -9223372036854775808 -1)", "neg.krf").unwrap_err();
     assert!(ev.rendered.contains("整数取模溢出"));
 }
 

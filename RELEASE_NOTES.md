@@ -1,3 +1,30 @@
+## v0.4.0-r23（2026-09-11）——批次 I 执行：I1 收口（生产切换 + 门 B fixpoint 两次编译自身字节一致 + eval 退役终态，670 全绿）
+
+### 交付一：CompilerKind 生产切换（42-d 主体，S3 段——P1/P2）
+
+- **`CompilerKind::{Bootstrap,Seed}` 分派**（driver.rs——镜像 `ExpanderKind` 先例）：分派位 `front_from_core` 第 4 步——生产（`compile_front`）= 自举 Compiler（compiler.krf 在 VM 上运行），种子（`compile_front_seed`）= Rust Compiler（bootstrap 加载引导 + parity oracle）；**bootstrap init 恒种子路径**（P1 硬约定——无递归）；`check_source_recover` 恢复路径同生产口径
+- **守护测试 `production_compiler_is_bootstrap`**（P2——独立线程活性探针双信号：生产编译后 is_loaded 翻转 + 种子路径不加载自举 Compiler（引导恒种子的实测面））
+- 三自举模块新增 **`install_state`/`reset_state` 钩子**（门 B fixpoint 的 B₂ 轮「以 B₁ 为新 bootstrap 程序」语义——状态构造提取为共享 `build_state` 单一实现）
+
+### 交付二：门 B fixpoint——两次编译自身字节一致（§21.3 条件 2 终验）
+
+- **`gate_b_fixpoint_two_self_compiles_byte_identical`**：B₁ = 生产链（自举读+展+编）编译自举三件 + preamble；B₂ = 以 B₁ 产物为新自举状态（三件 install）再编译同源；**硬门判据全过**：B₁[i]/B₂[i] 四程序 `bytecode_equal` 全结构一致（含 debug_spans）+ **SHA-256 摘要一致**（`BcProgram` Debug 结构序确定序列化——`sha256_hex` 自研 hash.rs 零新依赖）；隔离纪律 §7.4（关缓存 + fresh 状态——缓存命中假阳性防线）
+- **加强判据（非硬门）实测两裁定（GATE 1 诚实入档）**：① B₀（种子链）vs B₁（自举链）**按名反汇编全等**（四程序——结构 + 名 + span 位置；E1 边界 expansion_id 不参与）；② 宏自由件（compiler.krf）**跨链全结构 bytecode_equal 实测不成立**——两链符号表各自 intern 序不保证一致（差异仅 Symbol 数值——i1-design §7.3「名字是唯一稳定口径」预判的实证；全结构判据在同链 B₁/B₂ 下成立）
+- **`gate_b_b1_programs_execute_as_bootstrap_chain`**（行为面）：B₁ 字节码作为自举 Compiler 实际运转——install 后编译的程序 VM 执行 = 种子链结果（「产物编译自身」不止字节一致，可执行性同证）
+
+### 交付三：eval 退役终态裁定（P5/INC7）+ 缓存键分桶（B11/P4）
+
+- **eval_source 从生产路径退役**：CLI `eval` 子命令移除（退役提示 + 指向 run）；driver pub API 移除（`eval_source`/`resolve_eval_hygiene_fallbacks`/`collect_global_refs` 删除）；kerf-vm eval.rs **存档为 Rust 参考实现**（scope_set_tests 语义 oracle 消费面保留——12 §2.5 行 299 终态回写）
+- **T1 双路径互查新口径**：`run_source`（生产链）vs **`run_source_seed`**（种子链公共参考入口——新增 pub API）+ `compile_source_seed`（fixpoint B₀ 基准）；T1 测试面全量迁移（stage0/1 十文件 + common + 双审计集——eval 侧断言迁移为种子链对拍/编译 parity 断言，§9.4.3 断言迁移非删除）
+- **TD-017/TD-009 联动注销**（INC7 清单）：TD-017 resolved（256 深度上限域随 eval 退役注销——深尾递归生产路径经 TCO 无上限，`deep_tail_recursion_production_path_tco` 重写口径）；TD-009 resolved（eval GC 根集域随路径注销——生产 run 路径根集完整）
+- **缓存键 CompilerKind 分桶**（B11）：`cache_key(source, filename, kind)`——维度入 config_fingerprint 构成层（CacheKey 冻结字段结构不动）；种子路径不经缓存（不查不存——`pipeline_seed_path_cache_isolated` 集成实测）+ 键区分 + 跨桶隔离双测试
+
+### 交付四：对账与收尾（44-z）
+
+- 文档同步六面：plan.md Status（I1 收口交付 r23）+ i1-design v1.3（S3 执行注记——跨链符号值实测裁定 + 门 B 首跑全过 + 缓存分桶实测）+ matrix v0.1.0-r23（665→670；单元 202→205 + 集成 463→465；表体 driver 单元 58→67 实测修正（r12 时代陈旧数）+ bootstrap_compiler_tests 27→29）+ pipeline v0.4.0-r23 + TD 登记（TD-017/TD-009 resolved）+ 12-roadmap §2.5 行 299 终态回写 + 本 RELEASE_NOTES
+- **§3.2 六命令全绿**（clean 起步终验）：build --release 12.84s 零告警 / check 0 errors 0 warnings / fmt 零 diff / clippy --all-targets -D warnings 0 / **test --release --workspace 670:0:0**（665 基线零回归 + 净 5：单元 +3（守护 + 缓存 ×2）+ 集成 +2（fixpoint ×2）；23.9s）；CLI 冒烟（VM fib 75025/144 + macros `(2 1)`⇒42 + io 门控端到端 + check ok 38 指令 + native fib exit 144（print-free PoC 边界先例口径）+ E0006 负例 fail-closed + **eval 退役提示 exit 2**）+ 双审计集 EXIT 0
+- r23 tar.gz 打包（§19.4 命令）+ 包内自举验证 + web 同步（kerf-data r23）+ git 入账
+
 ## v0.4.0-r22（2026-09-11）——批次 I 执行：I1 中段糖/module/require 面全迁移（门 A 扩展组全臂 parity，665 全绿）
 
 ### 交付一：compiler.krf module/require 两臂迁移（42-c 主体，S2 段）

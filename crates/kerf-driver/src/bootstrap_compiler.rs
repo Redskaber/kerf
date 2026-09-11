@@ -1,4 +1,4 @@
-//! 自举 Compiler（I1 前段：compile 段 kerf 化——42-b parity 影子路径）。
+//! 自举 Compiler（I1 编译段 kerf 化——三件套第三实例）。
 //!
 //! 架构（07-bootstrap §3.2 混合期构成；r6/r14 三件套第三实例——
 //! i1-incision-migration-design §2 INC1）：
@@ -11,18 +11,20 @@
 //! - **种子（kerf-compiler）**：自举引导（compiler.krf 的编译）+ parity
 //!   测试的 oracle（自举种子经典角色——两实现互为印证）。
 //!
-//! **42-b 边界（显式登记，不静默——§2.3-4）**：本模块是 parity 影子
-//! 路径——生产管线（`compile_front`）仍走 Rust `compile_module`
-//! （CompilerKind 切换属 42-d，i1-incision-design §6 P1）；module/
-//! require 两臂属 42-c（compiler.krf 显式边界错误）。parity 判据 =
-//! `BcProgram::bytecode_equal`（INC5——全结构含 debug_spans）。
+//! **I1 生产切换（42-d）已生效**：生产管线（`compile_front`）编译段经
+//! 本模块分派（`CompilerKind::Bootstrap`——i1-design §6 P1）；42-b/c
+//! 的「parity 影子路径」边界已闭合（门 A 全臂 parity 全绿后切换——
+//! GATE 2/P3 前置满足）。自举一致性（两次编译自身字节一致）由门 B
+//! fixpoint 测试守护（bootstrap_compiler_tests——§21.3 条件 2）。
 //!
 //! 堆契约：Compiler 程序的持久堆承载全局状态（CC-* 编译上下文——
 //! 入口复位纪律使其不含跨调用影响输出的状态）与各次调用中间产物——
 //! GC 以（栈+帧+全局）为根集，跨调用回收安全；输入节点树在持久堆上
 //! 构造（一次性，调用后可回收）。
 //!
-//! 并发契约：thread_local 状态（Rc 值非 Sync）——每线程惰性编译加载一次。
+//! 并发契约：thread_local 状态（Rc 值非 Sync）——每线程惰性编译加载
+//! 一次；门 B fixpoint 的 B₂ 轮经 [`install_state`] 替换状态（隔离
+//! 运行纪律 §7.4）。
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -73,8 +75,10 @@ thread_local! {
 /// 自举编译入口：`Vec<Rc<CoreExpr>>` → `BcProgram`（与
 /// `kerf_compiler::compile_module` 同形——parity oracle 对照面）。
 ///
-/// **42-b 边界**：parity 影子路径（生产未切换——`compile_front` 仍走
-/// 种子 `compile_module`；切换点设计见 i1-incision-design §6 P1）。
+/// **I1 生产切换（42-d）**：生产管线（`compile_front`）编译段经本入口
+/// 分派（`CompilerKind::Bootstrap`——切换点设计 i1-design §6 P1；种子
+/// 路径恒 Rust `kerf_compiler::compile_module`——bootstrap 加载与
+/// parity oracle）。
 pub fn compile_module(
     exprs: &[Rc<CoreExpr>],
     file_id: FileId,
@@ -125,23 +129,60 @@ fn load_compiler() -> Result<BootstrapCompilerState, CompileError> {
                 e.rendered
             ))
         })?;
-    let mut table = front.table;
+    build_state(front.program, front.table, front.source_map)
+}
+
+/// 由前段产物构建 Compiler 状态（种子加载与 [`install_state`] 共享——
+/// 单一状态构造实现：注册内置 + 卫生回退 + 顶层执行 + 入口 intern）。
+fn build_state(
+    program: BcProgram,
+    mut table: SymbolTable,
+    source_map: SourceMap,
+) -> Result<BootstrapCompilerState, CompileError> {
     // compiler.krf 无 I/O 引用（纯数据变换）——空授权（R9 fail-closed）
     let mut globals = register_globals(&mut table, &crate::capability::IoGrant::none());
-    let program = front.program;
     crate::builtins::resolve_hygiene_fallbacks(&program, &mut table, &mut globals);
     let mut heap = Heap::new();
     let outcome = run_program(&program, &mut globals, &mut heap)
-        .map_err(|e| vm_error_to_compile(&e, &front.source_map))?;
+        .map_err(|e| vm_error_to_compile(&e, &source_map))?;
     let _ = outcome; // 主原型仅执行顶层定义（值无意义）
     let entry_sym = table.intern(ENTRY_NAME);
     Ok(BootstrapCompilerState {
         program,
         globals,
         entry_sym,
-        source_map: front.source_map,
+        source_map,
         heap,
     })
+}
+
+/// 安装给定产物为当前线程的 Compiler 状态（门 B fixpoint——B₂ 轮的
+/// 「以 B₁ 为新 bootstrap 程序」语义：自举链产物替换种子加载状态后
+/// 再编译同源，判据 B₁/B₂ 字节一致；i1-design §5 门 B + §7.4）。
+///
+/// 产物须为 compiler.krf 源编译所得（入口 `lexc-compile-program`
+/// 存在性由状态构造实测——非 compiler.krf 产物在此报结构化错误）。
+pub fn install_state(
+    program: BcProgram,
+    table: SymbolTable,
+    source_map: SourceMap,
+) -> Result<(), CompileError> {
+    let state = build_state(program, table, source_map)?;
+    BOOTSTRAP_CMP.with(|cell| *cell.borrow_mut() = Some(state));
+    Ok(())
+}
+
+/// 卸载当前线程 Compiler 状态（fixpoint 隔离运行——i1-design §7.4
+/// 「fresh 状态」最保守形态；后续调用触发惰性种子重载）。
+pub fn reset_state() {
+    BOOTSTRAP_CMP.with(|cell| *cell.borrow_mut() = None);
+}
+
+/// 自举 Compiler 状态活性探针（I1 生产切换守护：生产编译路径是否
+/// 确实经 VM Compiler——镜像 `bootstrap_expander::is_loaded`）。
+#[cfg(test)]
+pub(crate) fn is_loaded() -> bool {
+    BOOTSTRAP_CMP.with(|cell| cell.borrow().is_some())
 }
 
 /// 调用 Compiler 入口（宿主信任层程序化调用——§11 与 run_program 同级）。

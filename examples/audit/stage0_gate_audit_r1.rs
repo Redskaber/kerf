@@ -32,7 +32,7 @@
 
 use std::process::Command;
 
-use kerf_driver::{dump_stx, dump_tokens, eval_source, run_source, run_source_rendered, Stage};
+use kerf_driver::{dump_stx, dump_tokens, run_source, run_source_rendered, run_source_seed, Stage};
 use kerf_expander::phase::ModuleRegistry;
 use kerf_span::DiagnosticCode;
 use kerf_syntax::SymbolTable;
@@ -711,13 +711,14 @@ fn run_negative(c: &Case, stage: Stage, msg: &str, want_trace: bool) -> CaseResu
     if !err.rendered.contains(FNAME) {
         return fail(format!("渲染输出缺文件名 {}（位置摘录缺失）", FNAME));
     }
-    // eval 双路径：同 Err（而非挂起/静默成功）且消息子串一致
-    match eval_source(c.src, FNAME) {
-        Ok(_) => return fail("期望 Err，eval 路径返回 Ok（双路径分裂）".to_string()),
+    // 种子链双路径（T1 新口径 42-d：eval 退役——种子链为对拍 oracle）：
+    // 同 Err（而非挂起/静默成功）且消息子串一致
+    match run_source_seed(c.src, FNAME) {
+        Ok(_) => return fail("期望 Err，种子链返回 Ok（双路径分裂）".to_string()),
         Err(e2) => {
             if !e2.rendered.contains(msg) {
                 return fail(format!(
-                    "eval 消息不含「{}」：{}",
+                    "种子链消息不含「{}」：{}",
                     msg,
                     first_line(&e2.rendered)
                 ));
@@ -744,9 +745,10 @@ fn run_negative(c: &Case, stage: Stage, msg: &str, want_trace: bool) -> CaseResu
     pass(format!("{} | 双路径 Err", base))
 }
 
-/// 正向 case 执行器（OkInt）：双路径值一致。
+/// 正向 case 执行器（OkInt）：双路径值一致（生产链 vs 种子链——T1
+/// 新口径 42-d：eval 退役，种子链替代 oracle）。
 fn run_positive_int(c: &Case, n: i64) -> CaseResult {
-    let (o, o2) = match (run_source(c.src, FNAME), eval_source(c.src, FNAME)) {
+    let (o, o2) = match (run_source(c.src, FNAME), run_source_seed(c.src, FNAME)) {
         (Ok(a), Ok(b)) => (a, b),
         (Err(e), _) | (_, Err(e)) => {
             return fail(format!("正向程序意外失败：{}", first_line(&e.rendered)))
@@ -754,10 +756,10 @@ fn run_positive_int(c: &Case, n: i64) -> CaseResult {
     };
     match (&o.value, &o2.value) {
         (Value::Int(a), Value::Int(b)) if *a == n && *b == n => {
-            pass(format!("VM⇒{} eval⇒{}（双路径一致）", a, b))
+            pass(format!("生产⇒{} 种子⇒{}（双路径一致）", a, b))
         }
         _ => fail(format!(
-            "值不匹配：期望 {}，VM⇒{} eval⇒{}",
+            "值不匹配：期望 {}，生产⇒{} 种子⇒{}",
             n,
             render_value(&o.value, &o.heap),
             render_value(&o2.value, &o2.heap)
@@ -843,34 +845,41 @@ fn probe_circular_module_dep() -> CaseResult {
 }
 
 // ---------------------------------------------------------------------------
-// ⑧ 双路径分裂探针（C08）——eval 路径缺卫生回退解析
+// ⑧ 双路径分裂探针（C08）——宏全局引用双路径同解（T1 新口径 42-d）
 // ---------------------------------------------------------------------------
 
-/// C08：宏展开产物引用全局 +：VM 路径经 resolve_hygiene_fallbacks 回退后
-/// Ok(42)；eval 路径无回退 → Err「未绑定变量」（§21.8 双路径互查反例）。
+/// C08：宏展开产物引用全局 +：生产链（自举三段 + VM）经
+/// resolve_hygiene_fallbacks 回退后 Ok(42)；种子链（Rust 三段 + VM，
+/// 42-d eval 退役后的对拍 oracle）同样接线 ⇒ 双路径一致 42。
 fn probe_macro_global_dual_path() -> CaseResult {
     let src = "(define-syntax inc! (syntax-rules () ((inc! v) (set! v (+ v 1))))) (define x 41) (inc! x) x";
-    // VM 路径（生产路径）：卫生回退生效，正向锚点
+    // 生产链（自举三段 + VM——卫生回退生效，正向锚点）
     match run_source(src, FNAME) {
         Ok(o) if matches!(o.value, Value::Int(42)) => {}
-        Ok(o) => return fail(format!("VM 值不匹配：{}", render_value(&o.value, &o.heap))),
-        Err(e) => return fail(format!("VM 路径意外失败：{}", first_line(&e.rendered))),
+        Ok(o) => {
+            return fail(format!(
+                "生产链值不匹配：{}",
+                render_value(&o.value, &o.heap)
+            ))
+        }
+        Err(e) => return fail(format!("生产链意外失败：{}", first_line(&e.rendered))),
     }
-    // eval 路径（参考路径）：当前行为 = 未绑定错误
-    match eval_source(src, FNAME) {
+    // 种子链（Rust 三段 + VM——参考 oracle；原 eval 路径分裂已于驱动
+    // 层修复，42-d 口径迁移后对拍面保留）
+    match run_source_seed(src, FNAME) {
         Err(e) if e.rendered.contains("未绑定") => xfail(
-            "VM⇒42 / eval⇒Err[未绑定变量]（双路径分裂）".to_string(),
-            "当前行为：eval_source 未调用 resolve_hygiene_fallbacks（driver.rs 仅 run_source 接线，宏展开产物中的全局引用 +$hyg$N 在 eval 路径未绑定报错）；期望行为：双路径一致 Ok 42（§21.8 双路径互查 / T1）；vm_tests.dual_execution_paths_cross_validate 程序集不含『宏+全局引用』用例，此分裂未被既有测试覆盖——TODO 修复后本 case 自动升级为 PASS".to_string(),
+            "生产⇒42 / 种子⇒Err[未绑定变量]（双路径分裂）".to_string(),
+            "当前行为：种子链宏展开产物中的全局引用 +$hyg$N 未绑定报错（种子链卫生回退未接线）；期望行为：双路径一致 Ok 42（§21.8 双路径互查 / T1 新口径——42-d eval 退役后对拍面）——TODO 修复后本 case 自动升级为 PASS".to_string(),
         ),
         Ok(o) if matches!(o.value, Value::Int(42)) => {
-            pass("VM⇒42 eval⇒42（双路径一致）".to_string())
+            pass("生产⇒42 种子⇒42（双路径一致）".to_string())
         }
         Ok(o) => fail(format!(
-            "eval 路径 Ok 但值非 42：{}",
+            "种子链 Ok 但值非 42：{}",
             render_value(&o.value, &o.heap)
         )),
         Err(e) => fail(format!(
-            "eval 路径 Err 但非未绑定类：{}",
+            "种子链 Err 但非未绑定类：{}",
             first_line(&e.rendered)
         )),
     }
@@ -904,9 +913,13 @@ fn probe_error_then_correct() -> CaseResult {
     }
 }
 
-/// D02：除零在 VM 与 eval 双路径均 Err，随后双路径续跑正确。
+/// D02：除零在生产与种子双路径均 Err，随后双路径续跑正确（T1 新
+/// 口径 42-d——eval 退役，种子链对拍）。
 fn probe_dual_path_error_then_ok() -> CaseResult {
-    match (run_source("(/ 1 0)", FNAME), eval_source("(/ 1 0)", FNAME)) {
+    match (
+        run_source("(/ 1 0)", FNAME),
+        run_source_seed("(/ 1 0)", FNAME),
+    ) {
         (Err(e1), Err(e2))
             if e1.rendered.contains("整数除零") && e2.rendered.contains("整数除零") => {}
         (Ok(_), _) | (_, Ok(_)) => {
@@ -914,7 +927,7 @@ fn probe_dual_path_error_then_ok() -> CaseResult {
         }
         (Err(e1), Err(e2)) => {
             return fail(format!(
-                "(/ 1 0)：消息不匹配：VM「{}」eval「{}」",
+                "(/ 1 0)：消息不匹配：生产「{}」种子「{}」",
                 first_line(&e1.rendered),
                 first_line(&e2.rendered)
             ))
@@ -922,7 +935,7 @@ fn probe_dual_path_error_then_ok() -> CaseResult {
     }
     match (
         run_source("(+ 40 2)", FNAME),
-        eval_source("(+ 40 2)", FNAME),
+        run_source_seed("(+ 40 2)", FNAME),
     ) {
         (Ok(a), Ok(b))
             if matches!(a.value, Value::Int(42)) && matches!(b.value, Value::Int(42)) =>

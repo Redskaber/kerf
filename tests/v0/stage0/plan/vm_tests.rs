@@ -154,8 +154,9 @@ fn duplicate_define_errors_dual_path() {
     let src = "(define x 1) (define x 2)";
     let err = common::run(src).unwrap_err();
     assert!(err.contains("重复定义变量"), "VM 路径应报 E6：{}", err);
-    let ev = kerf_driver::eval_source(src, "test.krf").err().unwrap();
-    assert!(ev.to_string().contains("重复定义变量"), "eval 路径应报 E6");
+    // 种子链（参考路径——T1 新口径 42-d）
+    let ev = kerf_driver::run_source_seed(src, "test.krf").err().unwrap();
+    assert!(ev.to_string().contains("重复定义变量"), "种子链应报 E6");
     assert!(dual_path_agrees(src)); // 错误消息形态一致（渲染层对账）
 }
 
@@ -197,12 +198,12 @@ fn app_evaluation_order_fn_first_dual_path() {
         vm_err.diagnostic.primary_span.start,
         vm_err.rendered
     );
-    // eval 路径（参考路径）
-    let ev_err = kerf_driver::eval_source(src, "test.krf").expect_err("eval 路径应报错");
+    // 种子链（参考路径——T1 新口径 42-d：eval 退役，种子链为对拍 oracle）
+    let ev_err = kerf_driver::run_source_seed(src, "test.krf").expect_err("种子链应报错");
     assert!(
         ev_err.diagnostic.primary_span.start >= fn_pos
             && ev_err.diagnostic.primary_span.start < arg_pos,
-        "eval 路径应报 fn 位置的未绑定（实际 span.start={}）：{}",
+        "种子链应报 fn 位置的未绑定（实际 span.start={}）：{}",
         ev_err.diagnostic.primary_span.start,
         ev_err.rendered
     );
