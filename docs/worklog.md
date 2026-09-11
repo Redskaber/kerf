@@ -2247,3 +2247,82 @@ Stage Summary:
 - 下一步（批次 E 续）：Expander kerf 重写（E1——Rust 实现保留为
   parity oracle）+ TD-021 hof 用户面注入（随模块系统设计）→ Stage 1
   门审查（§7.3 + §21.3 四条验收）
+
+---
+Task ID: 33-a
+Agent: Super Z (main) — ARCH-A/PM-A 定调 + DEV-A 实施（L3 多角色会话，批次 E 续）
+Task: MUV 33-a：E1-α 自举 Expander——expander.krf（核心形式 + 九糖 + 提升 + 作用域注入 + quote）+ bootstrap_expander.rs 值桥 + parity 19 测试（影子路径）
+
+Work Log:
+- 启动协议轻量复验（同会话续轮）：磁盘 = r13 终态、未压实区间零、无
+  冲突；E1 为 32-b 登记的下一步；7 项声明（L3：expander.krf ~910 行
+  + 桥 ~500 + 测试 ~500，跨 driver/expander 语义边界）
+- 设计（r6 自举 Reader 先例同型三件套 + oracle 逐字镜像策略）：
+  - 节点格式 (tag s e scopes ...)——作用域集 int 列表随节点携带
+    （物理复制语义镜像：构造节点 ∅ 起步，与 r13 注入语义一致）
+  - ctx 不线程化——镜像 Rust 节点级注入/retag（糖产物 use-site 替换
+    语义；提升路径构造 ∅ 无 retag）
+  - 糖引入名 loop$hyg$1 常量（HygieneCtx 每实例化计数重置的镜像）
+  - E1-α 边界：define-syntax 显式报错（宏 E1-β）；expansion_id 不
+    参与 parity 判据（r6 同口径）
+- 实施：expander.krf（9 核心形式 + 九糖 + 内部 define 提升含切分
+  期名/值校验错误短路序 + fresh-scope 深注入 + trampoline + retag +
+  quote datum 转换——$hyg$ 剥离经字符表模式匹配绕开 num 算术索引的
+  保守类型检查边界；node-field 经 drop-k cdr 步进同因）；种子管线
+  编译 208 原型 / 4685 指令（迄今最大 kerf 程序）
+- 桥：bootstrap_expander.rs——Stx→VM datum 节点→VM core 节点→
+  CoreExpr（作用域集排序去重重建；共享 bootstrap.rs 走查辅助 pub(crate)
+  化——§2.3-10 单一定义）；IoGrant::none() pub 化（接口最小放宽）
+- 实测驱动的缺陷修复（§2.3-11 先实测禁臆测——全部经 parity 实跑
+  发现）：①let 形式括号缺失（body 被吞入绑定组）②'true/'false/'nil
+  是字面量非符号——tag 比较恒假（改 string->symbol 铸造 + 字符串
+  比较）③desugar-letrec 的 s/e 先用后绑 ④module-header import/export
+  名单误取首名（car r → r）⑤点对语料移除（reader 不支持）⑥类型
+  检查 num 联合边界两处重写（上）
+- parity 19 测试 + runner.rs 注册：结构（原语+Span+作用域集+
+  param_scopes 递归）/错误（消息+Span 逐字——含提升短消息口径）/
+  边界（define-syntax）/行为面（产物经 compile+VM 与种子全管线同果）
+- 文档同步：matrix 509→528 对账 + plan.md 批次 E 行 + bootstrap-
+  expander.md 测试计划 + RELEASE_NOTES r14 节 + 07-bootstrap 进度标记
+
+Stage Summary:
+- E1-α 交付闭环：设计→自举程序（208 原型）→桥→parity 19 全过
+  （528:0:0 零回归）→文档五处同步；「语言能表达自身前端」的自举
+  命题在 Expander 核心子集上成立（行为面端到端证明）
+- 遵循：§9.4（设计-测试锚定——oracle 逐 span/逐消息镜像）、
+  §2.3-11（先实测禁臆测——六类缺陷全部 parity 实跑发现）、§2.3-10
+  （走查辅助单一定义）、§11（IoGrant 接口最小放宽）
+- 下一步：33-b 交付环（§3.2 + r14 tar.gz + web + E2E + 树压实）
+
+---
+Task ID: 33-b
+Agent: Super Z (main) — QA-A/REC-A（L3 多角色会话，交付轮；含 r14 树压实）
+Task: MUV 33-b：§3.2 全绿 + r14 tar.gz（包内自举验证）+ web 同步 + E2E + r14 树压实
+
+Work Log:
+- §3.2 六命令实跑全绿（clean 起步）：build --release 零告警 → check
+  0/0 → fmt --check 零 diff → clippy --all-targets -D warnings 0 →
+  test --release --workspace **528:0:0**（单元 183 + 集成 345——
+  509 基线零回归 + E1-α parity 19）
+- 审计集 §7.3.1 配比满足 EXIT 0；CLI 冒烟：fib 75025 + ⇒ 144 +
+  kerf test 2/2 + expander.krf 自检 ok（208 原型/4685 指令）
+- r14 tar.gz 打包（§19.4 命令整目录；根 worklog.md 排除 ✓；
+  docs/worklog/ rec 树 + 镜像入包 ✓）+ 包内自举验证（解压 →
+  528:0:0 + CLI 一致）
+- web 同步：kerf-data（ROADMAP Stage 1 批次 E 行——r14 E1-α 自举
+  Expander + 528 基线；PACKAGE_CONTENTS 528/r14）+ site-footer 版本
+  链 + download/README.md r14 节 + 动态面（stats 528 + r14 包）
+- agent-browser E2E：页面加载零错误零 console 异常；r14 新内容渲染
+  核对（footer 版本 528/批次 E）；Playground 金路径复跑
+- r14 树压实（§8.6.5）：11_r14 条目（33-a/33-b + 溯源指针）+ 层 l
+  行更新 + 根 l 未压实区间清零 + by-topic 增「自举 Expander E1-α」行
+- lint exit 0（web 工程）
+
+Stage Summary:
+- r14 交付闭环：E1-α 自举 Expander（528:0:0）→ 打包（包内自举
+  验证 + rec 树）→ web 同步 → E2E → 树压实（冷启动即见 11_r14）
+- 遵循：§3.2（六命令逐条实测）、§19（打包 + 包内验证 + README
+  归档）、§8.6.5（压实规则第三次实操）、§8.4.5（matrix 528 分项）
+- 下一步（批次 E 续）：E1-β 宏收口（syntax-rules + HygieneCtx
+  α 重命名 + 深度计数 + Span 代次 + 生产路径切换 + 基础宏定义）
+  + TD-021 hof 用户面注入（随模块系统）→ Stage 1 门审查

@@ -81,8 +81,8 @@ flowchart TD
 ├── Reader（新语言子集）       ← r6 已交付（B3）：reader.krf 全 kerf 源码，
 │                                 生产读路径切换（compile_front 经自举 Reader）；
 │                                 种子 Rust Reader 保留为引导实现 + parity oracle
-├── Expander（新语言子集）     ← 批次 E 计划（E1）
-└── 基础宏定义                 ← 批次 E 计划（随 E1）
+├── Expander（新语言子集）     ← E1-α 已交付（r14：expander.krf 核心形式+九糖 parity 影子路径；宏/生产切换 E1-β）
+└── 基础宏定义                 ← E1-β（随宏收口与模块系统，TD-021 联动）
 
 宿主语言编写的部分（原生执行）：
 ├── Stage 0 VM 的 C/Rust 实现

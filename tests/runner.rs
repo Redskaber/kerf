@@ -115,3 +115,8 @@ mod reserved_ext_tests;
 
 #[path = "v0/stage1/plan/scope_set_tests.rs"]
 mod scope_set_tests;
+
+// 批次 E（r14：E1-α 自举 Expander——核心形式 + 九糖影子路径 + parity）
+
+#[path = "v0/stage1/plan/bootstrap_expander_tests.rs"]
+mod bootstrap_expander_tests;

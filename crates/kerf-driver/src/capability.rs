@@ -152,7 +152,11 @@ impl IoGrant {
     }
 
     /// 空授权（无声明程序——I/O 内置不注册，fail-closed）。
-    pub(crate) fn none() -> Self {
+    ///
+    /// 公共构造（r14）：宿主/测试侧构造「无能力」全局环境的合法入口
+    /// （E1-α 自举 Expander 行为面测试消费；§11 接口最小放宽——仅此
+    /// 一个构造器，令牌铸造面保持 crate 私有）。
+    pub fn none() -> Self {
         IoGrant {
             read: None,
             write: None,

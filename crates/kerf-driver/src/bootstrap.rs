@@ -477,7 +477,7 @@ fn as_err_form(v: &Value, heap: &Heap, file_id: FileId) -> Option<ReadError> {
 }
 
 /// 值列表 → 字段 `Vec<Value>`（走查堆序对脊）。
-fn value_list_fields(v: &Value, heap: &Heap) -> Result<Vec<Value>, ReadError> {
+pub(crate) fn value_list_fields(v: &Value, heap: &Heap) -> Result<Vec<Value>, ReadError> {
     let mut out = Vec::new();
     let mut cur = v.clone();
     while let Value::Pair(r) = cur {
@@ -488,12 +488,12 @@ fn value_list_fields(v: &Value, heap: &Heap) -> Result<Vec<Value>, ReadError> {
     Ok(out)
 }
 
-fn as_int(v: &Value) -> Result<i64, ReadError> {
+pub(crate) fn as_int(v: &Value) -> Result<i64, ReadError> {
     v.as_int()
         .ok_or_else(|| internal(&format!("期望 int 字段，实际 {}", v.type_name())))
 }
 
-fn as_str(v: &Value) -> Result<&str, ReadError> {
+pub(crate) fn as_str(v: &Value) -> Result<&str, ReadError> {
     match v {
         Value::Str(s) => Ok(&**s),
         other => Err(internal(&format!(
@@ -503,7 +503,7 @@ fn as_str(v: &Value) -> Result<&str, ReadError> {
     }
 }
 
-fn as_symbol_name(v: &Value) -> Result<&str, ReadError> {
+pub(crate) fn as_symbol_name(v: &Value) -> Result<&str, ReadError> {
     match v {
         Value::Symbol(s) => Ok(&**s),
         other => Err(internal(&format!(
@@ -521,11 +521,11 @@ fn node_text(fields: &[Value], idx: usize) -> Result<&str, ReadError> {
         .and_then(as_str)
 }
 
-fn internal_heap_error() -> ReadError {
+pub(crate) fn internal_heap_error() -> ReadError {
     internal("堆序对读取失败")
 }
 
-fn internal(msg: &str) -> ReadError {
+pub(crate) fn internal(msg: &str) -> ReadError {
     ReadError::new(
         format!("[bootstrap] 自举 Reader 内部错误：{}", msg),
         Span::dummy(),

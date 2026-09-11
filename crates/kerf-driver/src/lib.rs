@@ -26,6 +26,7 @@
 //! 实现与 parity oracle（07-bootstrap §3.2 混合期构成）。
 
 pub mod bootstrap;
+pub mod bootstrap_expander;
 pub mod builtins;
 pub mod cache;
 pub mod capability;

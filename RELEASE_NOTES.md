@@ -469,6 +469,27 @@ Expander kerf 重写 + TD-004 scope-set 收口 + TD-021 hof 用户面注入 → 
 
 ---
 
+## v0.3.0-r14（2026-09-11）——批次 E / E1-α：自举 Expander（核心形式 + 九糖，VM 上运行，parity 19 测试）
+
+### 交付一：expander.krf——Expander 以 kerf 源码重写（07 §3.2「Expander（新语言子集）」α 阶段）
+
+- **自举程序**：`bootstrap/expander.krf`（~910 行 kerf 源码，种子管线编译为 **208 原型 / 4685 指令**——迄今最大 kerf 程序）：9 核心形式（lambda/if/set!/define/begin/module/quote/require）+ 九糖（let/letrec/let*/cond/and/or/when/unless/while）+ 内部 define 提升（含切分期名校验/值校验/错误短路序镜像）+ **TD-004 fresh-scope 深注入与作用域集携带**（r13 语义的 kerf 侧镜像）+ trampoline 糖链循环 + retag use-site 替换语义 + quote datum 转换（$hyg$ 剥离经字符表模式匹配——算术索引不经 int 参数内置）
+- **值桥**：`bootstrap_expander.rs`——Stx → VM datum 节点（tag s e scopes，作用域集 int 列表）→ VM core 节点 → CoreExpr（作用域集排序去重重建；符号经用户表 intern）；共享 bootstrap.rs 走查辅助（§2.3-10 单一定义）；种子管线加载（compile_front_seed——Rust Reader/Expander 编译 expander.krf，无递归）
+- **parity 验收**（tests/v0/stage1/plan/bootstrap_expander_tests.rs，19 测试）：结构（原语形态 + Span(start,end) + **作用域集 + param_scopes** 递归一致）+ 错误（消息 + Span 逐字一致——含提升路径短消息口径）+ 行为面（自举展开产物经 compile + VM 执行与种子全管线一致——**「语言能表达自身前端」的自举验证命题在 Expander 子集上成立**）；509 基线零回归 = **528:0:0**
+- **E1-α 边界**（显式报错不静默，§2.3 原则 4）：define-syntax → 边界错误（宏属 E1-β）；糖产物 Span 展开代次不参与 parity 判据（r6 Reader 同口径）；影子路径——生产展开仍走 Rust 种子（切换随 E1-β 宏收口）
+- **接口最小放宽**：`IoGrant::none()` pub 化（宿主/测试侧构造无能力全局环境的合法入口；令牌铸造面保持 crate 私有）
+
+### 交付二：质量口径
+
+- **§3.2 六命令实跑全绿**（clean 起步）；审计集 §7.3.1 EXIT 0；CLI 冒烟 fib=75025 + test 2/2 + **expander.krf 自检 ok（208 原型/4685 指令）**
+- 文档同步：matrix 528 对账（正例 8 套件 + 负例 6 套件 + 边界 1 + 行为面 3）+ stage-1/plan.md 批次 E 行 + docs/tests/v0/stage1/plan/bootstrap-expander.md 测试计划
+
+### 下一步（批次 E 续）
+
+E1-β 宏收口（syntax-rules + HygieneCtx α 重命名 + 展开深度计数 + 宏产物 Span 代次 + **生产路径切换** + 基础宏定义）+ TD-021 hof 用户面注入（随模块系统）→ Stage 1 门审查（§7.3 + §21.3 四条验收）。
+
+---
+
 ## v0.3.0-r13（2026-09-11）——批次 E 启动：TD-004 作用域集解析收口（Racket 式 (name, scopes ⊆) 双路径 + 509 全绿）
 
 ### 交付一：TD-004 作用域集解析（P2 清偿——E1 Expander kerf 重写的前置语义基座）
