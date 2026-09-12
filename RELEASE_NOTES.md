@@ -1,3 +1,30 @@
+## v0.5.0-r38（2026-09-15）——批次 L 别名层：库表面现代化首件 / Stage 3 入场序列（59-a/59-z/59-web——用户指令「按 sop.md 继续推进 + 同步完整打包 tar.gz 并同步完整更新 web page」，758 → 788 + 27 parity 全绿）
+
+### 交付一：批次 L 本体——27 现代扁平名双注册（20 §6.4 四件实施清单全落地）
+
+- **① 注册面 57→84**：`builtins.rs` 新增 `BUILTIN_ALIASES` 静态表（27 现代名 → 旧名——20 §8 映射表实施单源）+ `register_globals` 双注册段；**别名与旧名共享同一 `Rc<BuiltinFn>` 分派体**：同行为同诊断天然 parity（20 §9.3——负例错误消息含旧名属设计口径：双名渲染逐字一致即 parity）；词法/语法零变更（27 别名全为既有词法形态的扁平符号——02 §8.1 B1-1 v0.5 面澄清）
+- **② `BUILTIN_SIGS` 双名同步（56→83）**：27 别名条目逐字复制旧名签名（同分派 → 同静态检查面——check/hm 消费方对新名同判）
+- **③ 门控表零变更实测**：I/O 六门控名（READ_GATED/WRITE_GATED）零新名——守卫锚（六名 ⊆ 注册 + 别名零交集）
+- **④ parity 测试组 27 case + 漂移守卫三方扩展**：stdlib_tests 别名组（正例双名同值 + 负例**阶段/诊断码/消息体三面比对**——开发实录：rendered 源码回显与 Span 列号随名字长度自然平移，非诊断内容差异，比对面收敛为诊断内容三面）+ 闭合守卫（静态名单 ↔ `BUILTIN_ALIASES` 双向对账：零缺零溢）+ builtins.rs 单元守卫 ×2（`builtin_aliases_closed_and_parity_typed`：27 表长/84 计数锚/双注册/双签名逐项相等/零重复零链式；`builtin_gating_names_subset_of_registered`：门控腿）
+- 27 别名清单：head/tail/nth/drop/is-nil/is-pair/is-int/is-bool/is-procedure/is-string/is-symbol/is-float/is-number/is-list/eq/string-append/string-length/string-substring/string-index-of/string-contains/string-starts-with/string-ends-with/string-to-upper/string-to-lower/string-to-symbol/symbol-to-string/assert-eq
+
+### 交付二：§3.2 六命令全绿 + 审计 + CLI + 对账
+
+- **758 → 788（净 +30）零回归**（集成 +28：stdlib_tests 27 parity + 闭合守卫 1；单元 +2：builtins 守卫 ×2——22 套件逐二进制实测）
+- 四审计集 EXIT 0 ×4 维持（stage0 41 + stage1 50 + stage2_r1 53 + stage2_r2 46 = 190）
+- CLI 四路径维持（fib ⇒ 144 / macros ⇒ 42 / effect_stress ⇒ 120 / check 负例 E0005 REAL_EXIT 1）+ **别名端到端实证**（`head/tail/string-contains/eq/nth` 经 run 路径全过 + E0006 门控 fail-closed 维持——未声明 `(require io write)` 时 `print` 仍编译期拒绝）
+- 对账面：matrix v0.1.0-r38（r38 增量行 + 总量行 788 = 217 单元 + 571 集成）/ pipeline r38（Tier 2 头 543→571）/ TD-027 进展注记（批次 L 腿 ✅——剩余批次 M + 移除轮）/ **六文档回写**：20 v1.3（§6.4 兑现 + §7 行 ✅ + §10 锚点 ✅）+ 12 v6.10（§2.10 批次 L 行 ✅）+ 23 v1.1（§2.2 窗 L 出口条件 ✅）+ 09 v6.7（§2 r38 双注册注记 + §4 状态）+ 02 v6.2（§8.1 B1-1 v0.5 面澄清）+ 07 v6.3（引导语料双注册注记）+ v0.5-roadmap v0.3.0（批次 L 行 ✅——Stage 3 入场序列首件）
+
+### 交付三：r38 tar.gz 包内自举 + web E2E + rec 树（59-z/59-web）
+
+- r38 tar.gz（§19.3 commit-then-package 正序）+ 包内自举验证（全新解包构建 + 788:0:0 复跑 + 包内四审计集 EXIT 0 ×4 + CLI 一致）
+- web 面：kerf-data r38 节点 + footer v7.8 + download README r38 节 + E2E 双端 + lint 0 + git 双仓 clean
+- rec 树：22_r38 新建（Stage 3 入场序列层）+ l 两层更新
+
+### 里程碑：批次 L ✅（窗 L 出口条件三全过）——下一步批次 M（v0.6 命名空间层，22 §8 实施对账表驱动）
+
+---
+
 ## v0.4.0-r37（2026-09-15）——批次 K 终件：K3 收尾交付 + r36 收尾中断清偿（58-c/58-a/58-z/58-web——用户指令「按 sop.md 继续推进 + 同步完整打包 tar.gz 并同步完整更新 web page」，758 维持全绿 + **批次 K 全闭环 → Stage 2 全收口**）
 
 ### 交付零：r36 收尾中断清偿（58-c——PHASE 4 纪律诚实登记）

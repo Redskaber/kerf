@@ -4700,3 +4700,38 @@ Work Log:
 Stage Summary:
 - K3 本体交付：§3.2 全绿（758:0:0 + 四审计集 190 + CLI 四路径含负例 REAL_EXIT 1）+ 对账六面 + 12 §2.5.1 终态 + v0.5-roadmap v0.2.0 收口——**批次 K 全闭环（K1 APPROVED + K2 GO + K3 本体）→ Stage 2 全收口（文档面）**；58-z 打包 + 58-web web 面随后闭环交付
 ---
+Task ID: 58-z（r37 收尾——K3 收尾交付）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r37 tar.gz 打包（§19.3 commit-then-package 正序 + §19.4 十四路径）+ 包内自举 + rec 树 21_r37/l 两层 + git（58-web 详录见 root worklog）
+
+Work Log:
+- 打包正序（§19.3）：git 主 commit 579de30（对账六面 + worklog 58-a 条目）先行 → r37 tar.gz（kerf-stage2-v0.4.0-r37-batchK-k3finalclose-758tests.tar.gz——十四路径 2.06MB/341 条目）
+- **包内自举验证**：全新解包（/tmp 临时目录）构建 13.26s + **758:0:0 复跑**（22 套件全 ok）+ 包内四审计集 EXIT 0 ×4（41+50+53+46）+ CLI 一致（fib ⇒ 144 exit 0 / macros ⇒ 42 / check ok 38 指令 / 负例 E0005 REAL_EXIT 1）+ qbe 在包（tools/qbe/bin/qbe）
+- rec 树：21_r37 新建（1:8 压缩——交付零清偿/交付一本体/交付二打包/交付三 web/里程碑语义）+ l 两层更新（02 层 21 行 + 根 l 02 行 r37 段 + 未压实区间 r37 终态 + by-topic 四新行：K3 收尾与中断清偿/Stage 2 全收口/默认期评估闭环）
+- 本条目 + root worklog 镜像 + 二次 commit
+
+Stage Summary:
+- r37 打包门达成：K3 验收合同三门全过（§3.2 全绿 ✅ + 包内自举 ✅ + E2E[58-web 承载]）；批次 K 全闭环 → **Stage 2 全收口（v0.4.0-r37 终态包）**；下一步 Stage 3 入场序列（批次 L → M → 移除轮——23 §2.2 触发表驱动）
+---
+---
+Task ID: 59-a（r38 批次 L 别名层——Stage 3 入场序列首件；窗 L 本体）
+Agent: Super Z (main) — 批次 L 实施（DEV-A/QA-A/REC-A；PHASE 1 定位声明 v2 一次通过——路由依据 23 §2.2 窗 L 入口信号三满足[K3 交付 r37 + TD-027 在位 + 20 §8 映射表冻结 r32]）
+Task: 27 现代扁平名双注册（20 §6.4 四件实施清单）+ 27 parity case + 漂移守卫三方扩展 + 六文档回写 + §3.2 六命令 + 四审计集 + CLI 四路径
+
+Work Log:
+- **会话恢复纪律（PHASE 4 + R4）**：第 12 轮续接摘要基线严重过期（声称 42-c/43-a 为下一 MUV——r22 已交付；声称待验证同步链任务——r34/r35 已交付）→ 磁盘实况复核（kerf @ e01de00 clean / 主仓 @ 1769788 clean / r37 终态包在 download/ / web 面五件齐）→ 指针修正：下一步 = Stage 3 入场序列首件批次 L（58-web 尾注 + v0.5-roadmap v0.2.0 一致）
+- **窗 L 入口信号三核对**（23 §2.2）：①K3 交付 r37 ✅（v0.5-roadmap v0.2.0 落位）②TD-027 在位 ✅（P2 实施跟踪 owner）③20 §8 映射表冻结 ✅（v1.2 终态）→ 开窗合法
+- **碰撞预检（实施前）**：27 别名名 vs 引导语料/示例全扫描——表面命中均为假阳性（`nth-or-nil`/`drop-last`/`head-name` 复合名 + `tail`/`is-float` 为 lambda 参数——词法遮蔽合法；零自由引用冲突）；未绑定负例测试零使用 27 名（grep 实证）→ 零覆写/零静默解析风险
+- **①注册面 57→84**：builtins.rs 新增 `BUILTIN_ALIASES` pub 静态表（27 现代名→旧名——20 §8 实施单源）+ `register_globals` 双注册段（`by_name` 映射 + Rc 共享分派体——同行为同诊断天然 parity 20 §9.3）；计数锚：基础 51+6（IO 门控）=57，+27 别名=84
+- **②BUILTIN_SIGS 双名同步（56→83）**：27 别名条目逐字复制旧名签名（同分派 → 同静态检查面——check/hm 消费方对新名同判；read-line 维持不列——运行时不检查元数口径不变）
+- **③门控表零变更实测**：READ_GATED/WRITE_GATED 六名零新名（20 §6.4 ③ 预判实证）；守卫锚落地（门控六名 ⊆ 注册 + 别名零交集——防未来无声引入门控别名）
+- **④parity 测试组 27 case + 闭合守卫 + 单元守卫 ×2**：stdlib_tests 别名组（parity 助手 + expect_parity_err 助手 + 27 #[test]——正例双名同值 + 负例三面比对）+ `alias_parity_group_covers_all_27`（静态名单 ↔ BUILTIN_ALIASES 双向对账零缺零溢 + 完整管线可解析 smoke——「未绑定」即失败态）+ builtins.rs `builtin_aliases_closed_and_parity_typed`（27 表长/84 计数锚/双注册/双签名逐项相等[PartialEq]/零重复/零链式别名）+ `builtin_gating_names_subset_of_registered`
+- **开发实录（parity 负路比对面收敛——R1 实测纪律）**：初版 expect_parity_err 断言 rendered 逐字一致 → 实测失败（`car 需要 pair` 消息体一致但源码回显 `(head 5)` vs `(car 5)` 与 Span 列号随名字长度平移）→ 判定：源回显/列号是**源文本的函数**（双名源文本必然不同）非诊断内容 → 比对面收敛为**阶段/诊断码/消息体**三面（DriverError.diagnostic 结构化字段——20 §9.3「同 Span 行为」读作节点定位行为同构）；另两处校准：字符串渲染裸形态（无引号——既有测试锚一致）+ `(list? 5)`→false 非错误（Floyd 谓词语义——负例改元数错）
+- **静态门三误修正**：BUILTIN_ALIASES 静态表漏分号（cargo check 捕获）+ 文档链接路径改纯文本（同文件惯例）+ fmt 折叠 27 签名条目（cargo fmt 应用后全绿）
+- **§3.2 六命令 clean 起步全绿**：cargo clean 2443 files/618.2MiB → **build --release 13.08s 零告警** → check 0/0 → fmt 0 diff → clippy --all-targets --workspace -- -D warnings 超集 0 → **test --release --workspace 788:0:0**（集成 571/27.92s + 单元 217——22 套件逐二进制实测汇总）
+- **四审计集 EXIT 0 ×4**（stage0 41 + stage1 50 + stage2_r1 53 + stage2_r2 46 = 190 维持）+ **CLI 四路径**（fib ⇒ 144 / macros ⇒ 42 / effect_stress ⇒ 120 / check 负例 E0005「+ 需要数值，实际 str（静态检查）」REAL_EXIT 1）+ **别名端到端实证**（head/tail/string-contains/eq/nth run 路径全过 + E0006 门控 fail-closed 维持——未声明 require 时 print 编译期拒绝）
+- **对账八面**：matrix v0.1.0-r38（r38 增量行 758→788 + 总量行 788=217+571 + Date/Version）+ RELEASE_NOTES r38 节（v0.5.0-r38 头部 + 交付一二三 + 里程碑）+ pipeline v0.4.0-r38（Date + Version + Tier 2 头 543→571）+ TD-027 进展注记（批次 L 腿 ✅——剩余批次 M + 移除轮）+ **六文档回写**：20 v1.3（§6.4 兑现注记[56→83]+§7 批次 L 行 ✅+§10 parity 锚点 ✅）+ 12 v6.10（§2.10 批次 L 行 ✅）+ 23 v1.1（§2.2 窗 L 出口条件 ✅）+ 09 v6.7（§2 r38 双注册注记 + §4 实施状态）+ 02 v6.2（§8.1 B1-1 v0.5 面澄清——批次 L 无新 Reader 语法，双 Reader 同核验证全量面归批次 M）+ 07 v6.3（§3.2 引导语料双注册注记）+ v0.5-roadmap v0.3.0（批次 L 行 ✅ + Date/Version/Status）+ hm-inference-design A8（56→83 计数漂移 R4 修正——内文 56 为 r29 历史口径注记）
+- 遵循：§3.2（六命令）/ §8.4.5（代码为准 R4 双向修正——A8 计数 + parity 比对面）/ §8.6（worklog 双源——59-z/59-web 镜像承载）/ 23 §2.2（窗 L 入口/出口）/ 20 §6.4/§9.3/§9.4（实施清单/parity 口径/守卫扩展）/ R1（三面比对收敛 + 校准两处）/ TD-027（批次 L 腿）
+
+Stage Summary:
+- **批次 L 本体交付**：27 现代扁平名双注册全落地（84 注册 + 83 签名 + 门控零变更实测 + 27 parity + 守卫 ×3）——**窗 L 出口条件三全过**（§3.2 788:0:0 零回归 + 27 parity 全绿[新旧名同行为同诊断] + 漂移守卫三方扩展）；零破坏（旧名存量面不动 + 引导语料继续旧名 + E0006 fail-closed 维持）；对账八面 + 六文档回写；59-z 打包 + 59-web web 面随后

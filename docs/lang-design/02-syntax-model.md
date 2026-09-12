@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-12（v6.1：K2/r36 大阶段末深审回写——§14.8 B2-3：Keyword 22 → 25 变体（r25 增 perform/handle/resume 三关键字）/ 叶级 45 → 48 种，实锚 symbol.rs:24-54；§8.1 B1-1：两语法同核验证改判（重规划至批次 L/M——20 §5 模块树，12 §2.10 表面现代化窗口承载）；2026-09-10（v6.0：新增 §8 表面语法决策与表面/内部语法分离——next3.md 第六/七轮吸收；v5.5：next2 讨论 S 表达式量化背书指针）
-> **Version**: v6.1
+> **Version**: v6.2（**r38 / 59-a 批次 L 面注记**：§8.1 B1-1 行 v0.5 面澄清——别名层无新 Reader 语法[全为既有词法形态的扁平符号]，v0.5 验证件 = 27 parity case[新旧名同行为同诊断]，双 Reader 同核验证全量面维持批次 M[v0.6 引入 `/` 限定名词法]承载；v6.1：K2/r36 深审回写）
 > **Status**: Active
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-reader + kerf-span + kerf-syntax）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：查询式增量编译按 Span 细粒度失效（Stage 2，[15-架构分层 §3.1](./15-architecture-layers.md)）、编译缓存键与 Span 失效关系（接口预留，[13-能力矩阵 §3.1.4](./13-capability-matrix.md)）
 
@@ -255,4 +255,4 @@ fn parse_if(&mut self) -> Result<Stx, ParseError> {
 | 锚点 | 验证方式 | 状态 |
 |------|---------|------|
 | 表面语法可替换性 | 设计审计：Reader trait 边界不泄漏表面语法细节到 CoreExpr（Stx→CoreExpr 单向） | ✅ r9 在位（kerf-reader → kerf-syntax → kerf-expander 单向流，[15 §1.3](./15-architecture-layers.md) 依赖规则） |
-| 两语法同核验证（原 Stage 2 前置） | Stage 2 目标语法 Reader 引入时：同一程序双 Reader 编译产物 CoreExpr 全等断言 | ⏸ **改判（K2/r36 B1-1）**：原定 Stage 2 前置未执行；重规划至表面现代化批次 L/M（[20 §5 模块树](./20-surface-conventions.md) + [12 §2.10](./12-roadmap.md)）承载——目标语法引入随 v0.5/v0.6 窗口，同核验证作为该批次验收件 |
+| 两语法同核验证（原 Stage 2 前置） | Stage 2 目标语法 Reader 引入时：同一程序双 Reader 编译产物 CoreExpr 全等断言 | ⏸ **改判（K2/r36 B1-1）**：原定 Stage 2 前置未执行；重规划至表面现代化批次 L/M（[20 §5 模块树](./20-surface-conventions.md) + [12 §2.10](./12-roadmap.md)）承载——目标语法引入随 v0.5/v0.6 窗口，同核验证作为该批次验收件。**r38 边界澄清（v6.2）**：批次 L（v0.5 别名层）**不引入新 Reader 语法**（27 别名全为既有词法形态的扁平符号——词法/语法零变更）；v0.5 窗口的验收件 = 27 parity case（新旧名同行为同诊断——stdlib_tests 别名组）；**双 Reader 同核验证全量面维持批次 M 承载**（v0.6 引入 `/` 限定名词法与模块树——届时同一程序双 Reader CoreExpr 全等断言） |

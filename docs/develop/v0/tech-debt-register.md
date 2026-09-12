@@ -460,6 +460,15 @@ lang-design 全部对账面）。推断与 TD-001/006 同型：跳号笔误而�
 - **目标阶段**：批次 L（v0.5 别名层——27 现代名双注册 + BUILTIN_SIGS/
   门控三方同步 + parity 组）；批次 M（v0.6 命名空间层）；移除轮
   （Stage 3——与 E5 关键字切换同窗）。
+- **r38 进展注记（批次 L 交付 ✅）**：① 注册面 57→84（`BUILTIN_ALIASES`
+  27 现代扁平名双注册——同名共享 `Rc<BuiltinFn>` 分派体：同行为同诊断
+  天然 parity）；② `BUILTIN_SIGS` 双名同步（56→83——守卫锚逐项相等）；
+  ③ 门控表零变更实测（READ_GATED/WRITE_GATED 六名 ⊆ 注册 + 别名零
+  交集——守卫锚）；④ parity 组 27 case + 闭合守卫 1（stdlib_tests——
+  正例双名同值 + 负例阶段/诊断码/消息体三面比对）+ 三方漂移守卫 ×2
+  （builtins.rs 单元）。**剩余**：批次 M（v0.6——22 §8 实施对账表）+
+  移除轮（Stage 3 同窗 E5）——TD 维持开放直至移除轮终态（27 旧名
+  删除时本条 resolved）。
 - **顺带修复（r32 本轮已做）**：builtins.rs 文件头注记「3 个 Reader 原语」
   → 4（实测漂移——`str-int-valid?` 第 4 件）；hm-inference-design.md A8
   「BUILTIN_SIGS 49 项」→ 56（实测漂移）。

@@ -682,3 +682,404 @@ fn type_predicates_negative_arity() {
     expect_run_err("(number? 1 2)", "number? 需要 1 个参数，实际 2");
     expect_run_err("(list? nil nil)", "list? 需要 1 个参数，实际 2");
 }
+
+// ---------------------------------------------------------------------------
+// 批次 L（v0.5 别名层，r38）——27 现代名 parity 组（20 §9.3/§10：
+// 新旧名同行为同诊断；别名与旧名共享同一分派体——正路断言双名同值，
+// 负路断言渲染逐字一致。映射单源 = 20 §8；注册单源 = builtins.rs
+// BUILTIN_ALIASES（闭合守卫 alias_parity_group_covers_all_27 对账）
+// ---------------------------------------------------------------------------
+
+/// parity 正路：新旧名同求值同渲染（expected 为双名共同期望值）。
+fn parity(new_src: &str, old_src: &str, expected: &str) {
+    assert_eq!(common::run_rendered(new_src), expected, "新名：{}", new_src);
+    assert_eq!(common::run_rendered(old_src), expected, "旧名：{}", old_src);
+}
+
+/// parity 负路：新旧名同诊断（20 §9.3「同行为同诊断」/23 §2.2 窗 L 出口
+/// 条件）。比较面 = 阶段 + 诊断码 + 消息体（共享分派体使消息含旧名——
+/// 双名逐字相同即 parity 成立）。注：rendered 的源码回显与 Span **列号**
+/// 随名字长度自然平移（双名源文本必然不同——非诊断内容差异；行号一致
+/// 由本组单行语料保证，节点定位行为同构）。
+fn expect_parity_err(new_src: &str, old_src: &str) {
+    let new_err = match run_source(new_src, "alias-neg.krf") {
+        Ok(_) => panic!("新名期望报错，实际 Ok：{}", new_src),
+        Err(e) => e,
+    };
+    let old_err = match run_source(old_src, "alias-neg.krf") {
+        Ok(_) => panic!("旧名期望报错，实际 Ok：{}", old_src),
+        Err(e) => e,
+    };
+    assert_eq!(
+        new_err.stage, old_err.stage,
+        "阶段不一致（parity 破坏）：{} vs {}",
+        new_src, old_src
+    );
+    assert_eq!(
+        new_err.diagnostic.code, old_err.diagnostic.code,
+        "诊断码不一致（parity 破坏）：{} vs {}",
+        new_src, old_src
+    );
+    assert_eq!(
+        new_err.diagnostic.message, old_err.diagnostic.message,
+        "消息体不一致（parity 破坏——应为共享分派体同消息）：\n新名 {}：{}\n旧名 {}：{}",
+        new_src, new_err.diagnostic.message, old_src, old_err.diagnostic.message
+    );
+}
+
+/// `head` ≡ `car`（R1 访问器；正例同值 + 负例同消息）。
+#[test]
+fn alias_parity_head() {
+    parity("(head '(1 2 3))", "(car '(1 2 3))", "1");
+    parity("(head (cons 'a 'b))", "(car (cons 'a 'b))", "a");
+    expect_parity_err("(head 5)", "(car 5)");
+    expect_parity_err("(head)", "(car)");
+}
+
+/// `tail` ≡ `cdr`（R1 访问器）。
+#[test]
+fn alias_parity_tail() {
+    parity("(tail '(1 2 3))", "(cdr '(1 2 3))", "(2 3)");
+    parity("(tail (cons 1 2))", "(cdr (cons 1 2))", "2");
+    expect_parity_err("(tail 'sym)", "(cdr 'sym)");
+}
+
+/// `nth` ≡ `list-ref`（R1 压缩——跨语言同名先例）。
+#[test]
+fn alias_parity_nth() {
+    parity("(nth '(a b c) 0)", "(list-ref '(a b c) 0)", "a");
+    parity("(nth '(a b c) 2)", "(list-ref '(a b c) 2)", "c");
+    expect_parity_err("(nth '(a b) 5)", "(list-ref '(a b) 5)");
+    expect_parity_err("(nth '(a b) -1)", "(list-ref '(a b) -1)");
+}
+
+/// `drop` ≡ `list-tail`（R1——跨语言同名先例）。
+#[test]
+fn alias_parity_drop() {
+    parity("(drop '(a b c d) 2)", "(list-tail '(a b c d) 2)", "(c d)");
+    parity("(drop '(a b) 0)", "(list-tail '(a b) 0)", "(a b)");
+    expect_parity_err("(drop '(a) 3)", "(list-tail '(a) 3)");
+}
+
+/// `is-nil` ≡ `null?`（R2 谓词）。
+#[test]
+fn alias_parity_is_nil() {
+    parity("(is-nil '())", "(null? '())", "true");
+    parity("(is-nil '(1))", "(null? '(1))", "false");
+    parity("(is-nil nil)", "(null? nil)", "true");
+    expect_parity_err("(is-nil)", "(null?)");
+    expect_parity_err("(is-nil nil nil)", "(null? nil nil)");
+}
+
+/// `is-pair` ≡ `pair?`（R2 谓词）。
+#[test]
+fn alias_parity_is_pair() {
+    parity("(is-pair (cons 1 2))", "(pair? (cons 1 2))", "true");
+    parity("(is-pair '())", "(pair? '())", "false");
+    expect_parity_err("(is-pair 1 2)", "(pair? 1 2)");
+}
+
+/// `is-int` ≡ `int?`（R2 谓词）。
+#[test]
+fn alias_parity_is_int() {
+    parity("(is-int 42)", "(int? 42)", "true");
+    parity("(is-int 3.5)", "(int? 3.5)", "false");
+    expect_parity_err("(is-int)", "(int?)");
+}
+
+/// `is-bool` ≡ `bool?`（R2 谓词）。
+#[test]
+fn alias_parity_is_bool() {
+    parity("(is-bool true)", "(bool? true)", "true");
+    parity("(is-bool 1)", "(bool? 1)", "false");
+    expect_parity_err("(is-bool true true)", "(bool? true true)");
+}
+
+/// `is-procedure` ≡ `procedure?`（R2 谓词——内置/闭包两形态）。
+#[test]
+fn alias_parity_is_procedure() {
+    parity("(is-procedure car)", "(procedure? car)", "true");
+    parity(
+        "(is-procedure (lambda (x) x))",
+        "(procedure? (lambda (x) x))",
+        "true",
+    );
+    parity("(is-procedure 5)", "(procedure? 5)", "false");
+    expect_parity_err("(is-procedure)", "(procedure?)");
+}
+
+/// `is-string` ≡ `string?`（R2 谓词）。
+#[test]
+fn alias_parity_is_string() {
+    parity("(is-string \"s\")", "(string? \"s\")", "true");
+    parity("(is-string 's)", "(string? 's)", "false");
+    expect_parity_err("(is-string)", "(string?)");
+}
+
+/// `is-symbol` ≡ `symbol?`（R2 谓词）。
+#[test]
+fn alias_parity_is_symbol() {
+    parity("(is-symbol 's)", "(symbol? 's)", "true");
+    parity("(is-symbol \"s\")", "(symbol? \"s\")", "false");
+    expect_parity_err("(is-symbol 'a 'b)", "(symbol? 'a 'b)");
+}
+
+/// `is-float` ≡ `float?`（R2 谓词）。
+#[test]
+fn alias_parity_is_float() {
+    parity("(is-float 3.5)", "(float? 3.5)", "true");
+    parity("(is-float 3)", "(float? 3)", "false");
+    expect_parity_err("(is-float)", "(float?)");
+}
+
+/// `is-number` ≡ `number?`（R2 谓词——数值塔域 Int∪Float）。
+#[test]
+fn alias_parity_is_number() {
+    parity("(is-number 3)", "(number? 3)", "true");
+    parity("(is-number 3.5)", "(number? 3.5)", "true");
+    parity("(is-number 'a)", "(number? 'a)", "false");
+    expect_parity_err("(is-number 1 2)", "(number? 1 2)");
+}
+
+/// `is-list` ≡ `list?`（R2 谓词——真表判定含 Floyd 环安全；非表
+/// 非序对值 → false 非错误——Floyd 语义，负例取元数错）。
+#[test]
+fn alias_parity_is_list() {
+    parity("(is-list '(1 2 3))", "(list? '(1 2 3))", "true");
+    parity("(is-list '())", "(list? '())", "true");
+    parity("(is-list (cons 1 2))", "(list? (cons 1 2))", "false");
+    parity("(is-list 5)", "(list? 5)", "false"); // 非表非序对 → false（非错误）
+    expect_parity_err("(is-list)", "(list?)"); // 元数错——共享分派体同消息
+}
+
+/// `eq` ≡ `eq?`（R3 去问号——B5 裁定保留恰 2 参）。
+#[test]
+fn alias_parity_eq() {
+    parity("(eq 1 1)", "(eq? 1 1)", "true");
+    parity("(eq 'a 'b)", "(eq? 'a 'b)", "false");
+    parity("(eq \"s\" \"s\")", "(eq? \"s\" \"s\")", "true");
+    expect_parity_err("(eq 1)", "(eq? 1)"); // 恰 2 参（B5——不可链）
+    expect_parity_err("(eq 1 2 3)", "(eq? 1 2 3)");
+}
+
+/// `string-append` ≡ `str-append`（R1 全词化）。
+#[test]
+fn alias_parity_string_append() {
+    parity(
+        "(string-append \"ab\" \"cd\")",
+        "(str-append \"ab\" \"cd\")",
+        "abcd",
+    );
+    expect_parity_err("(string-append \"a\")", "(str-append \"a\")");
+    expect_parity_err("(string-append 1 2)", "(str-append 1 2)");
+}
+
+/// `string-length` ≡ `str-length`（R1——Unicode 字符数口径）。
+#[test]
+fn alias_parity_string_length() {
+    parity("(string-length \"\")", "(str-length \"\")", "0");
+    parity("(string-length \"héllo\")", "(str-length \"héllo\")", "5");
+    expect_parity_err("(string-length 5)", "(str-length 5)");
+    expect_parity_err("(string-length 'a)", "(str-length 'a)");
+}
+
+/// `string-substring` ≡ `str-substring`（R1——字符索引边界同诊断）。
+#[test]
+fn alias_parity_string_substring() {
+    parity(
+        "(string-substring \"héllo\" 1 3)",
+        "(str-substring \"héllo\" 1 3)",
+        "él",
+    );
+    parity(
+        "(string-substring \"abc\" 0 3)",
+        "(str-substring \"abc\" 0 3)",
+        "abc",
+    );
+    expect_parity_err(
+        "(string-substring \"abc\" 0 9)",
+        "(str-substring \"abc\" 0 9)",
+    );
+    expect_parity_err(
+        "(string-substring \"abc\" 'a 'b)",
+        "(str-substring \"abc\" 'a 'b)",
+    );
+}
+
+/// `string-index-of` ≡ `str-index-of`（R1——v0.5 保持 -1 哨兵；
+/// B1 miss→nil 契约 v0.6 批次 M 生效——20 §4/§8 契约列）。
+#[test]
+fn alias_parity_string_index_of() {
+    parity(
+        "(string-index-of \"héllo wörld\" \"w\")",
+        "(str-index-of \"héllo wörld\" \"w\")",
+        "6",
+    );
+    parity(
+        "(string-index-of \"abc\" \"z\")",
+        "(str-index-of \"abc\" \"z\")",
+        "-1",
+    );
+    expect_parity_err("(string-index-of \"a\" 1)", "(str-index-of \"a\" 1)");
+}
+
+/// `string-contains` ≡ `str-contains?`（R3 动词化——去问号）。
+#[test]
+fn alias_parity_string_contains() {
+    parity(
+        "(string-contains \"abc\" \"bc\")",
+        "(str-contains? \"abc\" \"bc\")",
+        "true",
+    );
+    parity(
+        "(string-contains \"abc\" \"z\")",
+        "(str-contains? \"abc\" \"z\")",
+        "false",
+    );
+    expect_parity_err("(string-contains 1 \"a\")", "(str-contains? 1 \"a\")");
+}
+
+/// `string-starts-with` ≡ `str-prefix?`（R3——start/end 前后缀分词）。
+#[test]
+fn alias_parity_string_starts_with() {
+    parity(
+        "(string-starts-with \"abc\" \"ab\")",
+        "(str-prefix? \"abc\" \"ab\")",
+        "true",
+    );
+    parity(
+        "(string-starts-with \"abc\" \"bc\")",
+        "(str-prefix? \"abc\" \"bc\")",
+        "false",
+    );
+    expect_parity_err("(string-starts-with 1 2)", "(str-prefix? 1 2)");
+}
+
+/// `string-ends-with` ≡ `str-suffix?`（R3）。
+#[test]
+fn alias_parity_string_ends_with() {
+    parity(
+        "(string-ends-with \"abc\" \"bc\")",
+        "(str-suffix? \"abc\" \"bc\")",
+        "true",
+    );
+    parity(
+        "(string-ends-with \"abc\" \"ab\")",
+        "(str-suffix? \"abc\" \"ab\")",
+        "false",
+    );
+    expect_parity_err("(string-ends-with 1 2)", "(str-suffix? 1 2)");
+}
+
+/// `string-to-upper` ≡ `str-upcase`（R4 转换方向词）。
+#[test]
+fn alias_parity_string_to_upper() {
+    parity("(string-to-upper \"aé\")", "(str-upcase \"aé\")", "AÉ");
+    parity("(string-to-upper \"abc\")", "(str-upcase \"abc\")", "ABC");
+    expect_parity_err("(string-to-upper 5)", "(str-upcase 5)");
+}
+
+/// `string-to-lower` ≡ `str-downcase`（R4）。
+#[test]
+fn alias_parity_string_to_lower() {
+    parity("(string-to-lower \"AÉ\")", "(str-downcase \"AÉ\")", "aé");
+    expect_parity_err("(string-to-lower 'a)", "(str-downcase 'a)");
+}
+
+/// `string-to-symbol` ≡ `string->symbol`（R4——TD-002 符号值互转）。
+#[test]
+fn alias_parity_string_to_symbol() {
+    parity(
+        "(string-to-symbol \"foo\")",
+        "(string->symbol \"foo\")",
+        "foo",
+    );
+    parity(
+        "(eq (string-to-symbol \"a\") 'a)",
+        "(eq? (string->symbol \"a\") 'a)",
+        "true",
+    );
+    expect_parity_err("(string-to-symbol 5)", "(string->symbol 5)");
+}
+
+/// `symbol-to-string` ≡ `symbol->string`（R4）。
+#[test]
+fn alias_parity_symbol_to_string() {
+    parity("(symbol-to-string 'foo)", "(symbol->string 'foo)", "foo");
+    expect_parity_err("(symbol-to-string \"s\")", "(symbol->string \"s\")");
+}
+
+/// `assert-eq` ≡ `assert-eq?`（R3——断言是动词非谓词）。
+#[test]
+fn alias_parity_assert_eq() {
+    parity("(assert-eq 'a 'a)", "(assert-eq? 'a 'a)", "true");
+    parity("(assert-eq 1 1)", "(assert-eq? 1 1)", "true");
+    expect_parity_err("(assert-eq 1 2)", "(assert-eq? 1 2)"); // 断言失败同消息
+    expect_parity_err("(assert-eq 1)", "(assert-eq? 1)"); // 元数同消息
+}
+
+/// 别名闭合守卫（20 §9.4 漂移守卫扩展之二：「每别名必有 parity case
+/// ——防注册了没测、测了没注册」的双向对账）：本文件 parity 组的静态
+/// 名单（上方 27 个 #[test] 一一对应）与 driver 注册表逐名对账——
+/// 零缺（注册了没测）、零溢（测了没注册）、计数恰 27。
+#[test]
+fn alias_parity_group_covers_all_27() {
+    // parity 组静态名单（与上方 #[test] fn alias_parity_* 一一对应）
+    let tested: &[&str] = &[
+        "head",
+        "tail",
+        "nth",
+        "drop",
+        "is-nil",
+        "is-pair",
+        "is-int",
+        "is-bool",
+        "is-procedure",
+        "is-string",
+        "is-symbol",
+        "is-float",
+        "is-number",
+        "is-list",
+        "eq",
+        "string-append",
+        "string-length",
+        "string-substring",
+        "string-index-of",
+        "string-contains",
+        "string-starts-with",
+        "string-ends-with",
+        "string-to-upper",
+        "string-to-lower",
+        "string-to-symbol",
+        "symbol-to-string",
+        "assert-eq",
+    ];
+    let registered = kerf_driver::builtins::BUILTIN_ALIASES;
+    assert_eq!(registered.len(), 27, "driver 别名表应为 27 项");
+    assert_eq!(tested.len(), 27, "parity 组静态名单应为 27 项");
+    for &(alias, old) in registered {
+        assert!(
+            tested.contains(&alias),
+            "注册别名缺 parity case（注册了没测）：{}",
+            alias
+        );
+        // 实测核对（「测了没注册」的反向）：别名经完整生产管线可解析——
+        // 求值成功或域/元数错误均证明名字在册；未注册名报「未绑定」
+        let src = format!("({} 'x)", alias);
+        let out = common::run_rendered(&src);
+        assert!(
+            !out.contains("未绑定"),
+            "别名经完整管线不可解析（测了没注册）：{} → {}（旧名 {}）",
+            alias,
+            out,
+            old
+        );
+    }
+    for name in tested {
+        assert!(
+            registered.iter().any(|&(a, _)| a == *name),
+            "parity case 无注册别名（测了没注册）：{}",
+            name
+        );
+    }
+}

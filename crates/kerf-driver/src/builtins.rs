@@ -13,6 +13,11 @@
 //! 域划分架构（八域四要素/副作用汇聚——「门控表 = I/O 域全集」的根据）见
 //! docs/lang-design/21-capability-architecture.md §3；命名机制（五层 N0-N4/
 //! 解析/权限矩阵——v0.6 批次 M 实施输入）见 docs/lang-design/22-namespace-design.md）。
+//!
+//! **批次 L（v0.5 别名层，r38）**：`BUILTIN_ALIASES` 27 现代扁平名双注册
+//! （注册面 57→84——20 §6.4 ①/§8 映射表实施单源）；别名共享旧名同一
+//! 分派体（同行为同诊断——天然 parity 20 §9.3）；I/O 六门控名零新名
+//! （门控表零变更——20 §6.4 ③）。
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -870,6 +875,26 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
 
+    // ------------------------------------------------------------------
+    // 批次 L（v0.5 别名层，r38）——27 现代扁平名双注册（20 §6.4 ①：
+    // 注册面 57→84）。别名与旧名共享同一 Rc<BuiltinFn> 分派体：新旧名
+    // 同行为同诊断（同一分派即天然 parity——20 §9.3；负例错误消息含
+    // 旧名属设计口径——同诊断即逐字一致）。旧名不动（零破坏——移除
+    // 轮见 20 §7 表/12 §2.10）；开窗依据 23 §2.2 窗 L 入口信号三满足
+    // （K3 交付 r37 + TD-027 在位 + 20 §8 映射表冻结）。
+    // ------------------------------------------------------------------
+    let by_name: HashMap<&str, Rc<BuiltinFn>> =
+        defs.iter().map(|(n, f)| (*n, Rc::clone(f))).collect();
+    let mut alias_defs: Vec<(&'static str, Rc<BuiltinFn>)> = Vec::new();
+    for &(alias, old) in BUILTIN_ALIASES {
+        let f = by_name
+            .get(old)
+            .cloned() // Rc 共享分派体——别名 parity 的实现形态
+            .unwrap_or_else(|| panic!("批次 L 别名目标未注册：{} → {}", alias, old));
+        alias_defs.push((alias, f));
+    }
+    defs.extend(alias_defs);
+
     let mut globals = HashMap::new();
     for (name, f) in defs {
         let sym = table.intern(name);
@@ -877,6 +902,54 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
     }
     globals
 }
+
+/// 批次 L（v0.5 别名层，r38）双注册表：27 现代扁平名 → 旧名。
+///
+/// 单源 = docs/lang-design/20-surface-conventions.md §8（57 项映射表——
+/// `register_globals` 注册、`BUILTIN_SIGS` 双名同步、
+/// stdlib_tests parity 组三方对账锚——漂移守卫
+/// `builtin_aliases_closed_and_parity_typed` 闭合校验）。双注册 =
+/// 别名与旧名共享同一 `Rc<BuiltinFn>`（同行为同诊断——20 §9.3）；
+/// I/O 六门控名（READ_GATED/WRITE_GATED）零新名（门控表零变更——
+/// 20 §6.4 ③，守卫 `builtin_gating_names_subset_of_registered` 实测
+/// 核对）。移除轮（Stage 3——与 E5 关键字切换同窗）删除旧名列；
+/// v0.6 批次 M 在此之上叠加 `kerf/<模块>` 限定名（22-命名空间设计）。
+pub static BUILTIN_ALIASES: &[(&str, &str)] = &[
+    // 访问器（R1：历史访问器 → head/tail）
+    ("head", "car"),
+    ("tail", "cdr"),
+    // 列表（R1 压缩 / 跨语言同名先例）
+    ("nth", "list-ref"),
+    ("drop", "list-tail"),
+    // 谓词族（R2：`命名?` → `is-命名`）
+    ("is-nil", "null?"),
+    ("is-pair", "pair?"),
+    ("is-int", "int?"),
+    ("is-bool", "bool?"),
+    ("is-procedure", "procedure?"),
+    ("is-string", "string?"),
+    ("is-symbol", "symbol?"),
+    ("is-float", "float?"),
+    ("is-number", "number?"),
+    ("is-list", "list?"),
+    // eq（R3：去 `?`——B5 裁定保留恰 2 参）
+    ("eq", "eq?"),
+    // 字符串族（R1 全词化 + R3 动词化）
+    ("string-append", "str-append"),
+    ("string-length", "str-length"),
+    ("string-substring", "str-substring"),
+    ("string-index-of", "str-index-of"),
+    ("string-contains", "str-contains?"),
+    ("string-starts-with", "str-prefix?"),
+    ("string-ends-with", "str-suffix?"),
+    // 转换族（R4：`a->b` → `a-to-b`）
+    ("string-to-upper", "str-upcase"),
+    ("string-to-lower", "str-downcase"),
+    ("string-to-symbol", "string->symbol"),
+    ("symbol-to-string", "symbol->string"),
+    // 断言（R3：断言是动词非谓词）
+    ("assert-eq", "assert-eq?"),
+];
 
 /// I/O 内置的能力参数化注册（r8——13 §3.1.3 条款 4「driver 注册的
 /// 内置函数改为能力参数化形态」）。
@@ -1380,6 +1453,93 @@ static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
         "assert-eq?",
         BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
     ),
+    // ---- 批次 L（v0.5 别名层，r38）双名同步（20 §6.4 ②——逐字复制
+    // 旧名签名：别名与旧名同分派 → 同静态检查面；check/hm 消费方对新
+    // 名同判。守卫 `builtin_aliases_closed_and_parity_typed` 锚逐项相等）----
+    ("head", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
+    ("tail", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
+    (
+        "nth",
+        BuiltinSig::fixed(&[TcParam::List, TcParam::Int], TcType::Unknown),
+    ),
+    (
+        "drop",
+        BuiltinSig::fixed(&[TcParam::List, TcParam::Int], TcType::Unknown),
+    ),
+    ("is-nil", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("is-pair", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("is-int", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("is-bool", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    (
+        "is-procedure",
+        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
+    ),
+    (
+        "is-string",
+        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
+    ),
+    (
+        "is-symbol",
+        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
+    ),
+    ("is-float", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    (
+        "is-number",
+        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
+    ),
+    ("is-list", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    (
+        "eq",
+        BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
+    ),
+    (
+        "string-append",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Str),
+    ),
+    (
+        "string-length",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Int),
+    ),
+    (
+        "string-substring",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Int, TcParam::Int], TcType::Str),
+    ),
+    (
+        "string-index-of",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Int),
+    ),
+    (
+        "string-contains",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
+    ),
+    (
+        "string-starts-with",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
+    ),
+    (
+        "string-ends-with",
+        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
+    ),
+    (
+        "string-to-upper",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Str),
+    ),
+    (
+        "string-to-lower",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Str),
+    ),
+    (
+        "string-to-symbol",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Symbol),
+    ),
+    (
+        "symbol-to-string",
+        BuiltinSig::fixed(&[TcParam::Symbol], TcType::Str),
+    ),
+    (
+        "assert-eq",
+        BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
+    ),
     // read-line：运行时不检查元数（忽略多余参数）——签名表不列（不静态断言）
 ];
 
@@ -1478,6 +1638,69 @@ mod tests {
         let sigs = builtin_sigs(&mut t);
         for sym in sigs.keys() {
             assert!(g.contains_key(sym), "签名表条目未注册：{}", t.name(*sym));
+        }
+    }
+
+    /// 批次 L 别名闭合守卫（r38——20 §9.4 漂移守卫扩展之一：别名腿）。
+    /// ①表长恰 27（20 §8 映射表单源对账——防静默增删行）；②每别名：
+    /// 旧名已注册 + 别名已注册 + 双方均有静态签名 + 签名逐项相等（同
+    /// 分派 → 同静态检查面——20 §6.4 ②）；③别名表内部零重复 + 新旧
+    /// 名互异 + 别名不得是别表的旧名（链式别名会破坏 ④ 计数锚）；
+    /// ④全授权注册面恰 84（57 基础 + 27 别名——20 §6.4 ① 计数锚，
+    /// 同时拦截「别名撞基础名」的 HashMap 覆写陷阱）。
+    #[test]
+    fn builtin_aliases_closed_and_parity_typed() {
+        let mut t = SymbolTable::new();
+        let g = register_globals(&mut t, &full_grant());
+        let sigs = builtin_sigs(&mut t);
+        assert_eq!(BUILTIN_ALIASES.len(), 27, "别名表长度应为 27（20 §8）");
+        assert_eq!(g.len(), 84, "全授权注册面应为 84（57 基础 + 27 别名）");
+        let mut seen: Vec<&str> = Vec::new();
+        for &(alias, old) in BUILTIN_ALIASES {
+            assert!(!seen.contains(&alias), "别名重复：{}", alias);
+            seen.push(alias);
+            assert_ne!(alias, old, "别名不得指向自身：{}", alias);
+            assert!(
+                !BUILTIN_ALIASES.iter().any(|&(_, o)| o == alias),
+                "别名 {} 是另一别名目标（链式别名破坏 84 计数锚）",
+                alias
+            );
+            let a = t.intern(alias);
+            let o = t.intern(old);
+            assert!(g.contains_key(&a), "别名未注册：{}", alias);
+            assert!(g.contains_key(&o), "别名目标未注册：{}", old);
+            let sa = sigs
+                .get(&a)
+                .unwrap_or_else(|| panic!("别名缺签名：{}", alias));
+            let so = sigs
+                .get(&o)
+                .unwrap_or_else(|| panic!("旧名缺签名：{}", old));
+            assert_eq!(sa, so, "别名签名应与旧名一致：{} vs {}", alias, old);
+        }
+    }
+
+    /// 三方守卫之门控腿（r38——20 §9.4：注册 ⊇ 签名 ⊆ 门控之「门控 ⊆
+    /// 注册」）：R9 数据驱动表六名（READ_GATED/WRITE_GATED）全注册——
+    /// 20 §6.4 ③「I/O 族无新名，门控表零变更」的实测核对面；另锚别名
+    /// 名与门控名零交集（防未来批次无声引入门控别名而不扩门控表）。
+    #[test]
+    fn builtin_gating_names_subset_of_registered() {
+        let mut t = SymbolTable::new();
+        let g = register_globals(&mut t, &full_grant());
+        for name in crate::capability::READ_GATED
+            .iter()
+            .chain(crate::capability::WRITE_GATED.iter())
+        {
+            let sym = t.intern(name);
+            assert!(g.contains_key(&sym), "门控内置未注册：{}", name);
+        }
+        for &(alias, _) in BUILTIN_ALIASES {
+            assert!(
+                !crate::capability::READ_GATED.contains(&alias)
+                    && !crate::capability::WRITE_GATED.contains(&alias),
+                "别名 {} 进入门控面而门控表未同步（20 §6.4 ③）",
+                alias
+            );
         }
     }
 

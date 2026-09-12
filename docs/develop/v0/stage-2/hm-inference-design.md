@@ -35,7 +35,7 @@ Stage 2+）」）——本文件回答的是**怎么进、以多大步幅进**�
 | A5 | `set!` 返回被赋值的类型，**不改变绑定已有类型** | L332-335 |
 | A6 | 深度预算 `MAX_CHECK_DEPTH = 512`：超限子树保守 Unknown、零诊断（宏展开可产生超深结构——A3 展开上限 10_000） | L47 / L269-273 |
 | A7 | 诊断码 E0005（L39）；全量收集按 `(file_id, start, end)` 排序——TD-013 多错误收集的首个消费面（multi-error-recovery-design §5） | L220-227 |
-| A8 | 内置签名 BUILTIN_SIGS 56 项（r32 实测对账——v0.4 增量后口径）（kerf-driver/builtins.rs L1143 起）与 register_globals **同文件维护**（防漂移）；结果类型供上层消费（谓词 → Bool 使 R1 命中 if 条件）；check_source 经 front 管线注入（driver.rs L483-488） | builtins.rs / driver.rs |
+| A8 | 内置签名 BUILTIN_SIGS **83 项**（r38 批次 L 双名同步后口径——56 基础名 + 27 别名同签名逐字复制[守卫锚逐项相等：`builtin_aliases_closed_and_parity_typed`]；r32 曾实测对账 49→56）（kerf-driver/builtins.rs——静态表随注册表同文件维护）与 register_globals **同文件维护**（防漂移）；结果类型供上层消费（谓词 → Bool 使 R1 命中 if 条件）；check_source 经 front 管线注入（driver.rs L483-488）。注：本文 §3/§4 内文「56 项」为 r29 执行时点历史口径（scheme 重解释面向当时 56 基础名执行——别名条目为 r38 增量，逐字同签名故重解释结论对别名自动成立） | builtins.rs / driver.rs |
 
 测试面锚（typecheck_tests.rs）：examples 六件套零诊断 + 动态边界零误报
 （参数值/递归自引用/卫生符号/数值塔/内置遮蔽/set!-begin-if 混合）+ R1-R8
