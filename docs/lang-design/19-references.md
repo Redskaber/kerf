@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-10（v6.0：next3 讨论引用增补 §5（de Bruijn 1972 / Flanagan 1993 ANF / Plotkin & Pretnar 2009）；v5.5：next2 讨论引用增补 §4（Koka/MLton/Unison/CompCert/Zig comptime——该轮未回写版本号，本版一并修正）；v5.0：源自 stage0.md v5.0 拆分）
-> **Version**: v6.1（§6 next4 引用增补）
+> **Version**: v6.3（§8 r34 演进治理知识搜索引用增补（四查询实证——74-79 六条：WASI 无环境权威/组件组合安全边界/Rust proc-macro 编译期权威反面教材/Swift resilience 演进治理/ocap 布线/arxiv ocap 许可机制）；v6.2：§7 r33）
 > **Status**: Active
 
 > 本文件收录 stage0.md 附录 B（参考案例与关键数据）、附录 C（代码量估算）与附录 E（参考文献、规范与相关链接，按主题分类）。各条目的「文档引用位置」已从 stage0.md 的内部锚点改写为指向本目录对应设计文件的相对链接。术语表与术语源流考见 [18-术语文档](./18-terminology.md)。
@@ -349,3 +349,72 @@ Stage 0 合计：约 7,000-7,300 行 = 6,500 行核心实现 + 500-800 行接口
     - 文档引用位置：[13-能力矩阵 §3.3.7](./13-capability-matrix.md)、[08-后端演化 §2](./08-backend-evolution.md)
 
 （rust-analyzer——LanguageService + QuerySystem 联合实证——已于 §3.6 条目 44 收录，此处不重复。）
+
+---
+
+## 7. r33 能力架构知识搜索引用增补（v6.2 吸收——54-a 轮八查询实证）
+
+> 本轮增补对应 [21-能力架构 §6 前沿对照](./21-capability-architecture.md) 与 [22-命名空间设计 §2.2/§5](./22-namespace-design.md) 的知识搜索依据（tool-results/r33-search/ 八查询存档）。检索时点 2026-09。
+
+66. **Object-Capability Model（Wikipedia / ocaps 教程）**：https://en.wikipedia.org/wiki/Object-capability_model + https://tersesystems.github.io/ocaps/
+    - ocap 安全模型（能力 = 可转移的操作权利——「能力是 OCAP 的原语，如同对象之于 OOP」）；kerf L3 授权层与三态模型（[21 §4](./21-capability-architecture.md)）的理论出处
+    - 文档引用位置：[21 §1 三义定锚 / §4.1 授权三态](./21-capability-architecture.md)
+
+67. **Pony Reference Capabilities（官方教程）**：https://tutorial.ponylang.io/
+    - 变量级 reference capability 系统的完整实例（能力作用于**每次类型使用**而非类型整体）；kerf 不引入的对照锚（原则 26 成熟度匹配裁定——[21 §6](./21-capability-architecture.md)）
+    - 文档引用位置：[21 §6 前沿对照表首行](./21-capability-architecture.md)
+
+68. **Austral 语言规范**：https://austral-lang.org/
+    - 线性类型 + capability-based security + 强模块绑定的系统语言实例（模块系统与安全模型绑定但分层——kerf 双门分立的参照）；kerf FFI 令牌态（r30 External 线性消费）同型
+    - 文档引用位置：[21 §6 / 22 §5.1 net 行](./22-namespace-design.md)
+
+69. **Tratt, L. — Designing Sane Scoping Rules**：https://tratt.net/languages/
+    - 作用域规则设计方法论（「作用域规则是语言最深的语义承诺之一」）；kerf R-N1 解析优先序与 R-N2 遮蔽许可表的设计讨论对照
+    - 文档引用位置：[22 §3.1/§3.2](./22-namespace-design.md)
+
+70. **When Modules Are Not Just Namespaces（Programming Linguistics）**：https://pling.jondgoodwin.com/
+    - 模块（构建单元 + 语义边界）与命名空间（名字管理）的本质区分；kerf `Module` 原语持相位语义（M-L 迁移）与五层命名机制分轴设计的依据
+    - 文档引用位置：[21 §6 对照表 / 22 §2.2](./22-namespace-design.md)
+
+71. **Clojure 命名空间文档与风格指南**：https://clojure.org/guides + https://github.com/bbatsov/clojure-style-guide
+    - ns = 名字上下文 + var 容器；`project.module` 组织约定；require/refer 冲突显式报错与逃生阀——kerf 非限定 import 冲突裁定（[22 §6](./22-namespace-design.md)）与 `kerf/` 保留域（Clojure `clojure.*` 同型）的家族内现代先例
+    - 文档引用位置：[20 §2 对照表 / 22 §2.2/§6/§7](./22-namespace-design.md)
+
+72. **Ante — Why Algebraic Effects?（2025）**：https://antelang.org/
+    - 效应表达力与相互组合性的现代论述（「效应彼此组合良好」）；kerf L2 浅处理 + handler 嵌套承载组合性的对照
+    - 文档引用位置：[21 §6 效应组合性行 / §2.3 正交判据 J2 依据](./21-capability-architecture.md)
+
+73. **OCaml Stdlib 与 core library 分层（batsov, 2025）**：https://batsov.com/
+    - 语言核心（内建类型/异常声明）与 Stdlib（基本操作模块）的双层结构——kerf N1 运算符族永驻（零依赖最小骨架）与 N2 `kerf/<模块>` 树的同型分层
+    - 文档引用位置：[21 §6 库核心/Stdlib 分层行 / 22 §3.7 R-N7](./22-namespace-design.md)
+
+（Kernel 语言「一切一等」与 Racket kernel 8 形式对照已在 §3.1/§3.2 收录——[21 §5.5/§6 最小 kernel 行](./21-capability-architecture.md) 复引；langdev.se 遮蔽讨论（q1）与 matklad 模块笔记（q5）为社区讨论源，核心论点已内化于 22 §3.2/§2.2 裁定依据，不单独列条。）
+
+## 8. r34 演进治理知识搜索引用增补（v6.3 吸收——55-a 轮四查询实证）
+
+> 本轮增补对应 [21-能力架构 §4.4/§4.5 新裁定](./21-capability-architecture.md) 与 [23-演进治理 §2/§4](./23-evolution-governance.md) 的知识搜索依据（tool-results/r34-search/ 四查询存档）。检索时点 2026-09。
+
+74. **WASI Security: Capability Model（wasi.dev）**：https://wasi.dev/security.html + https://github.com/WebAssembly/WASI/blob/main/docs/Capabilities.md
+    - 「无环境权威」原则：模块/组件零起始访问，能力全部由嵌入者显式授予（link-time vs runtime 两类）；组件模型 = 组合原语（typed interface 声明）
+    - kerf 引用：[21 §4.4 授权组合闭包](./21-capability-architecture.md)（入口程序 = 嵌入者、模块 = 组件同构——传递闭包裁定）
+
+75. **WASM Component Model Security Boundaries（systemshardening.com，2026-04）**：https://www.systemshardening.com/
+    - 组件组合的安全边界分析（self-contained 模块 + typed interface 组合）；能力泄漏模式
+    - kerf 引用：[22 §5.1 矩阵组合面行](./22-namespace-design.md)（模块需求元数据 vs 授权获得的分立）
+
+76. **Rust Internals: Is executing arbitrary code at build time a good idea?（2019）+ Pre-RFC: Sandboxed, deterministic, reproducible Wasm（2023）**：https://internals.rust-lang.org/
+    - proc-macro 任意代码执行的编译期安全缺口共识（「非确定性编译期计算绝对不可接受」+ innocent-looking 宏攻击面 + build.rs 侧信道）；2026 收敛方向 = 宏沙箱化/确定性/可复现
+    - kerf 引用：[21 §4.5 编译期权威三判据](./21-capability-architecture.md)（反面教材 + 前沿方向双重实证——kerf 从设计起点站对侧）
+
+77. **Swift Library Evolution / Resilience（swift.org forums + swift.gg 汉化，2016-2020）**：https://forums.swift.org/
+    - 库演进的兼容性治理（resilience = 演进而维持二进制兼容的特征集）；标准库升级周期以年计的实证（alexgaynor《Standard Libraries and their Discontents》2025 同向）
+    - kerf 引用：[23 §2 触发判据表](./23-evolution-governance.md)（演进窗治理 + 生命周期四阶段的跨语言对照）
+
+78. **ocaps: Introducing Capabilities（tersesystems）**：https://tersesystems.github.io/ocaps/
+    - ocap 组合 = 「从单一能力开始，通过布线（wiring）构建」——显式布线非环境继承；能力组合的安全模式
+    - kerf 引用：[21 §4.4 组合判据行](./21-capability-architecture.md)（授权组合 = 显式布线的 kerf 形态）
+
+79. **Object-Capability as a Means of Permission（arxiv 2026-08）**：https://arxiv.org/
+    - ocap 作为许可机制的系统化论证（unforgeable tokens vs ambient identity——混淆代理人问题预防）
+    - kerf 引用：[21 §4.1 三态模型](./21-capability-architecture.md)（令牌态的理论基础补强）
+

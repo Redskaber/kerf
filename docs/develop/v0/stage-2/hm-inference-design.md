@@ -35,7 +35,7 @@ Stage 2+）」）——本文件回答的是**怎么进、以多大步幅进**�
 | A5 | `set!` 返回被赋值的类型，**不改变绑定已有类型** | L332-335 |
 | A6 | 深度预算 `MAX_CHECK_DEPTH = 512`：超限子树保守 Unknown、零诊断（宏展开可产生超深结构——A3 展开上限 10_000） | L47 / L269-273 |
 | A7 | 诊断码 E0005（L39）；全量收集按 `(file_id, start, end)` 排序——TD-013 多错误收集的首个消费面（multi-error-recovery-design §5） | L220-227 |
-| A8 | 内置签名 BUILTIN_SIGS 49 项（kerf-driver/builtins.rs L1143 起）与 register_globals **同文件维护**（防漂移）；结果类型供上层消费（谓词 → Bool 使 R1 命中 if 条件）；check_source 经 front 管线注入（driver.rs L483-488） | builtins.rs / driver.rs |
+| A8 | 内置签名 BUILTIN_SIGS 56 项（r32 实测对账——v0.4 增量后口径）（kerf-driver/builtins.rs L1143 起）与 register_globals **同文件维护**（防漂移）；结果类型供上层消费（谓词 → Bool 使 R1 命中 if 条件）；check_source 经 front 管线注入（driver.rs L483-488） | builtins.rs / driver.rs |
 
 测试面锚（typecheck_tests.rs）：examples 六件套零诊断 + 动态边界零误报
 （参数值/递归自引用/卫生符号/数值塔/内置遮蔽/set!-begin-if 混合）+ R1-R8
@@ -180,7 +180,7 @@ kerf 绑定语义实况：顶层/模块体 define 保留原语（06 §2 R6 两�
 | Callable{min,max} | 结构化 τ₁…τₙ→τ，元数由构造子携带 | R7 从区间检查变结构约束 |
 | （无对应——运行时 unit/closure/builtin） | closure/builtin → Arrow（lookup 二级）；**Unit 无静态面**（现状签名表无 Unit 结果者——维持，避免引入分歧行；P3 注记） | 06 §1.2 十变体与检查域的名实对照 |
 
-BUILTIN_SIGS 49 项 → scheme 重解释：TcParam::Any → α（逐调用实例化）；
+BUILTIN_SIGS 56 项 → scheme 重解释：TcParam::Any → α（逐调用实例化）；
 Num → ⊑Num 格约束；List → Pair(α,β) ∪ Nil 联合域约束（length/reverse
 接受空表——保守保留联合域而非递归 list 类型）；NumOrAllStr/Ordering
 特例约束形态保留（TD-011/016 语义对齐）。**签名表数据不动、解释层换**
@@ -257,7 +257,7 @@ OCaml→Rust 谱系佐证；**无系统的 rustc/Swift/Koka/Haskell 推断章节
 | **P0-1** | letrec/递归形状识别错漏 → 递归程序全误报（fib/fact/closures/higher_order examples 直接红——examples_all_clean 六件套回归锚） | D4 双形状特判 + PoC 门含 examples 全零诊断 |
 | **P0-2** | 保守契约重定义未显式化 → 「误报 = P1」断言语义漂移，553 套件保守性验收口径失效 | §2.3 契约变更随旗标期显式登记（断言更新 + occurs/自应用误报面文档化为接受行为；双向锚范围重锚） |
 | **P0-3** | 数值塔格合一实现错（Int~Float 处置不当）→ 数值塔合法程序误报（R2 数值塔边界锚红） | §3.5 Num 格合一文档化为偏差 + 专项矩阵（Int/Float/Num 全组合 ~ 关系 ≥9 case） |
-| **P1-1** | 49 项签名 scheme 重解释遗漏（variadic Any 实例化 / List 联合域 / NumOrAllStr 特例） | 签名表数据不动、逐项重解释 + 每内置 ≥1 正例推断断言 |
+| **P1-1** | 56 项签名 scheme 重解释遗漏（variadic Any 实例化 / List 联合域 / NumOrAllStr 特例） | 签名表数据不动、逐项重解释 + 每内置 ≥1 正例推断断言 |
 | **P1-2** | Dynamic 变量逃逸污染泛化（未绑定引用的 fresh var 被错误捕获进 scheme） | 未绑定引用固定 Dynamic 原子（不进约束集——「不约束、不泛化」二元纪律） |
 | **P1-3** | 求解失败后约束图残缺 → 多错误后续失败定位失真 | 形式级恢复复用（TD-013 §2 裁定）：每顶层形式独立约束桶，跨形式仅经全局 scheme 交互——失败形式按粒度隔离 |
 | **P2-1** | 生成期递归栈深（超预算宏展开产物） | 512 预算语义原样迁移 + typecheck.rs 深度单测两枚转锚 |
@@ -284,7 +284,7 @@ Koka 行对照互为输入）。**I1 自举迁移（编译器本体 kerf 化）�
    （Require → Dynamic——零运行时语义无类型约束，typecheck.rs L348-350
    同口径）；
 3. D2 值限制 + D4 双形状递归预置 + D3 set! join + D6 let 形状泛化；
-4. BUILTIN_SIGS 49 项 scheme 重解释；
+4. BUILTIN_SIGS 56 项 scheme 重解释；
 5. **验收程序**：`(define (fib n) (if (< n 2) n (+ (fib (- n 1))
    (fib (- n 2)))))` 与 examples 六件套**零标注零诊断，且 fib 推断为
    非Dynamic 具体箭头型**（**r18/40-e 实现注记（R4 代码为准）**：

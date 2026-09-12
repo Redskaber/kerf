@@ -1,8 +1,8 @@
 # Stage 0 最小内置库边界
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-11（**v6.3：r24 / 42-e stdlib 缺口补齐**——类型谓词 5 件（string?/symbol?/float?/number?/list?——Value 变体判别完备面 + Floyd 龟兔环安全）+ prelude foldr（foldl 对偶）+ **TD-011 解决**：字符串全序码点序参与全部比较族（静态面 R3 同步）；v6.2：批次 F 深审回写——TD-021 hofs 用户面已 r15 解决；v5.6：r8——I/O 六内置能力门控；v5.5：r7——TD-016 链式比较全操作数前置校验；v5.4：r6 B3——高阶函数四件套 kerf 源码化 + 4 自举 Reader 原语）
-> **Version**: v6.3
+> **Date**: 2026-09-12（**v6.4：r32 / 53-a 表面现代化审查轮**——新增 §4 命名规范层指针（[20-表面规范](./20-surface-conventions.md) R1-R6 + 57 项映射表——谓词 `?`→`is-`、转换 `->`→`to/from`、`car/cdr`→`head/tail`、`str-` 全词化；§2 表标注为 v0.4 遗留口径——新语料按现代名书写）；v6.3：r24 / 42-e stdlib 缺口补齐**——类型谓词 5 件（string?/symbol?/float?/number?/list?——Value 变体判别完备面 + Floyd 龟兔环安全）+ prelude foldr（foldl 对偶）+ **TD-011 解决**：字符串全序码点序参与全部比较族（静态面 R3 同步）；v6.2：批次 F 深审回写——TD-021 hofs 用户面已 r15 解决；v5.6：r8——I/O 六内置能力门控；v5.5：r7——TD-016 链式比较全操作数前置校验；v5.4：r6 B3——高阶函数四件套 kerf 源码化 + 4 自举 Reader 原语）
+> **Version**: v6.6（r34 / 55-a：§4 十一域口径 + 23-演进治理指针；v6.5：r33 扩展指针；v6.4：r32 首增）
 > **Status**: Active
 > **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；**r24 / 42-e：谓词完备面 + foldr + 字符串全序交付——I2 stdlib 缺口清单清零**；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：~~高阶函数用户面注入~~（**已解决 r15**——kerf-prelude 模块承载）、~~字符串全序比较~~（**已解决 r24**——TD-011 码点序，见 §2 表）、中缀运算符宏（Stage 2）、能力模型 I/O（Stage 2）
 
@@ -74,8 +74,14 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 > define 显式报「重复定义」。测试锚点 prelude_tests 7 case。上段「报未绑定」
 > 描述的是 r15 之前的边界，保留作历史口径。
 
-> **表面名与通道名的区分**（v5.2 澄清）：语言层用连字符命名（`read-line`/`str-append`——与 kerf 标识符规则一致）；通道层用 Rust snake_case（`read_line_stdin`/`write_line_stdout`）；谓词是 `null?`（非 `nil?`）。该清单为 Stage 0 的**最小骨架**：仅保证自举与测试所需（同 [12-路线图 §1.1](./12-roadmap.md) 里程碑验证清单的要求）；标准库的完整生长（列表操作、字符串处理、基本 I/O 的库化）是 Stage 1 → Stage 2 的阶段切换信号之一（见 [07-自举策略 §3.3](./07-bootstrap-strategy.md)）。完整清单以 `kerf-driver` 实现为准（δ 函数表）。`and`/`or`/`when`/`unless` 等是**语法糖**（[01-核心原语 §2](./01-core-forms.md) 推导表，展开期处理），不在内置函数表内。
+> **表面名与通道名的区分**（v5.2 澄清——v6.4 起由 [§4 命名规范层](#4-命名规范层v64-新增r32-表面现代化) 承载更新版，本段保留作历史锚）：语言层用连字符命名；通道层用 Rust snake_case（`read_line_stdin`/`write_line_stdout`）。`and`/`or`/`when`/`unless` 等是**语法糖**（[01-核心原语 §2](./01-core-forms.md) 推导表，展开期处理），不在内置函数表内。
 
 ## 3. 语言规范与文档流程（提取自原 §14.5）
 
 文档即代码：Scribble 风格，规范与实现使用相同语言编写。Stage 0 的规范文档即本 `lang-design/` 文档集；随语言生长，规范应迁移为用语言自身编写（Scribble 风格的"规范即程序"），使规范与实现共享同一语法对象与宏系统——这也是 [17-设计原则 §1 原则 15 文档即代码](./17-principles.md) 的落地路径。参考案例见 [19-参考文献 §3.6 工具链（Scribble）](./19-references.md)。
+
+## 4. 命名规范层与架构层（v6.4 新增——r32 表面现代化；v6.5 r33 扩展指针；v6.6 r34 十一域口径）
+
+> 本节为指针节：§2 的 57 项清单是 **v0.4 遗留命名口径的规范事实**（与 `builtins.rs` 逐名对齐——δ 函数表事实源不变）；**命名规范与迁移方向由 [20-表面规范](./20-surface-conventions.md) 独立承载**（2026 现代化：谓词 `?`→`is-` 前缀 / 转换 `->`→`to`/`from` 方向词 / `car`/`cdr`→`head`/`tail` / `str-` 前缀→全词 + v0.6 命名空间 `kerf/<模块>` 限定 + 行为契约 B1-B3 哨兵/真值多态现代化）；**能力域架构由 [21-能力架构](./21-capability-architecture.md) 承载**（r33 起八域 → **r34/v1.1 十一域四要素划分**——补算术运算符域（N1 永驻）/诊断终止域（`error`/`assert-eq?`）/横切泛函域（prelude 五件）三卡，**57 注册名 + prelude 五件每名有家**（覆盖闭合）+ 域正交依赖单向图 + 副作用汇聚规则 D3「门控表 = I/O 域全集」的架构根据）；**命名机制由 [22-命名空间设计](./22-namespace-design.md) 承载**（r33——五层命名层级/解析优先序/遮蔽许可表/权限矩阵——v0.6 批次 M 实施输入；r34/v1.1 增组合闭包与相位授权两行）；**演进治理由 [23-演进治理](./23-evolution-governance.md) 承载**（r34——演进六窗触发表 + 准入判据总表 + 生命周期节律——批次 L/M/E5 的时间治理 owner）。**纪律**（批次 L 起）：新语料（bootstrap 新增代码/examples 新件/测试新 case）一律现代名书写；存量旧名经 v0.5 别名层双注册过渡（行为 parity 锚定）、v0.6 命名空间层终态化、Stage 3 移除（与 E5 关键字切换同窗）。v5.2 版注记「谓词是 `null?`（非 `nil?`）」自此读作**遗留口径描述**（v0.4 事实）而非**命名规范**（规范 = 20 §3 R2）。
+
+**表面名与通道名的区分**（v5.2 澄清，保留——通道层不变）：通道层用 Rust snake_case（`read_line_stdin`/`write_line_stdout`）；语言层命名规范见 [20-表面规范 §3](./20-surface-conventions.md)（R1-R6）。该清单为 Stage 0 的**最小骨架**：仅保证自举与测试所需（同 [12-路线图 §1.1](./12-roadmap.md) 里程碑验证清单的要求）；标准库的完整生长（列表操作、字符串处理、基本 I/O 的库化）是 Stage 1 → Stage 2 的阶段切换信号之一（见 [07-自举策略 §3.3](./07-bootstrap-strategy.md)）；库化生长的**命名与组织规范** = [20-表面规范 §5](./20-surface-conventions.md) 模块树（`kerf/core`/`kerf/list`/`kerf/string`/`kerf/io`——能力-命名空间对齐）。完整清单以 `kerf-driver` 实现为准（δ 函数表）。`and`/`or`/`when`/`unless` 等是**语法糖**（[01-核心原语 §2](./01-core-forms.md) 推导表，展开期处理），不在内置函数表内。

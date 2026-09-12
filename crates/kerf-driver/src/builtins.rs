@@ -7,8 +7,12 @@
 //! 数值塔：Int×Int → Int（溢出检查）；任一 Float → Float。
 //! 比较：链式（(= a b c) 全相等）。
 //!
-//! 另含自举 Reader 原语（3，B3）：str->pos-chars / char-whitespace? /
-//! char-alphabetic? ——服务 reader.krf（见各注册处边界注记）。
+//! 另含自举 Reader 原语（4，B3）：str->pos-chars / char-whitespace? /
+//! char-alphabetic? / str-int-valid? ——服务 reader.krf（见各注册处边界注记；
+//! 命名属 v0.4 遗留口径——现代化方向见 docs/lang-design/20-surface-conventions.md；
+//! 域划分架构（八域四要素/副作用汇聚——「门控表 = I/O 域全集」的根据）见
+//! docs/lang-design/21-capability-architecture.md §3；命名机制（五层 N0-N4/
+//! 解析/权限矩阵——v0.6 批次 M 实施输入）见 docs/lang-design/22-namespace-design.md）。
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -735,7 +739,7 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
 
-    // —— 自举 Reader 原语（3，B3：Reader kerf 重写的运行时服务层）——
+    // —— 自举 Reader 原语（4，B3：Reader kerf 重写的运行时服务层）——
     // 边界（§8.4.6 两级语义 + §11）：词法/语法逻辑在 reader.krf（kerf 源码，
     // VM 上运行）；字符级索引与 Unicode 属性判定是运行时原语（与 Racket 的
     // string-ref/char-whitespace? 同层）——不属于语言层内置函数的语义面。

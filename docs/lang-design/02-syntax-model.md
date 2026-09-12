@@ -144,6 +144,11 @@ Reader = UTF-8 感知的词法器 + 递归下降语法器：输入字符流，�
 > 依赖收敛为 4 个运行时原语（str->pos-chars / char-whitespace? / char-alphabetic? /
 > str-int-valid?，见 [09-stdlib](./09-stdlib.md) v5.4）——字符级索引与 Unicode
 > 属性判定是与 Racket string-ref/char-whitespace? 同层的运行时服务，非语言语义面。
+> **命名规范注记（v6.1，r32）**：此四件的名称属 v0.4 遗留口径（`->`/`?` 约定）；
+> 现代化方向与终态名（`pos-chars`/`char/is-whitespace`/`char/is-alphabetic`/
+> `int-valid`——引导私有，跳过 v0.5 别名层直接终态化）见
+> [20-表面规范 §8 映射表](./20-surface-conventions.md)；批次 M 前 Reader
+> 词法零变更。
 
 **词法器骨架**：
 
