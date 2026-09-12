@@ -4658,3 +4658,45 @@ Work Log:
 Stage Summary:
 - K2 全协议面交付：§14.5 D1-D8（deep-review-round2 大阶段末版）+ §14.6 六件套 + §14.8 回写四件（03 v6.3/05 v6.3/02 v6.1/13 v6.3 + 12 宏行）+ §14.9 整理 19 处（零行为 758:0:0 复验）+ TD-028 登记 + §6.3 投票 5.5/5.5 = 100% GO + **final-assessment：Stage 3 切换 GO**（P0/P1 = 0 维持 + 强制修复项 0 + 就绪 12/12 + 投票 100%——plan §5c K2 验收合同「四项审查各 ≥1 产出文档 + P0/P1 = 0 维持」达成）
 - 下一步：K3 收尾交付（49-z——§3.2 六命令 + 对账六面 + v0.5-roadmap Stage 2 行 + tar.gz + web + git + rec 树压实；57-z/57-web 本轮随同执行）
+---
+Task ID: 57-z（r36 收尾——K2 大阶段末深审环）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r36 GATE 1 复验 + 对账四面 + r36 tar.gz 包内自举 + rec 树 20_r36/l + git（57-web 详录见 root worklog）
+
+Work Log:
+- GATE 1 复验口径（§3.2 在 57-a 基线实测 + 修复后复验承载——build 14.48s 零告警/check 0/0/fmt 0/clippy 超集 0/758:0:0 零断言修改 + 修复后 build 12.18s/fmt 0/clippy 0/758:0:0 复验）+ 四审计集 EXIT 0 ×4（stage0 41 + stage1 50 + stage2_r1 53 + stage2_r2 46）+ CLI 四路径（run fib ⇒ 75025 ⇒ 144 exit 0 / run macros ⇒ (2 1) ⇒ 42 / check ok「2 原型/9 常量/5 全局引用/38 指令」/ check 负例 E0005 REAL_EXIT 1）
+- 对账四面：RELEASE_NOTES r36 节 / matrix v0.1.0-r36（增量行 + 总量行同步债修正「三件 144→四件 190」——r35 遗留）/ pipeline-test-coverage v0.4.0-r36 / plan.md K2 执行注记（下一步 K3）
+- r36 tar.gz（§19.3 commit-then-package 正序：git f775ea3 → 十二路径 2.05MB/340 条目）+ 包内自举验证（全新解包构建 13.21s + 758:0:0 复跑 + 包内四审计集 EXIT 0 ×4 + CLI 四路径一致 + qbe 在包）
+- rec 树：20_r36 新建（1:8 压缩）+ l 两层更新 + by-topic 三新行（K2 深审环/Stage 3 切换 GO/TD-028）
+- **中断与清偿实录（PHASE 4 纪律——诚实登记）**：上会话在 rec 树写入（01:49）后、git add/commit 与本条目追加前中断（tar.gz 已在 01:46 打包）；本会话（Task 58-c，r37 K3 收尾轮随同清偿）补齐：本条目 + root worklog 57-z/57-web 镜像 + kerf 仓 rec 树 commit——依据 §8.6 worklog 双源 + R4（磁盘实况为准）
+
+Stage Summary:
+- r36 收尾闭环（含中断清偿）：K2 交付全链（六件套 + 投票 100% + Stage 3 GO）+ v0.4.0-r36 包 340 条目 + 包内自举 758 复跑 + rec 树 20_r36/l + git；批次 K 进度：K2 ✅ 收尾闭环（K3 收尾交付待启）
+---
+Task ID: 57-web（r36 web 面——中断清偿补齐）
+Agent: Super Z (main) — web 面交付（REC-A；Task 58-c 清偿承载）
+Task: r36 web 面完整同步：kerf-data r36 节点 + footer v7.6 + download README r36 节 + PACKAGE_CONTENTS r36 + E2E 双端 + lint（详录 root worklog）
+
+Work Log:
+- 上会话已完成：kerf-data.ts r36 节点（Status 行 + 57-a/57-z 两条 points 详录——主仓快照 257f569 承载）+ r36 包入 download/（stats API mtime 降序首位自动生效）
+- 上会话中断残留（本会话 Task 58-c 逐件补齐——R4 以磁盘实况为准）：①footer v7.5→v7.6（版本注释 + 状态行「批次 K 次件 K2 大阶段末深审环」+ r36 详录段 + r35 压缩段 + 文档索引行[deep-review-round2 + 六件套 + TD 登记册 28 项 + rec 树 36 条目/02 层 20 rec] + 底部 mono 行）②download/README.md r36 节（头部插入——三轮深挖/六件套/TD-028/质量口径/包内自举/中断清偿实录/下一步 K3）③PACKAGE_CONTENTS 四处 r36 口径（19 处注释级修复注记 + 190 维持 + 六件套 + rec 树 36 条目 + TD-028）
+- E2E 双端复验 + web lint + git 双仓库（见 root worklog 58-c 详录）
+
+Stage Summary:
+- r36 web 面闭环（中断清偿后）：五件面齐（kerf-data/status+points + footer v7.6 + download README + PACKAGE_CONTENTS + r36 包 stats 自动首位）；下一步 K3 收尾交付（含 r37 包 + web 面同型更新）
+---
+Task ID: 58-a（r37 批次 K 终件 / K3 收尾交付本体）
+Agent: Super Z (main) — K3 收尾（QA-A/REC-A——plan §5c 49-z 责任矩阵）
+Task: K3 收尾交付本体（用户指令「按照 sop.md 继续推进任务」——§3.2 六命令 + 四审计集 + CLI 四路径 + 对账六面 + 12 §2.5.1 终态注记 + v0.5-roadmap Stage 2 行；58-c 前置清偿已闭环 + 58-z 打包 / 58-web web 面随后）
+
+Work Log:
+- 输入条件核对：49-b K2 GO ✅（final-assessment Stage 3 切换 GO 裁定 + 投票 100%）——K3 输入满足（plan §5c 49-z 行）
+- **§3.2 六命令 clean 起步实测**（环境：cargo PATH 沙箱恢复 + RUST_MIN_STACK=16777216 维持——r29 起环境口径）：cargo clean（680 files/238.5MiB）→ build --release **13.15s 零告警** → check --workspace 0 errors 0 warnings → fmt --check 0 diff → clippy --all-targets --workspace -- -D warnings 超集 0 → **test --release --workspace 758:0:0 零断言修改**（22 套件——集成 543/26.67s + 单元 215）——零代码收尾轮（唯一代码面变更 = 无）
+- **四审计集 EXIT 0 ×4**（stage0 41 + stage1 50 + stage2_r1 53 + stage2_r2 46 = 190 case 全 APPROVED——含 EXIT 码逐件核验）
+- **CLI 四路径**：run fib ⇒ 75025 ⇒ 144 exit 0 / run macros ⇒ (2 1) ⇒ 42 exit 0 / check ok「2 原型/9 常量/5 全局引用/38 指令（缓存未中；会话命中 0/0）」exit 0 / check 负例 E0005「+ 需要数值，实际 str（静态检查）」定位 1:4 **REAL_EXIT 1**（HM 旗标期判定面维持——56-z 口径一致；开发实录：初测用 tail 管道吞 exit 码，改直跑重定向后真实码确认——R1 实测纪律）
+- **对账六面**：①matrix v0.1.0-r37（Date 行 r37 对账 + r37 增量行[零增量维持] + Version）②RELEASE_NOTES r37 节（交付零：58-c 中断清偿 + 交付一：§3.2 全链 + 交付二：对账 + 12 §2.5.1 + v0.5-roadmap + 交付三：打包/web/rec + 里程碑：Stage 2 全收口）③pipeline v0.4.0-r37（Date + Version）④plan K3 执行注记（五交付详录 + 里程碑）+ **Status 行 r32-r37 全链补齐**（r32-r34 批间三连 + r35 K1 + r36 K2 + r37 K3——批次 K 全闭环 + Stage 2 全收口；发现 r32-r36 五轮 Status 停 r31 的「Status 行滞后」同步债，本轮回写——依据 §8.4.5 规则 2）⑤**v0.5-roadmap v0.1.0 → v0.2.0**（Stage 2 行收口——批次 J ✅r28-r31 + 批间三连 ✅r32-r34 + 批次 K ✅r35-r37 三新行 + 头部 Date/Version/Status[Stage 2 ✅ 全收口——v0.4.0 终态 + Stage 3 入场序列就绪 12/12]——12 §2.10 预锚「K3 交付时直引」兑现）⑥**12-roadmap v6.9**（§2.5.1（附加）类型检查器行 K3 终态注记：默认期评估闭环——HM 旗标期维持[判定面 = hm_check_program；R1-R8 回归基线断言] + 默认期切换窗口归 23 §2.2 治理触发表 Stage 3 承载[触发式非时间驱动] + Date 头 v6.9 + Version）+ TD 登记册零事件（TD-028 维持 P3——28 项开放 P0/P1 = 0）
+- 遵循：§3.2（六命令 clean 起步）/ §7.3.1（四审计集复验口径）/ §8.4.5 规则 2（Status 滞后回写）/ §8.6（worklog 双源）/ R1（CLI exit 码实测修正）/ plan §5c 49-z 验收合同「§3.2 全绿 + 包内自举 + E2E」（第一门达成，二三门 58-z/58-web 承载）
+
+Stage Summary:
+- K3 本体交付：§3.2 全绿（758:0:0 + 四审计集 190 + CLI 四路径含负例 REAL_EXIT 1）+ 对账六面 + 12 §2.5.1 终态 + v0.5-roadmap v0.2.0 收口——**批次 K 全闭环（K1 APPROVED + K2 GO + K3 本体）→ Stage 2 全收口（文档面）**；58-z 打包 + 58-web web 面随后闭环交付
+---

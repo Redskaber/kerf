@@ -1,3 +1,34 @@
+## v0.4.0-r37（2026-09-15）——批次 K 终件：K3 收尾交付 + r36 收尾中断清偿（58-c/58-a/58-z/58-web——用户指令「按 sop.md 继续推进 + 同步完整打包 tar.gz 并同步完整更新 web page」，758 维持全绿 + **批次 K 全闭环 → Stage 2 全收口**）
+
+### 交付零：r36 收尾中断清偿（58-c——PHASE 4 纪律诚实登记）
+
+- 上会话在 r36 收尾段中断（tar.gz 已打包 01:46 + kerf-data r36 节点已写，但 rec 树 commit/57-z/57-web worklog 双源条目/footer v7.6/download README r36 节/PACKAGE_CONTENTS 未落）→ 本会话以磁盘实况为准（R4）逐件补齐：footer v7.6（五处 r36 同步）+ download README r36 节 + PACKAGE_CONTENTS 四处 r36 口径 + worklog 双源 57-z/57-web 条目补账 + kerf 仓 rec 树 commit（9dc8d28）+ E2E 双端（r36 关键词全命中 + 移动端 375 零横溢 + footer 贴底 + stats/download API + lint 0）
+
+### 交付一：§3.2 六命令 clean 起步全绿（零代码收尾轮——K3 验收合同第一门）
+
+- cargo clean（680 files/238.5MiB）→ **build --release 13.15s 零告警** → check --workspace 0 errors 0 warnings → fmt --check 0 diff → clippy --all-targets --workspace -- -D warnings 超集 0 → **test --release --workspace 758:0:0 零断言修改**（22 套件——集成 543/26.67s + 单元 215）
+- **四审计集 EXIT 0 ×4**（stage0 41 + stage1 50 + stage2_r1 53 + stage2_r2 46 = 190 case 全 APPROVED）
+- CLI 四路径：run fib ⇒ 75025 ⇒ 144 exit 0 / run macros ⇒ (2 1) ⇒ 42 exit 0 / check ok「2 原型/9 常量/5 全局引用/38 指令」exit 0 / check 负例 **E0005「+ 需要数值，实际 str（静态检查）」定位 1:4 REAL_EXIT 1**（HM 旗标期判定面维持）
+
+### 交付二：对账六面 + 12 §2.5.1 终态注记 + v0.5-roadmap Stage 2 行收口
+
+- 对账六面：matrix v0.1.0-r37（r37 增量行零增量维持）/ pipeline v0.4.0-r37 / RELEASE_NOTES 本节 / plan K3 执行注记 + Status 行（**批次 K 全闭环 + Stage 2 全收口**）/ **v0.5-roadmap v0.1.0 → v0.2.0**（Stage 2 行收口——批次 G→H→I→J→K 全链终态 + 批间插入 r19/r32-r34 + Stage 3 GO 注记 + 批次 L/M 入场序列；12 §2.10 预锚「K3 交付时直引」兑现）/ TD 登记册零事件（TD-028 维持 P3——28 项开放 P0/P1 = 0）
+- **12 §2.5.1（附加）类型检查器行 K3 终态注记**：r31「默认期评估移交批次 K 终门审」→ K3 闭环（K1 P07 九信号核对 + K2 深审 GO + K3 收尾）——**默认期评估结论**：HM 旗标期维持（判定面 = hm_check_program；R1-R8 退为回归基线断言双面检出纪律保留）；默认期切换窗口（hm-inference-design §2.3）归 23 §2.2 治理触发表 Stage 3 承载——**触发式非时间驱动**（时间治理四红线之一）
+
+### 交付三：r37 tar.gz 包内自举 + web E2E + rec 树（58-z/58-web）
+
+- r37 tar.gz（§19.3 commit-then-package 正序：git commit 先行 → §19.4 十二路径）+ 包内自举验证（全新解包构建 + 758:0:0 复跑 + 包内四审计集 EXIT 0 ×4 + CLI 一致 + qbe 在包）
+- web 面：kerf-data r37 节点（Status 行「批次 K 全闭环 → Stage 2 全收口」+ points 两条）+ footer v7.7 + download README r37 节 + E2E 双端（r37 关键词全命中 + 移动端 375 零横溢 + 控制台零错误 + stats/download API + lint 0）+ git 双仓 clean
+- rec 树：21_r37 新建（1:8 压缩）+ l 两层更新 + 未压实区间刷新至 r37 终态
+
+### 里程碑：Stage 2 全收口（v0.4.0 终态）
+
+- **批次 K 全闭环**：K1 终门审 APPROVED（stage2_gate_audit_r2 46 case + §21.3 四条件终验 + §21.5 九信号 + 投票 100% GO）→ K2 大阶段末深审环（§14.6.3 三轮深挖 + deep-review-round2 大阶段末版 + §14.6 六件套 + 投票 100% GO + **final-assessment Stage 3 切换 GO 裁定**）→ K3 收尾（§3.2 全绿 + 包内自举 + E2E）
+- **Stage 2 终态口径**：758 测试（单元 215 + 集成 543）+ 四审计集 190 case + TD 登记册 28 项（开放 P0/P1 = 0）+ lang-design 24 篇（设计栈四层 20/21/22/23）+ sop v12.4 + stage0 v6.5 + 原则 35 条
+- **下一步 Stage 3 入场序列**：批次 L（表面现代化——20-表面规范 §7 三批次迁移）→ 批次 M（命名空间——22 §8 实施对账表）→ 移除轮（与 E5 同窗）——23 §2.2 触发表驱动（触发式非时间驱动）
+
+---
+
 ## v0.4.0-r36（2026-09-15）——批次 K 次件：K2 大阶段末深审环 + §14.8 设计回写 + §14.9 系统性代码整理（57-a/57-s1/57-s2/57-z/57-web——用户指令「按 sop.md 继续推进 + 同步完整打包 tar.gz 并同步完整更新 web page」，758 维持全绿 + Stage 3 切换 GO 裁定）
 
 ### 交付一：K2 大阶段末深审环——§14.5/§14.6/§14.8/§14.9 全协议面（会话 Task 57-a——plan §5c 49-b 批次 K 次件）
