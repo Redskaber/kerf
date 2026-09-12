@@ -732,7 +732,7 @@ mod tests {
         // 模板 (do a rest ...)
         let template = Stx::list(
             vec![
-                sym_stx(t.keyword_symbol(kerf_syntax::Keyword::Begin)),
+                sym_stx(t.keyword_symbol(kerf_syntax::Keyword::Do)),
                 sym_stx(a),
                 sym_stx(rest),
                 sym_stx(ellipsis_sym(&t)),

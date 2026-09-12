@@ -21,7 +21,7 @@ use kerf_driver::compile_source;
 use kerf_expander::{expand_program, ExpandCtxt};
 use kerf_reader::read_source;
 use kerf_syntax::ScopeSet;
-use kerf_syntax::{Stx, Symbol, SymbolTable};
+use kerf_syntax::{Keyword, Stx, Symbol, SymbolTable};
 
 // ---------------------------------------------------------------------------
 // 原则 30：私有 ADT 冻结 + Span 元数据独立（01 §8.5 锚点 1）
@@ -30,25 +30,21 @@ use kerf_syntax::{Stx, Symbol, SymbolTable};
 /// 十变体穷尽 match（编译期证明变体集冻结）+ 逐变体字段形状锚定
 /// （01 §5 既有锚点的集成面补强）+ `span()`/`kind_name()` 全变体全通
 /// （元数据与命名分离——Span 独立携带，`kind_name` 仅诊断渲染）。
-#[test]
-fn core_expr_variant_set_frozen_exhaustive() {
+/// 十二变体各构造一例（共享构造面：冻结测试与五面同词根测试共用）。
+fn frozen_instances(sp: kerf_span::Span) -> Vec<CoreExpr> {
     let s0 = Symbol(0);
-    let sp = kerf_span::Span::dummy();
-
-    // 十变体各构造一例——构造本身即字段形状锚定（§3.2 冻结定义 +
-    // Require 声明变体；无任何类型/效应/能力标注字段）。
     let lit = CoreExpr::Literal {
         value: LiteralValue::Int(7),
         span: sp,
     };
-    let instances: Vec<CoreExpr> = vec![
-        CoreExpr::Lambda {
+    vec![
+        CoreExpr::Fn {
             params: vec![s0],
             param_scopes: vec![kerf_syntax::ScopeSet::new()],
             body: Rc::new(lit.clone()),
             span: sp,
         },
-        CoreExpr::App {
+        CoreExpr::Apply {
             fn_expr: Rc::new(lit.clone()),
             args: vec![],
             span: sp,
@@ -59,16 +55,16 @@ fn core_expr_variant_set_frozen_exhaustive() {
             else_branch: Rc::new(lit.clone()),
             span: sp,
         },
-        CoreExpr::VarRef {
+        CoreExpr::Var {
             name: s0,
             scopes: kerf_syntax::ScopeSet::new(),
             span: sp,
         },
         lit,
-        CoreExpr::SetBang {
+        CoreExpr::Assign {
             name: s0,
             scopes: kerf_syntax::ScopeSet::new(),
-            value: Rc::new(CoreExpr::VarRef {
+            value: Rc::new(CoreExpr::Var {
                 name: s0,
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: sp,
@@ -77,14 +73,14 @@ fn core_expr_variant_set_frozen_exhaustive() {
         },
         CoreExpr::Define {
             name: s0,
-            value: Rc::new(CoreExpr::VarRef {
+            value: Rc::new(CoreExpr::Var {
                 name: s0,
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: sp,
             }),
             span: sp,
         },
-        CoreExpr::Begin {
+        CoreExpr::Do {
             body: vec![],
             span: sp,
         },
@@ -124,21 +120,27 @@ fn core_expr_variant_set_frozen_exhaustive() {
             }),
             span: sp,
         },
-    ];
+    ]
+}
 
-    // 穷尽 match（编译期证明）：本 match 无通配臂——新增/删除/重命名变体
-    // 都会使本函数编译失败（冻结的机器证明；字段解构同时锚定字段形状，
-    // 01 §5 逐字段对照的集成面）。
+/// 十二变体穷尽 match（编译期证明变体集冻结）+ 逐变体字段形状锚定
+/// （01 §5 既有锚点的集成面补强）+ `span()`/`kind_name()` 全变体全通
+/// （元数据与命名分离——Span 独立携带，`kind_name` 仅诊断渲染）。
+#[test]
+fn core_expr_variant_set_frozen_exhaustive() {
+    let sp = kerf_span::Span::dummy();
+    let instances = frozen_instances(sp);
+
     let prove_frozen = |e: &CoreExpr| -> &'static str {
         match e {
-            CoreExpr::Lambda { .. } => "lambda",
-            CoreExpr::App { .. } => "app",
+            CoreExpr::Fn { .. } => "fn",
+            CoreExpr::Apply { .. } => "apply",
             CoreExpr::If { .. } => "if",
-            CoreExpr::VarRef { .. } => "var-ref",
+            CoreExpr::Var { .. } => "var",
             CoreExpr::Literal { .. } => "literal",
-            CoreExpr::SetBang { .. } => "set!",
+            CoreExpr::Assign { .. } => "assign",
             CoreExpr::Define { .. } => "define",
-            CoreExpr::Begin { .. } => "begin",
+            CoreExpr::Do { .. } => "do",
             CoreExpr::Module { .. } => "module",
             CoreExpr::Require { .. } => "require",
             CoreExpr::Perform { .. } => "perform",
@@ -163,6 +165,50 @@ fn core_expr_variant_set_frozen_exhaustive() {
         // 原则 30 的「Span 系统独立携带元数据」面）。
         assert_eq!(e.span(), sp);
     }
+}
+
+// ---------------------------------------------------------------------------
+// r44 / E5 S3 M-R 名面臂：五面同词根（22 §13 D34/D37——诊断面 ↔ 关键字
+// 注册面穿透断言）
+// ---------------------------------------------------------------------------
+
+/// 五面同词根穿透（22 §13 D34「一个语义一个名」的机器断言）：
+/// - 原语级关键字变体（9 名）：`kind_name` 必须是**注册关键字**且与
+///   `Keyword::as_str` 同名（诊断面 = 关键字面 = 表面 = 桥 tag = 渲染）；
+/// - 内部名变体（apply/var/literal 3 名）：`kind_name` **不得**是关键字
+///   （无表面关键字的语义——内部名独立域，不侵蚀 E0020 全域排他面）。
+#[test]
+fn s3mr_kind_name_keyword_face_penetration() {
+    let instances = frozen_instances(kerf_span::Span::dummy());
+    // 原语级关键字面（9 名）：kind_name ∈ Keyword 注册面（同名穿透）。
+    let primitive_keywords = [
+        "fn", "if", "assign", "define", "do", "module", "require", "perform", "handle",
+    ];
+    // 内部名面（3 名）：无表面关键字对应物——三面（桥/ADT/诊断）同名的
+    // 独立内部名域。
+    let internal_names = ["apply", "var", "literal"];
+    let mut seen = 0;
+    for e in &instances {
+        let n = e.kind_name();
+        if primitive_keywords.contains(&n) {
+            assert!(
+                Keyword::from_name(n).is_some(),
+                "原语级 kind_name「{}」必须是注册关键字（五面同词根）",
+                n
+            );
+            seen += 1;
+        } else if internal_names.contains(&n) {
+            assert!(
+                Keyword::from_name(n).is_none(),
+                "内部名「{}」不得占用关键字面（内部名独立域）",
+                n
+            );
+        } else {
+            panic!("未归类的 kind_name「{}」（12 名表失效）", n);
+        }
+    }
+    assert_eq!(seen, 9, "原语级关键字变体恰 9 名（9+3 = 12 名表）");
+    assert_eq!(instances.len(), 12, "12 名表计数锚");
 }
 
 // ---------------------------------------------------------------------------

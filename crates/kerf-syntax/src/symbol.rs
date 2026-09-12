@@ -22,11 +22,11 @@ impl Symbol {
 /// 核心形式与语法糖的关键字（§10.1 规则 2：Reader 归类为查表，词法层零语义）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Keyword {
-    Lambda,
+    Fn,
     If,
-    SetBang,
+    Assign,
     Define,
-    Begin,
+    Do,
     Module,
     Import,
     Export,
@@ -48,20 +48,50 @@ pub enum Keyword {
     Perform,
     /// `handle`（效应处理核心原语——浅处理，D2）。
     Handle,
-    /// `resume`（continuation 调用的表面关键字——脱糖为 `(κ v)` App，D4
+    /// `resume`（continuation 调用的表面关键字——脱糖为 `(κ v)` Apply，D4
     /// 非独立原语）。
     Resume,
 }
 
 impl Keyword {
+    /// 全部关键字（单一枚举面——22 §13 D36 枚举内一致性：变体名 =
+    /// 字面名同词根；预内部化与 roundtrip 断言共享此单源）。
+    pub const ALL: [Keyword; 25] = [
+        Keyword::Fn,
+        Keyword::If,
+        Keyword::Assign,
+        Keyword::Define,
+        Keyword::Do,
+        Keyword::Module,
+        Keyword::Import,
+        Keyword::Export,
+        Keyword::Quote,
+        Keyword::Let,
+        Keyword::LetRec,
+        Keyword::LetStar,
+        Keyword::Cond,
+        Keyword::Else,
+        Keyword::And,
+        Keyword::Or,
+        Keyword::When,
+        Keyword::While,
+        Keyword::Unless,
+        Keyword::DefineSyntax,
+        Keyword::SyntaxRules,
+        Keyword::Require,
+        Keyword::Perform,
+        Keyword::Handle,
+        Keyword::Resume,
+    ];
+
     /// 关键字源文本。
     pub fn as_str(self) -> &'static str {
         match self {
-            Keyword::Lambda => "fn",
+            Keyword::Fn => "fn",
             Keyword::If => "if",
-            Keyword::SetBang => "assign",
+            Keyword::Assign => "assign",
             Keyword::Define => "define",
-            Keyword::Begin => "do",
+            Keyword::Do => "do",
             Keyword::Module => "module",
             Keyword::Import => "import",
             Keyword::Export => "export",
@@ -88,11 +118,11 @@ impl Keyword {
     /// 查表归类（纯查表，无语义判断，§19.1 不变式 3）。
     pub fn from_name(name: &str) -> Option<Keyword> {
         Some(match name {
-            "fn" => Keyword::Lambda,
+            "fn" => Keyword::Fn,
             "if" => Keyword::If,
-            "assign" => Keyword::SetBang,
+            "assign" => Keyword::Assign,
             "define" => Keyword::Define,
-            "do" => Keyword::Begin,
+            "do" => Keyword::Do,
             "module" => Keyword::Module,
             "import" => Keyword::Import,
             "export" => Keyword::Export,
@@ -137,36 +167,9 @@ impl SymbolTable {
             map: HashMap::new(),
             keywords: HashMap::new(),
         };
-        // 预内部化全部关键字（一次且仅一次，§19.1 陷阱 2）。
-        for kw in [
-            Keyword::Lambda,
-            Keyword::If,
-            Keyword::SetBang,
-            Keyword::Define,
-            Keyword::Begin,
-            Keyword::Module,
-            Keyword::Import,
-            Keyword::Export,
-            Keyword::Quote,
-            Keyword::Let,
-            Keyword::LetRec,
-            Keyword::LetStar,
-            Keyword::Cond,
-            Keyword::Else,
-            Keyword::And,
-            Keyword::Or,
-            Keyword::When,
-            Keyword::While,
-            Keyword::Unless,
-            Keyword::DefineSyntax,
-            Keyword::SyntaxRules,
-            Keyword::Require,
-            // r25/42-f：效应三关键字（预内部化——keyword_symbol 查表
-            // 完备性随枚举同步）
-            Keyword::Perform,
-            Keyword::Handle,
-            Keyword::Resume,
-        ] {
+        // 预内部化全部关键字（一次且仅一次，§19.1 陷阱 2——单源
+        // `Keyword::ALL`，完备性随枚举同步）。
+        for kw in Keyword::ALL {
             let sym = table.intern(kw.as_str());
             table.keywords.insert(kw, sym);
         }
@@ -287,8 +290,8 @@ mod tests {
     fn keywords_prefetched() {
         let mut t = SymbolTable::new();
         let sym = t.intern("fn");
-        assert_eq!(t.keyword_symbol(Keyword::Lambda), sym);
-        assert!(t.is_keyword(sym, Keyword::Lambda));
+        assert_eq!(t.keyword_symbol(Keyword::Fn), sym);
+        assert!(t.is_keyword(sym, Keyword::Fn));
         assert!(!t.is_keyword(sym, Keyword::If));
     }
 
@@ -305,13 +308,35 @@ mod tests {
     #[test]
     fn keyword_roundtrip() {
         for kw in [
-            Keyword::Lambda,
-            Keyword::SetBang,
+            Keyword::Fn,
+            Keyword::Assign,
+            Keyword::Do,
             Keyword::DefineSyntax,
             Keyword::SyntaxRules,
         ] {
             assert_eq!(Keyword::from_name(kw.as_str()), Some(kw));
         }
         assert_eq!(Keyword::from_name("not-a-keyword"), None);
+    }
+
+    #[test]
+    fn keyword_all_roundtrip_and_distinct() {
+        // 22 §13 D36 枚举一致性：ALL 25 名全量 roundtrip（变体 ↦ 字面名
+        // ↦ 变体恒等）+ 字面名互不重叠（E0020 全域排他前提）+ ALL 与
+        // E0020 禁绑面同一计数锚（25）。
+        let mut names: Vec<&'static str> = Keyword::ALL.iter().map(|k| k.as_str()).collect();
+        let total = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(total, 25, "关键字计数锚（E0020 严格保留字 25 名）");
+        assert_eq!(names.len(), total, "关键字字面名互不重叠");
+        for kw in Keyword::ALL {
+            assert_eq!(
+                Keyword::from_name(kw.as_str()),
+                Some(kw),
+                "roundtrip（{}）",
+                kw.as_str()
+            );
+        }
     }
 }

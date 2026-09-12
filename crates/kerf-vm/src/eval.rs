@@ -244,10 +244,10 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
     let _depth = DepthGuard::enter(e.span())?;
     match e {
         CoreExpr::Literal { value, span } => eval_literal(value, heap, *span),
-        CoreExpr::VarRef { name, scopes, span } => env
+        CoreExpr::Var { name, scopes, span } => env
             .lookup(*name, scopes)
             .ok_or_else(|| EvalError::new("未绑定变量", *span)),
-        CoreExpr::Lambda {
+        CoreExpr::Fn {
             params,
             param_scopes,
             body,
@@ -258,7 +258,7 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
             body: Rc::clone(body),
             env: Rc::clone(env),
         }))),
-        CoreExpr::App {
+        CoreExpr::Apply {
             fn_expr,
             args,
             span,
@@ -289,7 +289,7 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
                 )),
             }
         }
-        CoreExpr::SetBang {
+        CoreExpr::Assign {
             name,
             scopes,
             value,
@@ -314,7 +314,7 @@ pub fn eval_expr(e: &CoreExpr, env: &Rc<Env>, heap: &mut Heap) -> Result<Value, 
                 Err(EvalError::new("重复定义变量", *span))
             }
         }
-        CoreExpr::Begin { body, span } => {
+        CoreExpr::Do { body, span } => {
             let mut last = Value::Nil;
             for item in body {
                 last = eval_expr(item, env, heap)?;

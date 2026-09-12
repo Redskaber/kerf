@@ -17,16 +17,16 @@
 ;     错误 → ('err 消息 起始字节 结束字节)
 ; - 输入 core 节点 = (tag s e exp ...)（tag 为 quote 符号值；s/e = Span
 ;     起止字节；exp = 展开代次——镜像 bootstrap_expander.rs 输出格式）：
-;     ('lit s e x 字面量值)——字面量值为消歧标记形态（Str/Symbol/Float
+;     ('literal s e x 字面量值)——字面量值为消歧标记形态（Str/Symbol/Float
 ;     在 VM 值面无谓词区分，桥侧定型标记——INC4 实现期修订，见
 ;     i1-incision-migration-design.md INC4 注记）：
 ;       ('int v) ('float v) ('str s) ('true) ('false) ('nil)
 ;       ('sym 名字str) ('pair 左 右)
 ;     ('var s e x 名字str 作用域int列表)
-;     ('app s e x 函数 参数...) ('if s e x 条件 真分支 假分支)
-;     ('lambda s e x (名字str...) (作用域int列表...) 体)
-;     ('set s e x 名字str 作用域 值) ('define s e x 名字str 值)
-;     ('begin s e x 项...)
+;     ('apply s e x 函数 参数...) ('if s e x 条件 真分支 假分支)
+;     ('fn s e x (名字str...) (作用域int列表...) 体)
+;     ('assign s e x 名字str 作用域 值) ('define s e x 名字str 值)
+;     ('do s e x 项...)
 ;     ('module s e x 名 (导入...) (导出...) 体...) / ('require s e x 能力str...)
 ;     —— 两臂 42-c 已迁：module 体 inline（每项恒非尾位 + 中间值
 ;     Pop——span = 项自身；空体 PushNil——span = module 自身；首原型
@@ -392,14 +392,14 @@
     (cond
       ((eq tag "var")
        (fvo-push-free! (first fields) (second fields)))
-      ((eq tag "lit") nil)
-      ((eq tag "lambda")
+      ((eq tag "literal") nil)
+      ((eq tag "fn")
        (let ((shadowed (length (first fields))))
          (do
            (fvo-params! (first fields))
            (fvo-node (third fields))
            (fvo-pop! shadowed))))
-      ((eq tag "app")
+      ((eq tag "apply")
        (do
          (fvo-node (first fields))
          (fvo-seq (tail fields))))
@@ -408,7 +408,7 @@
          (fvo-node (first fields))
          (fvo-node (second fields))
          (fvo-node (third fields))))
-      ((eq tag "set")
+      ((eq tag "assign")
        (do
          (fvo-push-free! (first fields) (second fields))
          (fvo-node (third fields))))
@@ -416,7 +416,7 @@
        (do
          (fvo-node (second fields))
          (fvo-bound-add! (first fields))))
-      ((eq tag "begin")
+      ((eq tag "do")
        (fvo-seq fields))
       ((eq tag "require") nil)
       ((eq tag "module")
@@ -590,13 +590,13 @@
         (fields (node-fields node)))
     (cond
       ; ---- Literal（含引号点对递归——先 head 后 tail-pos 压栈对齐 MAKE_PAIR）----
-      ((eq tag "lit") (compile-lit (first fields) s e x))
+      ((eq tag "literal") (compile-lit (first fields) s e x))
       ; ---- VarRef（解析 → LoadLocal/LoadCaptured/LoadGlobal）----
       ((eq tag "var") (compile-var (first fields) (second fields) s e x))
       ; ---- Lambda ----
-      ((eq tag "lambda") (compile-fn fields s e x))
+      ((eq tag "fn") (compile-fn fields s e x))
       ; ---- App（求值顺序契约：被调函数先，参数从左到右；尾位 TailCall）----
-      ((eq tag "app")
+      ((eq tag "apply")
        (let ((rf (compile-expr (first fields) false)))
          (if (err? rf)
              rf
@@ -622,7 +622,7 @@
                                  (patch-jump je)
                                  nil)))))))))))
       ; ---- Set!（值 → DUP → 存储；目标解析与 VarRef 同一口径）----
-      ((eq tag "set")
+      ((eq tag "assign")
        (let ((rv (compile-expr (third fields) false)))
          (if (err? rv)
              rv
@@ -654,7 +654,7 @@
                           s e x))))))
       ; ---- Begin（末项继承尾位——do 尾调用 = 尾调用；中间值弹出
       ;        span = 项自身 Span）----
-      ((eq tag "begin")
+      ((eq tag "do")
        (if (is-nil fields)
            (emit! (list 'op OP-PUSH-NIL) s e x)
            (compile-begin-seq fields 0 (length fields) tail-pos)))

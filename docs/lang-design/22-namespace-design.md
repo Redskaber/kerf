@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-15（**v1.5——r42 / 63-b 移除轮 S1 表面腿**：D11 兑现（W1003 落地——namespace_tests s1_w1003 组：正例知会/非内置零误报/限定名遮蔽/宏胜出行为不变四锚）+ W1001 退役（W 面收窄 W1002/W1003——23 §3.4 生命周期四阶段完整走完）+ E0021（driver verify_qualified_refs 扩展——旧名引用编译期拒绝携现代名指引））；2026-09-15（**v1.4——r41 / 62-a 语言形式深审轮二**：驱动源 = 用户指令「内部语法设计/通解特解审查/词法语法语义无二义性/层级组织（/ vs ::）/(a b c) 通解性/多模型组织——发散 + 2026 前沿 + 内循环迭代收敛」+ 六查询实证[tool-results/r41-search/——q1 Rhombus v1.0 2026-06 发布 + state 深读]——§11 新增 D10-D18 节[E0020 当场修复 + 七项裁定]）；2026-09-13（**v1.0 首版——r33 / 54-a 能力架构深度设计轮交付**：驱动源 = 用户审查指令「是否完整设计规划的命名空间、层级关系、权限控制」——[20-表面规范 §5](./20-surface-conventions.md) 的命名空间节只是**方向概要**（模块树 + 限定名语法），机制层完整设计缺位 = v0.6 批次 M 的实施输入不完整，属「可推迟决策未配接口契约」的元分析违例（[17-设计原则 §2.1](./17-principles.md)））+ 知识搜索实证（q1 遮蔽设计/q5 可见性模型/q6 Clojure 命名空间组织/q7 Pony-Austral 能力模块））；2026-09-14（**v1.1 修正——r34 / 55-a 设计缺陷深度审计收敛轮**：驱动源 = 用户审查指令「定位/权限/能力边界/职责边界/层级处理和管理模型/演进阶段和时机——网状发散性思维、内循环迭代直至收敛」+ 知识搜索四查询实证（tool-results/r34-search/——WASI 无环境权威组合/ocap 布线）：①三轴坐标系接线——本文命名轴 N 系显式锚定语义轴的共正交轴（[21 §2.5](./21-capability-architecture.md)：「L3′」记号全局退役——命名机制升格独立轴非 L3 旁支）；②§4.2 相位授权面注记（Phase 1 零授权面——[21 §4.5](./21-capability-architecture.md) 接线）；③§5.1 矩阵增两行（模块授权需求声明（组合闭包）+ Phase 1 宏命名宇宙）；④§8 实施对账表增两行）
-> **Version**: v1.6（**r43 / 64-b 关键字完全重筛深审轮**：§12 新增 D19-D33——N4 25 名全量三判定[语义/二义/标准] + 名空间经济新判据[E0020 启用后首次完整适用]——两处 P2 候选修正：set!→**assign**（否决原候选 set——集合构造 2026 标配占用）/ begin→**do**（否决原候选 seq——Clojure seq 生态占用 + 动词化）+ lambda→fn 维持强化 + 22 名维持裁定 + 衍生关键字 S3 形态名一致性对账[D30] + E0021 扩展至关键字旧名[D29] + `/` 与操作位统一零交互复审[D32/D33]；v1.5：r42 D11/W1003）
+> **Version**: v1.7（**r44 / 65-a 内部关键字全栈一致性深审轮**：§13 新增 D34-D40——四套名面现状矩阵[表面/桥 tag/ADT/kind_name 八处不一致] + 一致性总则「一个语义一个名」（D34——原则 31 精确化：形态分离 ≠ 名面漂移）+ M-R 重命名族逐名裁定（D35——`Lambda→Fn`/`SetBang→Assign`/`Begin→Do`/`App→Apply`/`VarRef→Var` GO 五件 + `If→Branch`/`Literal→Const` NO-GO 两件[一致性判据否决 01 §8.3 原候选——判据先于先例操作实例]）+ Keyword 枚举对齐（D36）+ kind_name 统一（D37）+ 桥 quote/tag 域重构（D38——'lambda→'fn/'set→'assign/'begin→'do/'app→'apply/'lit→'literal）+ S3 结构臂分轮（D39——r44 名面臂/r45+ 结构臂）+ 六域候选空间完备性收敛证明（D40）+ 关键字正交性对账（§13.3——9 原语+3 内部+13 派生职责边界表）；v1.6：r43 D19-D33）
 > **Status**: Active（**命名机制规范冻结**——v0.6 批次 M 的设计输入；实施对账表 §8）
 > **处理程度**：P2（规范 + 规则表 + 权限矩阵 + 冲突裁定；实现 = 批次 M——[12-路线图 §2.10](./12-roadmap.md)）｜ **所属 Stage**：Stage 2 末设计冻结 → v0.6 实现 ｜ **推迟项**：版本化语法（`@` 语法不引入——§7 只锁接口语义位）
 
@@ -353,3 +353,79 @@ r40（D1-D9）+ r41（D10-D18）两轮已覆盖定位/权限/能力/职责/层�
 | 语料终态 | 全语料（.krf ×4 + tests + examples + audits）grep 零旧形实证 | 词法边界替换 + grep 对账 |
 
 *遵循条款：原则 9（核心冻结——N4 变更唯一通道 E5 窗，本轮 S2 腿是窗内合法变更）/ 原则 26（成熟度匹配——D23 let\* 频率倒挂仅登记：语义冻结无通道）/ 原则 28（渐进替换——E0021 携指引 + 接管豁免的迁移期 DX）/ 原则 29（命名行为导向——D19 fn/D20 assign/D21 do 三切换名的动词化判据 + D21 否决 seq 的名词判据）/ 原则 31（表面-内部分离——D30 两对齐一分离 + 门 A 断言形态 + kind_name 内部名维持）/ 原则 33（表面现代化动态演进——D19-D21 三件是 1970 表面的关键字面收口[S1 库面腿的姊妹腿]）/ 原则 35（判据先于先例——名空间经济新判据驱动两处候选修正 + 否决记录表 + 候选空间全展开收敛证明）/ R5（复杂度升级——S2 实施判定 L3 全流程）。*
+
+---
+
+## 13. 内部关键字全栈一致性深审（D34-D40——r44 / 65-a 深审轮四交付）
+
+> 驱动源：用户指令「内部关键字和候选衍生关键字的完全重新筛选（内循环迭代直至收敛）+ **原语本身也是关键字，其他关键字都是派生；暴露给用户的关键字应该和编译器内部的是一致性的（不然内部设计一套开发一套算什么？）** + 自举桥同类问题也需重构（正确 > 妥协）+ 关键字正交性（每个关键字的定位/职责/边界/能力）」。四查询实证（tool-results/r44-search/）：q1 AST 节点名与表面关键字同词根实践（**Python `ast.If`/`ast.Lambda`/`ast.While`——节点名与关键字同词根**，earthly/UCF SimpleC T_decl 文法非终结符命名佐证）/ q2 自举编译器双实现同步（HN「features implemented twice, kept in sync」——名面一致是双实现同步性的关键基础设施）/ **q3 Racket 完全展开代码的 `#%plain-lambda` 双轨**（lexi-lambda 原文：surface `lambda` vs 内部 `#%plain-lambda`——kerf 原则 29/30 已明确否决的 `#%` 家族病的活体实证）/ q4 统一命名规范（PEP 8/C# conventions——一致性是工程共识）。**审查对象**：S2 后的四套名面（表面关键字 / 自举桥 quote 符号与 tag / Rust ADT 变体名 / kind_name 诊断名）——r43 的「三域分离零变更」声明本身成为本轮审查对象。
+
+### 13.1 四套名面现状矩阵（65-a 基线盘点）
+
+| 语义 | 表面关键字（r43 后） | 桥 quote/tag（.krf + Rust 桥） | Rust ADT 变体 | kind_name | 一致性判定 |
+|---|---|---|---|---|---|
+| 函数抽象 | `fn` | `'lambda` / `"lambda"` | `Lambda` | `"lambda"` | ❌ 表面新、三处内部旧 |
+| 赋值 | `assign` | `'set` / `"set"`（第三形——非 set! 非 assign） | `SetBang` | `"set!"` | ❌ 四套四形（最严重） |
+| 顺序求值 | `do` | `'begin` / `"begin"` | `Begin` | `"begin"` | ❌ |
+| 调用 | （`(f x)` 无关键字） | `'app` / `"app"` | `App` | `"app"` | ✅ 三面同名（无表面对应） |
+| 分支 | `if` | `'if` / `"if"` | `If` | `"if"` | ✅ 全一致 |
+| 变量引用 | （无关键字） | `'var` / `"var"` | `VarRef` | `"var-ref"` | ❌ 桥 `var` vs Rust `var-ref` 两形 |
+| 字面量 | （无关键字） | `'lit` / `"lit"` | `Literal` | `"literal"` | ❌ 桥 `lit` vs `literal` 两形 |
+| 定义/模块/声明/效应/处理 | `define`/`module`/`require`/`perform`/`handle` | 同名 | `Define`/`Module`/`Require`/`Perform`/`Handle` | 同名 | ✅ 全一致 |
+| **Keyword 枚举**（r43 半改态） | as_str/from_name 已新（`"fn"`/`"assign"`/`"do"`） | — | `Keyword::Lambda`/`SetBang`/`Begin`（变体名旧） | — | ❌ 枚举内自身不一致 |
+
+**缺陷面结论**：四语义 8 处不一致 + Keyword 枚举内自身不一致 3 处——用户指令「不然内部设计一套开发一套算什么」的精确对应物。r43「三域分离（桥 tag/core tag 零变更）」是**把债务当资产引用的过度引申**：三域分离保护的是 *切换域隔离*（表面切换不误伤桥语料——R1 误伤教训的流程防御），不是 *名面漂移的合法性证明*；桥 tag 与表面的名面漂移本身是待清偿债务（本轮 D38 裁定）。
+
+### 13.2 深审裁定总表（D34-D40）
+
+| # | 焦点 | 缺陷面/裁定点 | 裁定 | 依据（判据先于先例） |
+|---|---|---|---|---|
+| **D34** | **一致性总则（判据新增）** | 表面与内部名面关系无显式判据——原则 31「表面-内部分离」被 r43 过度引申为「内部名可以独立漂移」 | **一个语义一个名（one name per semantics）**：原语级关键字（有表面对应物的语义）的表面名 = 桥 quote/tag = ADT 变体词根 = kind_name = 渲染面，五面同词根；派生关键字经宏/糖展开到原语（无独立 ADT 节点——用户指令「派生类是通过宏或者原语构建」的规范表述）；无表面关键字的语义（调用/变量引用/字面量）用内部统一名（桥/ADT/kind_name 三面同名）。**原则 31 精确化**：分离的是**语法形态**（皮肤可替换——S-expr/中缀/DSL），不是**名词根**（名面一致）——名面漂移不是分离原则的推论而是其违反 | ①正向：Python AST 同词根（`ast.If`↔`if`/`ast.Lambda`↔`lambda`/`ast.While`↔`while`——q1 跨家族大生产实践）；②反向：Racket `#%plain-lambda` 双轨（q3 lexi-lambda——内部名与表面名脱钩的家族病实证，kerf 原则 29/30 已否决该形态，三套名是同一家族病的残余）；③工程：自举双实现同步性依赖名面一致（q2 HN 实证）；④判据层级：一致性 > 内部动词化微优化（见 D35 Branch/Const 否决） |
+| **D35** | **M-R 重命名族逐名裁定**（01 §8.3 候选的判据修正——一致性判据引入后部分原候选被否决） | 01 §8.3 迁移映射的候选（Fn/Apply/Branch/Var/Const）在一致性判据下重审 | **六裁定**：①`Lambda→Fn` **GO**（表面对齐 + 01 §8.3 同向）；②`SetBang→Assign` **GO**（表面对齐——**M-R 与 M-E 解耦**：D5 否决的是效应化迁移[Perform(State) 实现]，M-R 纯重命名零语义载荷独立合法；e5-plan「SetBang 不迁」精确化为「不做 M-E；M-R 照做」）；③`If→Branch` **NO-GO 修正 01 §8.3**（表面 `if` 维持 D22 跨家族通用语——Branch 重命名制造表面 if↔内部 Branch **新分离**，违反 D34；一致性 > 行为导向微优化）；④`App→Apply` **GO**（无表面对应无反判据 + 01 §8.3 候选 + J-1 动词化）；⑤`VarRef→Var` **GO**（桥已 `var` 三面统一 + 01 §8.3 候选）；⑥`Literal→Const` **NO-GO 修正 01 §8.3**（J-1：literal 精确覆盖 quote 产物[Symbol/Pair 字面数据]——const 语义偏编译期常量概念；不可变性由类型系统保证[原则 23/30]名无需编码；01 §8.2 零冗余已达成[单层映射]Const 的「吸收两层」理由不成立）+ `Begin→Do` **GO**（表面对齐；结构脱糖[→Let 链]归后续臂 D39——名面清偿不可分期） | 候选空间全展开见 D40；两个 NO-GO 是**判据先于先例的操作实例**（01 §8.3 是 next3 轮裁定，本轮新判据[用户指令一致性]推翻其中两行——先例是佐证不是权威） |
+| **D36** | **Keyword 枚举变体名对齐**（r43 半改态闭合） | as_str/from_name 已新而变体名旧（`Keyword::Lambda` 映射 `"fn"`——枚举内自身不一致） | `Keyword::Lambda→Keyword::Fn` / `Keyword::SetBang→Keyword::Assign` / `Keyword::Begin→Keyword::Do`——变体名与字面名同词根（枚举内一致性）；其余 22 变体名已与字面同词根零变更 | D34 推论（五面同词根含枚举变体面）；r43 遗留半改态的债务闭合 |
+| **D37** | **kind_name 诊断名统一**（r43「S3 腿才改」债务清偿） | 诊断面 `lambda`/`set!`/`var-ref`/`app`/`begin` 旧名 | 12 名表：`fn`/`apply`/`if`/`var`/`literal`/`assign`/`define`/`do`/`module`/`require`/`perform`/`handle`——与桥 tag 同名穿透（tag=诊断=dump 的单一名面）；architecture_audit_tests 12 名表同步 | D34（kind_name 是用户可见诊断面——原则 16 人类可感知输出的一致性义务）；`var-ref`→`var` 与桥统一；`lit` 不入诊断名（全词 literal——20 §1.1 不透明缩写退役判据） |
+| **D38** | **桥 quote/tag 符号域统一**（自举桥重构——用户指令点名载荷） | 桥 tag 既是第三套名（`"set"` 非 set! 非 assign）又含内部缩写形（`var`/`lit` vs `var-ref`/`literal`） | 六处改名：`'lambda→'fn`、`'set→'assign`、`'begin→'do`、`'app→'apply`、`'lit→'literal`（全词统一——两形并存清偿）、`'var` 维持；涉及 expander.krf（产出点 ~40 处）+ compiler.krf（匹配点 ~20 处）+ bootstrap_expander.rs/bootstrap_compiler.rs（Rust 桥 tag 表各 6 处）+ 内部函数名随迁（compile-fn 等维持——.krf 内部函数名非 tag 域）；**tag 改名的 parity 影响分析**：tag 是数据协议标记非 bytecode 组成——门 A CoreExpr parity 恒成立（桥接映射同步改名）；门 B fixpoint 随语料变更重建（SHA 重锚——语料变更自身合法）；quote 位 tag 符号是 E0020 豁免面（数据域）零保留字冲突 | D34（五面同词根）；r43「三域零变更」的过度引申修正（域隔离是防误伤流程 ≠ 名面漂移合法）；tag 短名书写经济 vs 一致性——一致性胜出（可读性 > 省字符，20 §1.1 同判据） |
+| **D39** | **S3 结构臂分轮裁定**（e5-plan S3 行载荷分解） | S3 原载荷（Define 脱糖/Begin→Let 链/Module 迁移/de Bruijn IR）是 M-D/M-A/M-L/M-I 结构变更——与 M-R 名面臂不同重量级 | **本轮 r44 = M-R 名面臂 + 三域一致化**（~400 Rust 处 + ~60 桥语料处 + 测试期望）；**结构臂（Define 脱糖 + Begin→Let 链 + Module 迁移 + de Bruijn IR）归 r45+ 分臂承载**（e5-plan §4「S3 可能分臂多轮」维持——每臂独立 commit + 字节码 parity 断言先行[e5-plan §3.3 分臂回退机制]）；S4 收口排期不变（E5 出口条件对账在 S3 全臂完成后）。**非正交点计数预告**：本轮名面臂后计数仍为 3（Define/Begin/SetBang 结构未动）——r45 结构臂后 3→1（SetBang[Assign] 维持） | 23 §2.3 红线 4（同窗分步验收）；§13.2 切换期重构的臂式推进；e5-plan §3.2 S3 行字节码 parity 最严口径按臂适用（名面臂的 parity 形态 = CoreExpr 结构不变 + bytecode 全等——M-R 零语义载荷的机器证明） |
+| **D40** | **候选空间完备性 + 否决记录（重筛收敛证明）** | 变体名候选空间全展开（六域）+ 01 §8.3 两候选否决记录 | **六域候选**：Fn 域 {Fn ✅, Lambda ❌[表面分离], Function ❌[冗长], Abs ❌[数学黑话]}；Assign 域 {Assign ✅, SetBang ❌[表面分离+`!` 家族标记], Set ❌[名空间经济 D20 已否决], Mutate ❌[泛化], Put ❌[异形]}；Do 域 {Do ✅, Begin ❌[表面分离], Seq ❌[D21 已否决], Progn ❌[不透明], Block ❌[歧义]}；Apply 域 {Apply ✅, App ❌[名词缩写], Call ❌[与 VM 指令名 CallOp 语义撞形——分层但词根重复], Invoke ❌[异形]}；Var 域 {Var ✅, VarRef ❌[实现导向冗长], Name ❌[Python 撞形且泛化], Index ❌[de Bruijn 后行]}；Literal 域 {Literal ✅, Const ❌[语义偏移], Lit ❌[不透明缩写], Datum ❌[黑话], Value ❌[泛化]}——**每域收敛唯一解，无未评估候选** | 收敛判据：①候选空间全展开（六域 × 4-5 候选）②每候选三判定[J-1 语义/J-2 二义/一致性新判据]③否决记录保留（Branch/Const 两个 01 §8.3 原候选的否决入档——判据冲突先修判据不迁就先例[原则 35 原文]） |
+
+### 13.3 关键字正交性对账（用户指令「每个关键字的定位/职责/边界/能力」——25 表面名 × 12 内部变体两轴）
+
+**原语级关键字（有表面关键字 ↔ 有 ADT 变体——r44 后五面同词根）**：
+
+| 关键字 | ADT 变体（r44 后） | 定位 | 职责（唯一） | 边界（不做什么） | 能力 |
+|---|---|---|---|---|---|
+| `fn` | `Fn` | 函数抽象原语 | 参数绑定 + 体闭包 | 不求值（构造抽象值） | 捕获自由变量分析 |
+| `assign` | `Assign` | 可变绑定赋值原语 | 已绑定名的运行期重绑定 | 不引入新绑定（Define 职责） | 作用域集解析（scopes ⊆） |
+| `do` | `Do` | 顺序求值原语 | 依序求值返回末值 | 不绑定中间值（Let 职责——r45 结构臂） | 尾位 TCO 穿透 |
+| `if` | `If` | 分支原语 | 三支条件选择 | 不多支（cond 糖职责） | 短路求值 |
+| `define` | `Define` | 模块级绑定原语 | 顶层/提升位绑定 | 表达式子树内非法（E0016/位置纪律） | letrec* 序 |
+| `module` | `Module` | 相位单元原语 | 导入/导出/体组织 | 不嵌套（D12 单层裁定） | 组合闭包验证 |
+| `require` | `Require` | 声明变体（零语义） | 能力需求声明 | 零运行时语义（恒 nil） | R9 验证 + 令牌铸造 |
+| `perform` | `Perform` | 效应上抛原语 | 效应值执行+控制转移 | 不恢复（Handle 职责） | ext1 槽位 |
+| `handle` | `Handle` | 效应处理原语 | 浅处理+续体恢复 | 不多层（用户嵌套组合） | 续体线性唯一（D3） |
+
+**内部名（无表面关键字——三面同名）**：`apply`（调用：求值函数+实参——β-归约操作位）/ `var`（变量引用：按作用域集解析的命名引用）/ `literal`（字面数据：Int/Float/Str/Bool/Nil/Pair/Symbol 字面书写值）。**派生关键字（糖——经 builtin_transformer 展开到原语）**：`let`/`letrec`/`let*`（→ Fn+Apply）、`cond`/`and`/`or`/`when`/`unless`（→ If）、`while`（→ letrec+If+Do）、`else`（cond 臂数据位字面量——非操作位）、`quote`（→ Literal[Symbol/Pair]）、`define-syntax`/`syntax-rules`（宏定义对——展开期机制）、`import`/`export`（Module 内位置限定形式）。**正交性结论**：25 表面名 = 9 原语 + 3 内部 + 13 派生/声明/数据位——每名职责唯一无重叠（12 变体正交性 01 §2 核心冻结锚定维持——M-R 零语义载荷不改正交结构）。
+
+### 13.4 r44 实施对账（M-R 名面臂验收锚——e5-plan §3.2 S3 行名面臂口径）
+
+| 断言 | 验收 | 载体 |
+|---|---|---|
+| 门 A（CoreExpr parity——名面臂形态） | 变体/tag 改名零语义载荷：同源产**结构相同** CoreExpr（变体名变更非结构变更）+ bytecode 全等（tag 不入 bytecode） | 全套件零行为回归 + 桥接映射同步断言 |
+| 门 B（fixpoint 重建） | 桥语料 tag 迁移后 B₁/B₂ 自举链 fixpoint 重建（语料变更自身合法） | §3.2 六命令 + 包内自举 |
+| 五面同词根实证 | 表面=桥 tag=ADT 变体=kind_name=渲染面（fn/assign/do/apply/var/literal 六语义 grep 对账） | 全语料 grep 零旧形 + kind_name 12 名表测试 |
+| Keyword 枚举一致 | `Keyword::Fn/Assign/Do` 变体名 = as_str 字面 | symbol.rs 编译期断言（既有计数锚） |
+| 测试期望迁移 | architecture_audit kind_name 表 + 渲染/tag 期望 | 既有套件迁移零回归 |
+
+**r44 实施交付实录（65-b——2026-09-17）**：
+
+| 断言 | 结果 | 证据 |
+|---|---|---|
+| 门 A（CoreExpr parity） | ✅ | 834:0:0 全套件零行为回归（615 集成 + 219 单元——净 +2：`s3mr_kind_name_keyword_face_penetration` + `keyword_all_roundtrip_and_distinct`）；bootstrap parity 组（expander/compiler 门 A/B/C）全绿 = 变体/tag 改名零语义载荷的机器证明 |
+| 门 B（fixpoint 重建） | ✅ | B₁/B₂ 自举链于新语料（tag 迁移后）重建——bootstrap_compiler_tests 门 B 组全绿（SHA 重锚合法） |
+| 五面同词根 | ✅ | 三域 grep 零旧形：Rust 代码面 0（变体/枚举旧名）/ 桥语料面 0（'lambda/'set/'begin/'app/'lit/tag 串）/ kind_name 12 名表全现代（fn/apply/if/var/literal/assign/define/do/module/require/perform/handle） |
+| Keyword 枚举一致 | ✅ | `Keyword::Fn/Assign/Do` + `Keyword::ALL` 25 名单源（预内部化与 roundtrip 共享）+ 全量 roundtrip 互异断言 |
+| 测试期望迁移 | ✅ | architecture_audit 12 名表 + 40 处测试变体引用 + 注释面清扫（crates/tests/examples 全零旧名）；r43 遗留 unused import（namespace_tests `kerf_vm::Value`）顺手清偿（clippy -D warnings 0） |
+| §3.2 六命令 | ✅ | clean 起步：build 14.26s / check 0 / fmt 0 / clippy --all-targets -D warnings 0 / **834:0:0** release |
+| 五审计集 + CLI | ✅ | EXIT 0 ×5（233 case）+ fib 144 / macros 42 / check ok / E0021 端到端 REAL_EXIT 1 携「现代形式「fn」」指引 |
+
+*遵循条款：原则 9（核心冻结——语义原语集不变；M-R 是名面变更非语义变更，经 E5 窗 S3 腿通道合法）/ 原则 16（人类可感知输出——kind_name/dump/tag 五面一致的诊断义务）/ 原则 23（不可变性——Const 否决的类型系统论据）/ 原则 29（命名行为导向——Apply 动词化 + Branch/Const 否决显示行为导向判据的一致性从属地位）/ 原则 30（类型安全——Literal 维持的不可变由类型保证论据）/ 原则 31（表面-内部分离的精确化：形态分离 ≠ 名面漂移——D34 核心修正）/ 原则 33（表面现代化动态演进——内部名面是 1970 残余的最后一域[S1 库面 r42/S2 表面 r43/S3 内部 r44 三腿闭合]）/ 原则 35（判据先于先例——Branch/Const 两否决修正 01 §8.3 + 六域候选全展开 + 否决记录保留）/ R4（文档-代码冲突——r43「三域零变更」声明按新判据修正）/ R5（复杂度 L3——跨 6 crates ADT 级变更 §13.2 切换期流程）。*

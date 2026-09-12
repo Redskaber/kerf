@@ -280,8 +280,8 @@ impl<'a> TypeCtxt<'a> {
         }
         match e.as_ref() {
             CoreExpr::Literal { value, .. } => literal_ty(value),
-            CoreExpr::VarRef { name, .. } => self.lookup(*name),
-            CoreExpr::Lambda { params, body, .. } => {
+            CoreExpr::Var { name, .. } => self.lookup(*name),
+            CoreExpr::Fn { params, body, .. } => {
                 // 参数装订 Unknown（动态值），体检查后还原（遮蔽语义）
                 let saved: Vec<(Symbol, Option<TcType>)> = params
                     .iter()
@@ -296,7 +296,7 @@ impl<'a> TypeCtxt<'a> {
                     max_args: Some(params.len()),
                 }
             }
-            CoreExpr::App {
+            CoreExpr::Apply {
                 fn_expr,
                 args,
                 span,
@@ -320,7 +320,7 @@ impl<'a> TypeCtxt<'a> {
                 let e_ty = self.check_expr(else_branch, depth + 1, diags);
                 t.join(e_ty)
             }
-            CoreExpr::Begin { body, .. } => {
+            CoreExpr::Do { body, .. } => {
                 // 顺序体（begin 包裹的 define 已由展开器裁定为全局语义——
                 // 03c/03d 修复后的统一行为，此处顺序装订与顶层同构）
                 let mut last = TcType::Unknown;
@@ -336,7 +336,7 @@ impl<'a> TypeCtxt<'a> {
                 }
                 last
             }
-            CoreExpr::SetBang { value, .. } => {
+            CoreExpr::Assign { value, .. } => {
                 // set! 返回被赋的值（Stage 0 语义）；不改变绑定已有类型
                 self.check_expr(value, depth + 1, diags)
             }
@@ -365,9 +365,9 @@ impl<'a> TypeCtxt<'a> {
                 self.check_expr(effect, depth + 1, diags);
                 TcType::Unknown
             }
-            // Handle 绑定器装订（与 Lambda 臂 save/restore 同型——遮蔽
+            // Handle 绑定器装订（与 Fn 臂 save/restore 同型——遮蔽
             // 纪律镜像）：payload = dispatch 注入的动态值 → Unknown；
-            // resume = continuation 调用形态（D4 展开期脱糖为 App——
+            // resume = continuation 调用形态（D4 展开期脱糖为 Apply——
             // 值位置调用保守零断言）→ Unknown
             CoreExpr::Handle {
                 payload_var,
@@ -403,9 +403,9 @@ impl<'a> TypeCtxt<'a> {
             .iter()
             .map(|a| self.check_expr(a, depth + 1, diags))
             .collect();
-        // 内置调用判定：fn_expr 为 VarRef 且未被用户词法绑定遮蔽
+        // 内置调用判定：fn_expr 为 Var 且未被用户词法绑定遮蔽
         let builtin_sig = match fn_expr.as_ref() {
-            CoreExpr::VarRef { name, .. } => {
+            CoreExpr::Var { name, .. } => {
                 if self.env.contains_key(name) {
                     None
                 } else {
@@ -416,8 +416,8 @@ impl<'a> TypeCtxt<'a> {
         };
         if let Some(sig) = builtin_sig {
             let op = match fn_expr.as_ref() {
-                CoreExpr::VarRef { name, .. } => self.table.name(*name).to_string(),
-                // 防御性回退：调用点非 VarRef 时无符号名可归因（上游
+                CoreExpr::Var { name, .. } => self.table.name(*name).to_string(),
+                // 防御性回退：调用点非 Var 时无符号名可归因（上游
                 // 408 行已窄化内置调用为直接引用形）
                 _ => "<内置>".to_string(),
             };

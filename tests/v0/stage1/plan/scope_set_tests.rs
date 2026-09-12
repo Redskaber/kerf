@@ -38,12 +38,12 @@ fn mismatched_lambda(binder: ScopeId, ref_scope: ScopeId) -> Vec<Rc<CoreExpr>> {
     let x = table.intern("x");
     let binder_scopes = ScopeSet::from_iter_scopes([binder]);
     let ref_scopes = ScopeSet::from_iter_scopes([ref_scope]);
-    let body = Rc::new(CoreExpr::VarRef {
+    let body = Rc::new(CoreExpr::Var {
         name: x,
         scopes: ref_scopes,
         span: Span::dummy(),
     });
-    let lam = Rc::new(CoreExpr::Lambda {
+    let lam = Rc::new(CoreExpr::Fn {
         params: vec![x],
         param_scopes: vec![binder_scopes],
         body,
@@ -53,7 +53,7 @@ fn mismatched_lambda(binder: ScopeId, ref_scope: ScopeId) -> Vec<Rc<CoreExpr>> {
         value: kerf_core::LiteralValue::Int(42),
         span: Span::dummy(),
     });
-    vec![Rc::new(CoreExpr::App {
+    vec![Rc::new(CoreExpr::Apply {
         fn_expr: lam,
         args: vec![arg],
         span: Span::dummy(),
@@ -156,17 +156,17 @@ fn scope_mismatch_setbang_unbound_dual_path() {
         value: kerf_core::LiteralValue::Int(1),
         span: Span::dummy(),
     });
-    let setb = Rc::new(CoreExpr::SetBang {
+    let setb = Rc::new(CoreExpr::Assign {
         name: x,
         scopes: mismatch,
         value: one,
         span: Span::dummy(),
     });
-    let body = Rc::new(CoreExpr::Begin {
+    let body = Rc::new(CoreExpr::Do {
         body: vec![setb],
         span: Span::dummy(),
     });
-    let lam = Rc::new(CoreExpr::Lambda {
+    let lam = Rc::new(CoreExpr::Fn {
         params: vec![x],
         param_scopes: vec![binder],
         body,
@@ -177,7 +177,7 @@ fn scope_mismatch_setbang_unbound_dual_path() {
         value: kerf_core::LiteralValue::Int(2),
         span: Span::dummy(),
     });
-    let app = Rc::new(CoreExpr::App {
+    let app = Rc::new(CoreExpr::Apply {
         fn_expr: lam.clone(),
         args: vec![two],
         span: Span::dummy(),
@@ -229,12 +229,12 @@ fn scope_subset_match_resolves_to_param() {
     let x = table.intern("x");
     let binder = ScopeSet::from_iter_scopes([7]);
     let sup = ScopeSet::from_iter_scopes([7, 9]);
-    let body = Rc::new(CoreExpr::VarRef {
+    let body = Rc::new(CoreExpr::Var {
         name: x,
         scopes: sup,
         span: Span::dummy(),
     });
-    let lam = Rc::new(CoreExpr::Lambda {
+    let lam = Rc::new(CoreExpr::Fn {
         params: vec![x],
         param_scopes: vec![binder],
         body,
@@ -244,7 +244,7 @@ fn scope_subset_match_resolves_to_param() {
         value: kerf_core::LiteralValue::Int(42),
         span: Span::dummy(),
     });
-    let app = Rc::new(CoreExpr::App {
+    let app = Rc::new(CoreExpr::Apply {
         fn_expr: lam,
         args: vec![arg],
         span: Span::dummy(),

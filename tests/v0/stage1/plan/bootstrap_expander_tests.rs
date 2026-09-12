@@ -59,12 +59,12 @@ fn core_equiv(
             }
         }
         (
-            CoreExpr::VarRef {
+            CoreExpr::Var {
                 name: x,
                 scopes: sx,
                 ..
             },
-            CoreExpr::VarRef {
+            CoreExpr::Var {
                 name: y,
                 scopes: sy,
                 ..
@@ -84,13 +84,13 @@ fn core_equiv(
             Ok(())
         }
         (
-            CoreExpr::Lambda {
+            CoreExpr::Fn {
                 params: px,
                 param_scopes: sx,
                 body: bx,
                 ..
             },
-            CoreExpr::Lambda {
+            CoreExpr::Fn {
                 params: py,
                 param_scopes: sy,
                 body: by,
@@ -120,12 +120,12 @@ fn core_equiv(
             core_equiv(bx, ta, by, tb).map_err(|e| format!("[body]: {}", e))
         }
         (
-            CoreExpr::App {
+            CoreExpr::Apply {
                 fn_expr: fx,
                 args: ax,
                 ..
             },
-            CoreExpr::App {
+            CoreExpr::Apply {
                 fn_expr: fy,
                 args: ay,
                 ..
@@ -159,13 +159,13 @@ fn core_equiv(
             core_equiv(ex, ta, ey, tb).map_err(|e| format!("[else]: {}", e))
         }
         (
-            CoreExpr::SetBang {
+            CoreExpr::Assign {
                 name: x,
                 scopes: sx,
                 value: vx,
                 ..
             },
-            CoreExpr::SetBang {
+            CoreExpr::Assign {
                 name: y,
                 scopes: sy,
                 value: vy,
@@ -206,7 +206,7 @@ fn core_equiv(
             }
             core_equiv(vx, ta, vy, tb).map_err(|e| format!("[value]: {}", e))
         }
-        (CoreExpr::Begin { body: x, .. }, CoreExpr::Begin { body: y, .. }) => {
+        (CoreExpr::Do { body: x, .. }, CoreExpr::Do { body: y, .. }) => {
             seq_equiv(x, ta, y, tb, "do")
         }
         (
@@ -372,7 +372,7 @@ fn parity_symbol_ref_empty_scopes() {
 #[test]
 fn parity_lambda_nested_scopes() {
     // r13 fresh-scope 注入 parity：嵌套 fn 的 param_scopes 与体内
-    // VarRef 作用域集逐集一致
+    // Var 作用域集逐集一致
     parity("((fn (x) (+ x 1)) 41)");
     parity("(fn (x) (fn (y) (+ x y)))");
     parity("(fn (x) (fn (x) x))");

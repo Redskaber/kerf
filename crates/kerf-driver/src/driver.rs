@@ -485,8 +485,8 @@ fn reserved_stx_diag(f: &Stx, table: &SymbolTable) -> Option<Diagnostic> {
 }
 
 /// CoreExpr 层保留字绑定检查（**宏展开产物面**——源码层 Stx 检查的
-/// 防御纵深：宏模板生成的绑定名同样过 E0020；let 系脱糖为 Lambda+
-/// App 后绑定名收敛于 Lambda.params；handle 双绑定器在展开产物
+/// 防御纵深：宏模板生成的绑定名同样过 E0020；let 系脱糖为 Fn+
+/// Apply 后绑定名收敛于 Fn.params；handle 双绑定器在展开产物
 /// 结构化承载）。
 #[allow(clippy::result_large_err)]
 fn verify_reserved_bindings_core(
@@ -502,7 +502,7 @@ fn verify_reserved_bindings_core(
     Ok(())
 }
 
-/// CoreExpr 单节点绑定面检查（Define/Lambda/SetBang/Module/Handle
+/// CoreExpr 单节点绑定面检查（Define/Fn/Assign/Module/Handle
 /// 五绑定器变体 + 全子树递归）。
 fn reserved_core_diag(e: &CoreExpr, table: &SymbolTable) -> Option<Diagnostic> {
     match e {
@@ -513,18 +513,18 @@ fn reserved_core_diag(e: &CoreExpr, table: &SymbolTable) -> Option<Diagnostic> {
             }
             None
         }
-        CoreExpr::Lambda {
+        CoreExpr::Fn {
             params, body, span, ..
         } => {
             for p in params {
                 let n = table.name(*p);
                 if is_reserved_word(n) {
-                    return Some(reserved_binding_diag(n, *span, "lambda 参数（展开产物）"));
+                    return Some(reserved_binding_diag(n, *span, "fn 参数（展开产物）"));
                 }
             }
             reserved_core_diag(body, table)
         }
-        CoreExpr::SetBang { name, span, .. } => {
+        CoreExpr::Assign { name, span, .. } => {
             let n = table.name(*name);
             if is_reserved_word(n) {
                 return Some(reserved_binding_diag(n, *span, "赋值目标（展开产物）"));
@@ -558,8 +558,8 @@ fn reserved_core_diag(e: &CoreExpr, table: &SymbolTable) -> Option<Diagnostic> {
             }
             reserved_core_diag(handler_body, table).or_else(|| reserved_core_diag(body, table))
         }
-        CoreExpr::Begin { body, .. } => body.iter().find_map(|i| reserved_core_diag(i, table)),
-        CoreExpr::App { fn_expr, args, .. } => reserved_core_diag(fn_expr, table)
+        CoreExpr::Do { body, .. } => body.iter().find_map(|i| reserved_core_diag(i, table)),
+        CoreExpr::Apply { fn_expr, args, .. } => reserved_core_diag(fn_expr, table)
             .or_else(|| args.iter().find_map(|a| reserved_core_diag(a, table))),
         CoreExpr::If {
             cond,
@@ -570,7 +570,7 @@ fn reserved_core_diag(e: &CoreExpr, table: &SymbolTable) -> Option<Diagnostic> {
             .or_else(|| reserved_core_diag(then_branch, table))
             .or_else(|| reserved_core_diag(else_branch, table)),
         CoreExpr::Perform { effect, .. } => reserved_core_diag(effect, table),
-        // VarRef/Literal/Require 无绑定面（引用与声明非绑定——值位引用
+        // Var/Literal/Require 无绑定面（引用与声明非绑定——值位引用
         // 保留字在绑定禁令生效后恒走未绑定路径，fail-closed 天然维持）
         _ => None,
     }
@@ -909,14 +909,14 @@ fn module_dup_diag(e: &CoreExpr, table: &SymbolTable) -> Option<Diagnostic> {
             let _ = span;
             None
         }
-        CoreExpr::Begin { body, .. } => body.iter().find_map(|i| module_dup_diag(i, table)),
+        CoreExpr::Do { body, .. } => body.iter().find_map(|i| module_dup_diag(i, table)),
         _ => None,
     }
 }
 
 /// E0018：require 位置纪律（深审 D3 裁定：合法位 = 程序顶层序列直接
-/// 元素 + module 体直接元素；表达式子树内（lambda/let 脱糖后 Lambda/
-/// If/App/Begin 嵌套层）出现 = 位置错误——fail-closed 位置纪律，
+/// 元素 + module 体直接元素；表达式子树内（lambda/let 脱糖后 Fn/
+/// If/Apply/Do 嵌套层）出现 = 位置错误——fail-closed 位置纪律，
 /// Clojure require 限定 ns 顶层同型）。
 #[allow(clippy::result_large_err)]
 fn verify_require_positions(
@@ -947,8 +947,8 @@ fn require_pos_diag(e: &CoreExpr, top: bool) -> Option<Diagnostic> {
             }
         }
         CoreExpr::Module { body, .. } => body.iter().find_map(|item| require_pos_diag(item, true)),
-        CoreExpr::Lambda { body, .. } => require_pos_diag(body, false),
-        CoreExpr::App { fn_expr, args, .. } => require_pos_diag(fn_expr, false)
+        CoreExpr::Fn { body, .. } => require_pos_diag(body, false),
+        CoreExpr::Apply { fn_expr, args, .. } => require_pos_diag(fn_expr, false)
             .or_else(|| args.iter().find_map(|a| require_pos_diag(a, false))),
         CoreExpr::If {
             cond,
@@ -958,12 +958,12 @@ fn require_pos_diag(e: &CoreExpr, top: bool) -> Option<Diagnostic> {
         } => require_pos_diag(cond, false)
             .or_else(|| require_pos_diag(then_branch, false))
             .or_else(|| require_pos_diag(else_branch, false)),
-        CoreExpr::SetBang { value, .. } | CoreExpr::Define { value, .. } => {
+        CoreExpr::Assign { value, .. } | CoreExpr::Define { value, .. } => {
             require_pos_diag(value, false)
         }
-        CoreExpr::Begin { body, .. } => {
+        CoreExpr::Do { body, .. } => {
             if top {
-                // 顶层/module 体 Begin：序列形态内的 require 视同合法
+                // 顶层/module 体 Do：序列形态内的 require 视同合法
                 // （begin 是序形式非表达式嵌套——零误报优先裁定）
                 body.iter().find_map(|i| require_pos_diag(i, true))
             } else {
@@ -974,7 +974,7 @@ fn require_pos_diag(e: &CoreExpr, top: bool) -> Option<Diagnostic> {
         CoreExpr::Handle {
             handler_body, body, ..
         } => require_pos_diag(handler_body, false).or_else(|| require_pos_diag(body, false)),
-        CoreExpr::VarRef { .. } | CoreExpr::Literal { .. } => None,
+        CoreExpr::Var { .. } | CoreExpr::Literal { .. } => None,
     }
 }
 
@@ -1022,8 +1022,8 @@ fn warn_diag(
     out: &mut Vec<Diagnostic>,
 ) {
     match e {
-        CoreExpr::VarRef { .. } => {
-            // r42/S1：W1001 弃用族退役——VarRef 无 W 职责（旧名已升
+        CoreExpr::Var { .. } => {
+            // r42/S1：W1001 弃用族退役——Var 无 W 职责（旧名已升
             // E0021 编译期阻断于 verify_qualified_refs，fail-closed）
         }
         CoreExpr::Module { name, body, .. } => {
@@ -1056,7 +1056,7 @@ fn warn_diag(
                 warn_diag(item, table, face, shadow_seen, out);
             }
         }
-        CoreExpr::Lambda { params, body, .. } => {
+        CoreExpr::Fn { params, body, .. } => {
             // 参数遮蔽注入名：R-N2 第二行同型警告（内层胜合法）
             for p in params {
                 let pn = hygienic_base(table.name(*p));
@@ -1075,7 +1075,7 @@ fn warn_diag(
             }
             warn_diag(body, table, face, shadow_seen, out);
         }
-        CoreExpr::App { fn_expr, args, .. } => {
+        CoreExpr::Apply { fn_expr, args, .. } => {
             warn_diag(fn_expr, table, face, shadow_seen, out);
             for a in args {
                 warn_diag(a, table, face, shadow_seen, out);
@@ -1091,10 +1091,10 @@ fn warn_diag(
             warn_diag(then_branch, table, face, shadow_seen, out);
             warn_diag(else_branch, table, face, shadow_seen, out);
         }
-        CoreExpr::SetBang { value, .. } | CoreExpr::Define { value, .. } => {
+        CoreExpr::Assign { value, .. } | CoreExpr::Define { value, .. } => {
             warn_diag(value, table, face, shadow_seen, out)
         }
-        CoreExpr::Begin { body, .. } => {
+        CoreExpr::Do { body, .. } => {
             for item in body {
                 warn_diag(item, table, face, shadow_seen, out);
             }
@@ -1111,7 +1111,7 @@ fn warn_diag(
 }
 
 /// M2 别名限定名编译期归一（22 §3.5 R-N5「别名是局部绑定」的机制面
-/// 实现：`(import kerf-string as str)` 后 `str/append` 的 VarRef 重写为
+/// 实现：`(import kerf-string as str)` 后 `str/append` 的 Var 重写为
 /// `string/append`——HM 签名/字节码编译/运行面全链消费归一名，零运行
 /// 时别名感知；T1 双路径共享 front_from_core 段天然 parity）。
 /// 别名集为空时原样返回（零重写开销——无别名程序零成本）。
@@ -1130,13 +1130,13 @@ fn rewrite_alias_refs(
 
 fn rewrite_alias_expr(e: Rc<CoreExpr>, face: &ImportFace, table: &mut SymbolTable) -> Rc<CoreExpr> {
     match e.as_ref() {
-        CoreExpr::VarRef { name, scopes, span } => {
+        CoreExpr::Var { name, scopes, span } => {
             let raw = table.name(*name);
             let base = hygienic_base(raw);
             if let Some((ns, local)) = base.split_once('/') {
                 if let Some((_, module)) = face.aliases.iter().find(|(a, _)| a == ns) {
                     let new_name = format!("{}/{}", module, local);
-                    return Rc::new(CoreExpr::VarRef {
+                    return Rc::new(CoreExpr::Var {
                         name: table.intern(&new_name),
                         scopes: scopes.clone(),
                         span: *span,
@@ -1145,22 +1145,22 @@ fn rewrite_alias_expr(e: Rc<CoreExpr>, face: &ImportFace, table: &mut SymbolTabl
             }
             Rc::new(e.as_ref().clone())
         }
-        CoreExpr::Lambda {
+        CoreExpr::Fn {
             params,
             param_scopes,
             body,
             span,
-        } => Rc::new(CoreExpr::Lambda {
+        } => Rc::new(CoreExpr::Fn {
             params: params.clone(),
             param_scopes: param_scopes.clone(),
             body: rewrite_alias_expr(Rc::clone(body), face, table),
             span: *span,
         }),
-        CoreExpr::App {
+        CoreExpr::Apply {
             fn_expr,
             args,
             span,
-        } => Rc::new(CoreExpr::App {
+        } => Rc::new(CoreExpr::Apply {
             fn_expr: rewrite_alias_expr(Rc::clone(fn_expr), face, table),
             args: args
                 .iter()
@@ -1179,12 +1179,12 @@ fn rewrite_alias_expr(e: Rc<CoreExpr>, face: &ImportFace, table: &mut SymbolTabl
             else_branch: rewrite_alias_expr(Rc::clone(else_branch), face, table),
             span: *span,
         }),
-        CoreExpr::SetBang {
+        CoreExpr::Assign {
             name,
             scopes,
             value,
             span,
-        } => Rc::new(CoreExpr::SetBang {
+        } => Rc::new(CoreExpr::Assign {
             name: *name,
             scopes: scopes.clone(),
             value: rewrite_alias_expr(Rc::clone(value), face, table),
@@ -1195,7 +1195,7 @@ fn rewrite_alias_expr(e: Rc<CoreExpr>, face: &ImportFace, table: &mut SymbolTabl
             value: rewrite_alias_expr(Rc::clone(value), face, table),
             span: *span,
         }),
-        CoreExpr::Begin { body, span } => Rc::new(CoreExpr::Begin {
+        CoreExpr::Do { body, span } => Rc::new(CoreExpr::Do {
             body: body
                 .iter()
                 .map(|i| rewrite_alias_expr(Rc::clone(i), face, table))
@@ -1246,10 +1246,10 @@ fn rewrite_alias_expr(e: Rc<CoreExpr>, face: &ImportFace, table: &mut SymbolTabl
 }
 
 /// 限定名引用验证（R-N3 不回落——22 §8 表 R-N3 行）：含 `/` 的
-/// VarRef 名仅查 stdlib 七模块 export 面 + 程序接管豁免（define/set!
+/// Var 名仅查 stdlib 七模块 export 面 + 程序接管豁免（define/set!
 /// 同名——零误报纪律与 R9 同口径）；未命中 → E0014「不导出」而非
 /// 「未绑定」（诊断增益：打错模块名精确指向模块面）。R-N8 豁免天然
-/// 成立（本验证只走 VarRef 引用位——quote 符号值是 Literal，不参与）。
+/// 成立（本验证只走 Var 引用位——quote 符号值是 Literal，不参与）。
 /// 保留域（E0015）：module 名 kerf- 前缀占用（用户模块去前缀）。
 /// M1 收窄如实注记：用户模块 export 限定名引用归 M2 import 面承载。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同入口约定
@@ -1279,9 +1279,9 @@ fn verify_qualified_refs(
 /// 限定名/保留域诊断遍历（首个违例即返——fail-closed 单条阻断，
 /// 多错误收集属 E0005 家族职责，同 R9 口径）。
 ///
-/// R-N1 解析序（22 §3.1）：N3 局部绑定先于 N2——**Lambda 参数遮蔽
+/// R-N1 解析序（22 §3.1）：N3 局部绑定先于 N2——**Fn 参数遮蔽
 /// 限定名检查**（`(lambda (foo/bar) foo/bar)` 是局部名非限定引用）；
-/// 遮蔽集随递归传入（Lambda 入并集——不可变传播，词法嵌套正确性）。
+/// 遮蔽集随递归传入（Fn 入并集——不可变传播，词法嵌套正确性）。
 fn qualified_ref_diag(
     e: &CoreExpr,
     takeover: &std::collections::HashSet<String>,
@@ -1290,7 +1290,7 @@ fn qualified_ref_diag(
     table: &SymbolTable,
 ) -> Option<Diagnostic> {
     match e {
-        CoreExpr::VarRef { name, span, .. } => {
+        CoreExpr::Var { name, span, .. } => {
             let raw = table.name(*name);
             let base = hygienic_base(raw);
             if shadowed.contains(base) || shadowed.contains(raw) {
@@ -1384,16 +1384,16 @@ fn qualified_ref_diag(
             body.iter()
                 .find_map(|item| qualified_ref_diag(item, takeover, shadowed, face, table))
         }
-        CoreExpr::Lambda { params, body, .. } => {
+        CoreExpr::Fn { params, body, .. } => {
             // R-N1：参数是 N3 局部绑定——并入遮蔽集再递归体（let 系已
-            // 脱糖为 Lambda+App，CoreExpr 层 N3 绑定面 = Lambda 参数）
+            // 脱糖为 Fn+Apply，CoreExpr 层 N3 绑定面 = Fn 参数）
             let mut inner = shadowed.clone();
             for p in params {
                 inner.insert(table.name(*p).to_string());
             }
             qualified_ref_diag(body, takeover, &inner, face, table)
         }
-        CoreExpr::App { fn_expr, args, .. } => {
+        CoreExpr::Apply { fn_expr, args, .. } => {
             qualified_ref_diag(fn_expr, takeover, shadowed, face, table).or_else(|| {
                 args.iter()
                     .find_map(|a| qualified_ref_diag(a, takeover, shadowed, face, table))
@@ -1407,13 +1407,13 @@ fn qualified_ref_diag(
         } => qualified_ref_diag(cond, takeover, shadowed, face, table)
             .or_else(|| qualified_ref_diag(then_branch, takeover, shadowed, face, table))
             .or_else(|| qualified_ref_diag(else_branch, takeover, shadowed, face, table)),
-        CoreExpr::SetBang { value, .. } => {
+        CoreExpr::Assign { value, .. } => {
             qualified_ref_diag(value, takeover, shadowed, face, table)
         }
         CoreExpr::Define { value, .. } => {
             qualified_ref_diag(value, takeover, shadowed, face, table)
         }
-        CoreExpr::Begin { body, .. } => qualified_ref_seq(body, takeover, shadowed, face, table),
+        CoreExpr::Do { body, .. } => qualified_ref_seq(body, takeover, shadowed, face, table),
         CoreExpr::Require { .. } | CoreExpr::Literal { .. } => None,
         CoreExpr::Perform { effect, .. } => {
             qualified_ref_diag(effect, takeover, shadowed, face, table)
@@ -1425,7 +1425,7 @@ fn qualified_ref_diag(
     }
 }
 
-/// 序列臂助手（Begin/Module 体——同 verify_refs 形态；遮蔽集透传）。
+/// 序列臂助手（Do/Module 体——同 verify_refs 形态；遮蔽集透传）。
 fn qualified_ref_seq(
     body: &[Rc<CoreExpr>],
     takeover: &std::collections::HashSet<String>,
@@ -2165,7 +2165,7 @@ fn is_prelude_form(e: &CoreExpr) -> bool {
     matches!(
         e,
         CoreExpr::Define { .. }
-            | CoreExpr::SetBang { .. }
+            | CoreExpr::Assign { .. }
             | CoreExpr::Module { .. }
             | CoreExpr::Require { .. }
     )
@@ -2363,7 +2363,7 @@ mod tests {
             let (front, _hit) = compile_front_cached(src, "t.krf").expect("编译失败");
             let after = crate::bootstrap_expander::is_loaded();
             let has_expansion_mark = front.core.iter().any(|e| match e.as_ref() {
-                CoreExpr::Begin { span, .. } => span.expansion_id >= 1,
+                CoreExpr::Do { span, .. } => span.expansion_id >= 1,
                 _ => false,
             });
             (!before, after, has_expansion_mark)

@@ -582,7 +582,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: None,
         // r30（48-d）：FFI 编译面收窄（非字面量实参拒绝）
-        src: "(FFI lowering：VarRef 实参)",
+        src: "(FFI lowering：Var 实参)",
         expect: Expect::Custom(probe_r30_ffi_lowering_narrowed),
     },
     Case {
@@ -1099,11 +1099,11 @@ fn probe_r29_positioning() -> CaseResult {
 }
 
 /// E06（r30/51-a 修复面）：FFI 编译面收窄——语言面形式 Stage 3 前
-/// 实参仅支持字面量子集（VarRef 实参 → CompileError「仅支持字面量」）。
+/// 实参仅支持字面量子集（Var 实参 → CompileError「仅支持字面量」）。
 fn probe_r30_ffi_lowering_narrowed() -> CaseResult {
     let mut st = SymbolTable::new();
     let sym = st.intern("write_stdout");
-    let var_ref = CoreExpr::VarRef {
+    let var_ref = CoreExpr::Var {
         name: st.intern("x"),
         scopes: ScopeSet::new(),
         span: Span::dummy(),

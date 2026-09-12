@@ -385,7 +385,7 @@ fn t1_regression_global_storage_semantics() {
     assert!(dual_path_agrees("(assign y 1)"));
 }
 
-/// T1 回归：App 求值顺序（06 §2 A1 函数先——Task 16 修复面，5 case）。
+/// T1 回归：Apply 求值顺序（06 §2 A1 函数先——Task 16 修复面，5 case）。
 #[test]
 fn t1_regression_app_evaluation_order() {
     // fn 位未绑定先于参数位报错（span 判定见 vm_tests 同名测试）

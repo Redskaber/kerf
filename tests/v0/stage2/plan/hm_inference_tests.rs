@@ -9,7 +9,7 @@
 //!   ①用户 fn 实参类型错；②car/cdr 元素类型（Pair(τ,τ) 构造子）；
 //!   ③分支分歧；④递归函数体内元数/域错；
 //! - **裁定负例**：occurs check（含自应用）≥3 + 值限制（assign 目标 /
-//!   App 结果不泛化）≥2 + 多错误 Span 序。
+//!   Apply 结果不泛化）≥2 + 多错误 Span 序。
 //!
 //! **旗标期口径（D8 阶段 2——r29 / 50-a / MUV 48-c）**：`kerf check`
 //! 生产判定面已切换为 `hm_check_program`（driver.rs 两入口）——本套件
@@ -289,7 +289,7 @@ fn occurs_check_negatives() {
 
 #[test]
 fn value_restriction_negatives() {
-    // ① App 结果不泛化：head 的元素类型 Mono 共享——两用点异型报错
+    // ① Apply 结果不泛化：head 的元素类型 Mono 共享——两用点异型报错
     assert_diag(
         "(define f (head (cons (fn (x) x) nil))) (f 1) (f true)",
         "类型不一致",
@@ -304,12 +304,12 @@ fn value_restriction_negatives() {
 }
 
 // ---------------------------------------------------------------------------
-// D6 泛化载体：let 形状（App-of-Lambda 识别——用户手写同形同待遇）
+// D6 泛化载体：let 形状（Apply-of-Fn 识别——用户手写同形同待遇）
 // ---------------------------------------------------------------------------
 
 #[test]
 fn let_shape_generalization() {
-    // 表面 let 糖（脱装为 App-of-Lambda）与用户手写同待遇
+    // 表面 let 糖（脱装为 Apply-of-Fn）与用户手写同待遇
     assert_clean("(let ((id (fn (x) x))) (+ (id 1) (id 2)))");
     assert_clean("((fn (id) (+ (id 1) (id 2))) (fn (x) x))");
     // 泛化实例化：let 绑定的 id 在 Int/Bool 两域用点均合法

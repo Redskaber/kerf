@@ -30,18 +30,18 @@ pub(crate) fn expand_core_form(
     ctx: &mut ExpandCtxt,
 ) -> Result<Rc<CoreExpr>, ExpandError> {
     match kw {
-        Keyword::Lambda => expand_lambda(stx, items, ctx),
+        Keyword::Fn => expand_lambda(stx, items, ctx),
         Keyword::If => expand_if(stx, items, ctx),
-        Keyword::SetBang => expand_setbang(stx, items, ctx),
+        Keyword::Assign => expand_setbang(stx, items, ctx),
         Keyword::Define => expand_define(stx, items, ctx),
-        Keyword::Begin => expand_begin(stx, items, ctx, true),
+        Keyword::Do => expand_begin(stx, items, ctx, true),
         Keyword::Module => expand_module(stx, items, ctx),
         Keyword::Require => expand_require(stx, items, ctx),
         Keyword::Quote => expand_quote(stx, items, ctx),
         Keyword::Perform => expand_perform(stx, items, ctx),
         Keyword::Handle => expand_handle(stx, items, ctx),
         // D4（effect-language-design）：resume 非独立原语——展开期脱糖为
-        // `(κ v)` App（continuation 值的调用形态，复用调用机制）
+        // `(κ v)` Apply（continuation 值的调用形态，复用调用机制）
         Keyword::Resume => expand_resume(stx, items, ctx),
         Keyword::Import | Keyword::Export => Err(ExpandError::new(
             "import/export 只能出现在 module 形式内部",
@@ -99,7 +99,7 @@ fn expand_lambda(
     let params = parse_params(&param_stx)?;
     let (names, param_scopes): (Vec<_>, Vec<_>) = params.into_iter().unzip();
     let body = expand_body(&body_forms, ctx)?;
-    Ok(Rc::new(CoreExpr::Lambda {
+    Ok(Rc::new(CoreExpr::Fn {
         params: names,
         param_scopes,
         body,
@@ -197,7 +197,7 @@ fn expand_body(forms: &[Stx], ctx: &mut ExpandCtxt) -> Result<Rc<CoreExpr>, Expa
     body_forms.extend(forms[rest_idx..].iter().cloned());
     // ((lambda (names...) body...) nil...)——体形式直接铺平为 lambda 尾部
     let mut lambda_items: Vec<Stx> = vec![
-        keyword_stx(ctx, Keyword::Lambda),
+        keyword_stx(ctx, Keyword::Fn),
         Stx::list(
             names
                 .iter()
@@ -223,7 +223,7 @@ fn wrap_body(exprs: Vec<Rc<CoreExpr>>, forms: &[Stx]) -> Rc<CoreExpr> {
     if exprs.len() == 1 {
         return exprs.into_iter().next().expect("单个元素");
     }
-    Rc::new(CoreExpr::Begin { body: exprs, span })
+    Rc::new(CoreExpr::Do { body: exprs, span })
 }
 
 fn expand_if(stx: &Stx, items: &[Stx], ctx: &mut ExpandCtxt) -> Result<Rc<CoreExpr>, ExpandError> {
@@ -264,7 +264,7 @@ fn expand_setbang(
         .as_symbol()
         .ok_or_else(|| ExpandError::new("assign 目标必须是符号", items[1].span))?;
     let value = expand_form(&items[2], ctx)?;
-    Ok(Rc::new(CoreExpr::SetBang {
+    Ok(Rc::new(CoreExpr::Assign {
         name,
         scopes: items[1].scopes.clone(),
         value,
@@ -287,7 +287,7 @@ fn expand_define(
     if let Some(flist) = items[1].datum.as_list() {
         if let Some(fname) = flist.first().and_then(|f| f.datum.as_symbol()) {
             let mut lambda_items: Vec<Stx> = vec![
-                keyword_stx(ctx, Keyword::Lambda),
+                keyword_stx(ctx, Keyword::Fn),
                 Stx::list(flist[1..].to_vec(), stx.span, ScopeSet::new()),
             ];
             lambda_items.extend(items[2..].iter().cloned());
@@ -333,14 +333,14 @@ fn expand_begin(
     _toplevel: bool,
 ) -> Result<Rc<CoreExpr>, ExpandError> {
     if items.len() < 2 {
-        return Ok(Rc::new(CoreExpr::Begin {
+        return Ok(Rc::new(CoreExpr::Do {
             body: vec![],
             span: stx.span,
         }));
     }
     let body: Result<Vec<Rc<CoreExpr>>, _> =
         items[1..].iter().map(|f| expand_form(f, ctx)).collect();
-    Ok(Rc::new(CoreExpr::Begin {
+    Ok(Rc::new(CoreExpr::Do {
         body: body?,
         span: stx.span,
     }))
@@ -624,7 +624,7 @@ fn define_value_stx(def: &Stx, ctx: &ExpandCtxt) -> Result<Stx, ExpandError> {
             ));
         }
         let mut lambda_items: Vec<Stx> = vec![
-            keyword_stx(ctx, Keyword::Lambda),
+            keyword_stx(ctx, Keyword::Fn),
             Stx::list(flist[1..].to_vec(), items[1].span, ScopeSet::new()),
         ];
         lambda_items.extend(items[2..].iter().cloned());
@@ -641,7 +641,7 @@ fn define_value_stx(def: &Stx, ctx: &ExpandCtxt) -> Result<Stx, ExpandError> {
 
 /// `(perform ⟨effect-value⟩)`（r25/42-f——effect-language-design §2.1 R10）。
 ///
-/// 效应值先求值（App 序——求值顺序契约 06 §1.3 A1 不变）；结果须为
+/// 效应值先求值（Apply 序——求值顺序契约 06 §1.3 A1 不变）；结果须为
 /// `(tag . payload)` 点对（tag = Symbol 分派键——运行时校验，非展开期）。
 /// 控制转移非值归约：resume 后值由恢复点注入。
 fn expand_perform(
@@ -664,7 +664,7 @@ fn expand_perform(
 
 /// `(handle ⟨tag⟩ ((⟨payload-var⟩ ⟨resume-var⟩) ⟨result-expr⟩) ⟨body⟩)`
 /// （R11——浅处理单子句，D2/D3）。两绑定器 fresh scope 深注入（TD-004
-/// 口径，与 Lambda 同型：注入绑定器符号与 handler 体；body 不注入
+/// 口径，与 Fn 同型：注入绑定器符号与 handler 体；body 不注入
 /// ——p/r 的作用域仅覆盖处理子句）。body 恒单表达式（设计语法单形）。
 fn expand_handle(
     stx: &Stx,
@@ -753,7 +753,7 @@ fn expand_handle(
     }))
 }
 
-/// `(resume κ v)` → `(κ v)` App（D4：continuation 值的调用形态——脱糖，
+/// `(resume κ v)` → `(κ v)` Apply（D4：continuation 值的调用形态——脱糖，
 /// 复用调用机制；编译/运行时零特设路径）。
 fn expand_resume(
     stx: &Stx,
@@ -768,7 +768,7 @@ fn expand_resume(
     }
     let fn_expr = crate::expander::expand_form(&items[1], ctx)?;
     let arg = crate::expander::expand_form(&items[2], ctx)?;
-    Ok(Rc::new(CoreExpr::App {
+    Ok(Rc::new(CoreExpr::Apply {
         fn_expr,
         args: vec![arg],
         span: stx.span,

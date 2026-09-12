@@ -72,7 +72,7 @@ impl CodeValue {
         if (self.root as usize) >= self.ir.len() {
             return false;
         }
-        // 图内自由引用（尊重 Lambda/Define 绑定屏蔽）必须与 free_vars 声明一致
+        // 图内自由引用（尊重 Fn/Define 绑定屏蔽）必须与 free_vars 声明一致
         let refs = free_refs_of_graph(&self.ir, self.root);
         refs.len() == self.free_vars.len() && refs.iter().all(|r| self.free_vars.contains(r))
     }
@@ -99,7 +99,7 @@ impl CodeValue {
     /// 不可变 α 重命名：`from` → `to`（返回新 CodeValue）。
     pub fn alpha_rename(&self, from: Symbol, to: Symbol) -> CodeValue {
         let ir = self.ir.map_nodes(|_id, node| match node {
-            crate::ir::IrNode::VarRef(name) if *name == from => crate::ir::IrNode::VarRef(to),
+            crate::ir::IrNode::Var(name) if *name == from => crate::ir::IrNode::Var(to),
             other => other.clone(),
         });
         let free_vars = self
@@ -136,14 +136,14 @@ fn collect_var_refs(ir: &IrGraph, root: NodeId, out: &mut Vec<Symbol>) {
     let mut stack = vec![root];
     while let Some(id) = stack.pop() {
         match ir.get_node(id) {
-            IrNode::VarRef(s) => {
+            IrNode::Var(s) => {
                 if !out.contains(s) {
                     out.push(*s);
                 }
             }
             IrNode::Literal(_) => {}
-            IrNode::Lambda { body, .. } => stack.push(*body),
-            IrNode::App { callee, args } => {
+            IrNode::Fn { body, .. } => stack.push(*body),
+            IrNode::Apply { callee, args } => {
                 stack.push(*callee);
                 stack.extend(args.iter().copied());
             }
@@ -156,10 +156,8 @@ fn collect_var_refs(ir: &IrGraph, root: NodeId, out: &mut Vec<Symbol>) {
                 stack.push(*then_branch);
                 stack.push(*else_branch);
             }
-            IrNode::SetBang { value, .. } | IrNode::Define { value, .. } => stack.push(*value),
-            IrNode::Begin { body } | IrNode::Module { body, .. } => {
-                stack.extend(body.iter().copied())
-            }
+            IrNode::Assign { value, .. } | IrNode::Define { value, .. } => stack.push(*value),
+            IrNode::Do { body } | IrNode::Module { body, .. } => stack.extend(body.iter().copied()),
             IrNode::Perform { effect } => stack.push(*effect),
             IrNode::Handle {
                 handler_body, body, ..
@@ -177,20 +175,20 @@ fn recompute_free(ir: &IrGraph, root: NodeId) -> Vec<Symbol> {
     refs
 }
 
-/// 绑定感知的自由引用计算（Lambda 参数屏蔽；Define 引入绑定）。
+/// 绑定感知的自由引用计算（Fn 参数屏蔽；Define 引入绑定）。
 fn free_refs_of_graph(ir: &IrGraph, root: NodeId) -> Vec<Symbol> {
     use crate::ir::IrNode;
     let mut out: Vec<Symbol> = Vec::new();
     let mut bound: Vec<Symbol> = Vec::new();
     fn walk(ir: &IrGraph, id: NodeId, bound: &mut Vec<Symbol>, out: &mut Vec<Symbol>) {
         match ir.get_node(id) {
-            IrNode::VarRef(s) => {
+            IrNode::Var(s) => {
                 if !bound.contains(s) && !out.contains(s) {
                     out.push(*s);
                 }
             }
             IrNode::Literal(_) => {}
-            IrNode::Lambda { params, body } => {
+            IrNode::Fn { params, body } => {
                 let pushed = params.iter().filter(|p| !bound.contains(p)).count();
                 bound.extend(params.iter().copied());
                 walk(ir, *body, bound, out);
@@ -198,7 +196,7 @@ fn free_refs_of_graph(ir: &IrGraph, root: NodeId) -> Vec<Symbol> {
                     bound.pop();
                 }
             }
-            IrNode::App { callee, args } => {
+            IrNode::Apply { callee, args } => {
                 walk(ir, *callee, bound, out);
                 for a in args {
                     walk(ir, *a, bound, out);
@@ -213,13 +211,13 @@ fn free_refs_of_graph(ir: &IrGraph, root: NodeId) -> Vec<Symbol> {
                 walk(ir, *then_branch, bound, out);
                 walk(ir, *else_branch, bound, out);
             }
-            IrNode::SetBang { name, value } | IrNode::Define { name, value } => {
+            IrNode::Assign { name, value } | IrNode::Define { name, value } => {
                 walk(ir, *value, bound, out);
                 if !bound.contains(name) {
                     bound.push(*name);
                 }
             }
-            IrNode::Begin { body } | IrNode::Module { body, .. } => {
+            IrNode::Do { body } | IrNode::Module { body, .. } => {
                 for b in body {
                     walk(ir, *b, bound, out);
                 }
@@ -232,7 +230,7 @@ fn free_refs_of_graph(ir: &IrGraph, root: NodeId) -> Vec<Symbol> {
                 body,
                 ..
             } => {
-                // 两绑定器屏蔽（与 Lambda 同型）
+                // 两绑定器屏蔽（与 Fn 同型）
                 let pushed = [payload_var, resume_var]
                     .iter()
                     .filter(|p| !bound.contains(p))
@@ -258,7 +256,7 @@ mod tests {
     use std::rc::Rc;
 
     fn var(n: u32) -> CoreExpr {
-        CoreExpr::VarRef {
+        CoreExpr::Var {
             name: Symbol(n),
             scopes: ScopeSet::new(),
             span: Span::dummy(),
@@ -266,7 +264,7 @@ mod tests {
     }
 
     fn lam(param: u32, body: CoreExpr) -> CoreExpr {
-        CoreExpr::Lambda {
+        CoreExpr::Fn {
             params: vec![Symbol(param)],
             param_scopes: vec![ScopeSet::new()],
             body: Rc::new(body),
@@ -275,7 +273,7 @@ mod tests {
     }
 
     fn app(f: CoreExpr, arg: CoreExpr) -> CoreExpr {
-        CoreExpr::App {
+        CoreExpr::Apply {
             fn_expr: Rc::new(f),
             args: vec![Rc::new(arg)],
             span: Span::dummy(),

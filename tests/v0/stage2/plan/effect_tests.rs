@@ -50,7 +50,7 @@ fn effect_resume_env_consistency() {
     );
 }
 
-/// 锚 5：效应值先求值序（App 序契约 06 §1.3 A1——效应值表达式在 PERFORM
+/// 锚 5：效应值先求值序（Apply 序契约 06 §1.3 A1——效应值表达式在 PERFORM
 /// 之前完整求值；序经计数器副作用可观测）。
 #[test]
 fn effect_value_eval_order() {

@@ -6,12 +6,12 @@
 //! （值上下文 if 经块参数 merge——QBE phi 的显式等价物）。
 //!
 //! **PoC 边界裁定（B1 登记——批次 G 范围声明）**：
-//! - 支持：整数域字面量 / VarRef（函数形参）/ 算术与比较原语十项
+//! - 支持：整数域字面量 / Var（函数形参）/ 算术与比较原语十项
 //!   （`+ - * / mod = < > <= >=`）+ `not` + `eq`（整数域视作 `=`）/
-//!   App（被调者为顶层 `define` 函数的直接调用，含静态 arity 校验）/
-//!   If（含值上下文——块参数 merge）/ Begin / 顶层 `define`（值必须为
-//!   Lambda）/ Require（零运行时语义——跳过，与 VM 字节码口径一致）；
-//! - 边界外（明确错误，非静默降级）：Lambda 出现在值位置（闭包捕获未
+//!   Apply（被调者为顶层 `define` 函数的直接调用，含静态 arity 校验）/
+//!   If（含值上下文——块参数 merge）/ Do / 顶层 `define`（值必须为
+//!   Fn）/ Require（零运行时语义——跳过，与 VM 字节码口径一致）；
+//! - 边界外（明确错误，非静默降级）：Fn 出现在值位置（闭包捕获未
 //!   进 PoC——语言面全闭包语义由批次 H/I 的 GC-后端协同承接）/
 //!   Float/Str/Symbol/Pair/Bool/Nil 字面量 / `set!` / `module` /
 //!   未定义函数调用 / arity 不匹配 / 函数值一等传递。
@@ -350,7 +350,7 @@ pub fn lower_program(
     for e in exprs {
         match e.as_ref() {
             CoreExpr::Define { name, value, .. } => {
-                if let CoreExpr::Lambda {
+                if let CoreExpr::Fn {
                     params, body, span, ..
                 } = value.as_ref()
                 {
@@ -392,7 +392,7 @@ pub fn lower_program(
 /// define 值的形参数（非 lambda → None）。
 fn lambda_arity(value: &CoreExpr) -> Option<usize> {
     match value {
-        CoreExpr::Lambda { params, .. } => Some(params.len()),
+        CoreExpr::Fn { params, .. } => Some(params.len()),
         _ => None,
     }
 }
@@ -500,7 +500,7 @@ fn lower_atom(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<AAtom, LowerError
                 e.span(),
             )),
         },
-        CoreExpr::VarRef { name, .. } => {
+        CoreExpr::Var { name, .. } => {
             if let Some(t) = ctx.lookup(*name) {
                 Ok(AAtom::Var(t))
             } else if ctx.globals.names.contains_key(name) {
@@ -522,20 +522,20 @@ fn lower_atom(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<AAtom, LowerError
             let t = lower_value_if(ctx, e)?;
             Ok(AAtom::Var(t))
         }
-        CoreExpr::App { .. } => {
+        CoreExpr::Apply { .. } => {
             let t = lower_call(ctx, e)?;
             Ok(AAtom::Var(t))
         }
-        CoreExpr::Begin { .. } => {
+        CoreExpr::Do { .. } => {
             let t = lower_begin_value(ctx, e)?;
             Ok(AAtom::Var(t))
         }
-        CoreExpr::Lambda { span, .. } => Err(LowerError::new(
+        CoreExpr::Fn { span, .. } => Err(LowerError::new(
             "本地码 PoC 边界：lambda 出现在值位置（闭包捕获未进 PoC——\
              语言面闭包语义由后续批次的 GC-后端协同承接）",
             *span,
         )),
-        CoreExpr::SetBang { span, .. } => Err(LowerError::new(
+        CoreExpr::Assign { span, .. } => Err(LowerError::new(
             "本地码 PoC 边界：assign（可变赋值）未进 PoC",
             *span,
         )),
@@ -597,7 +597,7 @@ fn lower_tail(ctx: &mut LowerCtxt<'_>, e: &CoreExpr, tctx: TailCtx) -> Result<AA
                 ctx.start_block(Vec::new());
                 lower_tail(ctx, else_branch, TailCtx::BodyTail)?;
                 Ok(AAtom::Int(0)) // 不可达载荷（两分支均已终结）
-            } else if let CoreExpr::Begin { body, .. } = e {
+            } else if let CoreExpr::Do { body, .. } = e {
                 // 尾位 begin：逐值丢弃 + 尾递归（BodyTail 契约传递）
                 lower_begin_tail(ctx, body)
             } else {
@@ -698,18 +698,18 @@ fn lower_value_if(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<ATemp, LowerE
     Ok(result)
 }
 
-/// App lowering（调用——被调者必须为 VarRef 命中全局函数或原语）。
+/// Apply lowering（调用——被调者必须为 Var 命中全局函数或原语）。
 fn lower_call(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<ATemp, LowerError> {
-    let CoreExpr::App {
+    let CoreExpr::Apply {
         fn_expr,
         args,
         span,
     } = e
     else {
-        unreachable!("调用点已匹配 App");
+        unreachable!("调用点已匹配 Apply");
     };
-    // 被调者形状：VarRef（直接调用/原语）——其余（lambda 直接应用等）边界外
-    let CoreExpr::VarRef { name, .. } = fn_expr.as_ref() else {
+    // 被调者形状：Var（直接调用/原语）——其余（lambda 直接应用等）边界外
+    let CoreExpr::Var { name, .. } = fn_expr.as_ref() else {
         return Err(LowerError::new(
             "本地码 PoC 边界：被调者必须是函数名（直接调用）——\
              计算出的函数值未支持",
@@ -780,10 +780,10 @@ fn lower_call(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<ATemp, LowerError
     ))
 }
 
-/// 值上下文 Begin（中间值丢弃，尾值返回）。
+/// 值上下文 Do（中间值丢弃，尾值返回）。
 fn lower_begin_value(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<ATemp, LowerError> {
-    let CoreExpr::Begin { body, .. } = e else {
-        unreachable!("调用点已匹配 Begin");
+    let CoreExpr::Do { body, .. } = e else {
+        unreachable!("调用点已匹配 Do");
     };
     if body.is_empty() {
         return Err(LowerError::new(
@@ -800,7 +800,7 @@ fn lower_begin_value(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<ATemp, Low
     unreachable!("空 begin 已拒绝")
 }
 
-/// 尾位 Begin（丢弃中间值 + 尾递归）。
+/// 尾位 Do（丢弃中间值 + 尾递归）。
 fn lower_begin_tail(ctx: &mut LowerCtxt<'_>, body: &[Rc<CoreExpr>]) -> Result<AAtom, LowerError> {
     if body.is_empty() {
         return Err(LowerError::new(

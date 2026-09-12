@@ -27,11 +27,11 @@ pub type NodeId = u32;
 /// IR 节点（§8.2 `IRNode`；每节点元信息见 `NodeMetadata` 平行表）。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IrNode {
-    Lambda {
+    Fn {
         params: Vec<Symbol>,
         body: NodeId,
     },
-    App {
+    Apply {
         callee: NodeId,
         args: Vec<NodeId>,
     },
@@ -40,9 +40,9 @@ pub enum IrNode {
         then_branch: NodeId,
         else_branch: NodeId,
     },
-    VarRef(Symbol),
+    Var(Symbol),
     Literal(LiteralKey),
-    SetBang {
+    Assign {
         name: Symbol,
         value: NodeId,
     },
@@ -50,7 +50,7 @@ pub enum IrNode {
         name: Symbol,
         value: NodeId,
     },
-    Begin {
+    Do {
         body: Vec<NodeId>,
     },
     Module {
@@ -64,7 +64,7 @@ pub enum IrNode {
         effect: NodeId,
     },
     /// 效应处理（浅处理——两绑定器 payload/resume 引入 fresh scope
-    /// 作用域，与 Lambda 同型；tag 为符号字面量同型 `Rc<str>`）。
+    /// 作用域，与 Fn 同型；tag 为符号字面量同型 `Rc<str>`）。
     Handle {
         tag: Rc<str>,
         payload_var: Symbol,
@@ -184,7 +184,7 @@ impl IrGraph {
     }
 
     /// 不可变变换：按函数映射节点（返回新图，元信息保留）。
-    /// Lambda/App 等子节点 ID 不自动重写——调用方负责映射一致性（Stage 0 约定）。
+    /// Fn/Apply 等子节点 ID 不自动重写——调用方负责映射一致性（Stage 0 约定）。
     pub fn map_nodes(&self, f: impl Fn(NodeId, &IrNode) -> IrNode) -> IrGraph {
         let mut out = IrGraph {
             nodes: Vec::with_capacity(self.nodes.len()),
@@ -208,7 +208,7 @@ impl IrGraph {
         };
         for (id, node) in self.iter_nodes() {
             let mapped = match node {
-                IrNode::VarRef(name) if *name == var => self.get_node(replacement).clone(),
+                IrNode::Var(name) if *name == var => self.get_node(replacement).clone(),
                 other => other.clone(),
             };
             let nid = out.add_node(mapped, self.metadata[id as usize].clone());
@@ -241,26 +241,26 @@ fn lower_expr(graph: &mut IrGraph, e: &CoreExpr, scopes: &mut ScopeSet) -> NodeI
         CoreExpr::Literal { value, .. } => {
             graph.add_shared_literal(LiteralKey::from_value(value), meta)
         }
-        CoreExpr::VarRef { name, .. } => graph.add_node(IrNode::VarRef(*name), meta),
-        CoreExpr::Lambda { params, body, .. } => {
+        CoreExpr::Var { name, .. } => graph.add_node(IrNode::Var(*name), meta),
+        CoreExpr::Fn { params, body, .. } => {
             // 绑定引入新作用域（mark，§19.2 展开侧语义在 IR 侧的镜像）
             let scope = fresh_scope();
             scopes.add(scope);
             let body_id = lower_expr(graph, body, scopes);
             scopes.remove(scope);
             graph.add_node(
-                IrNode::Lambda {
+                IrNode::Fn {
                     params: params.clone(),
                     body: body_id,
                 },
                 meta,
             )
         }
-        CoreExpr::App { fn_expr, args, .. } => {
+        CoreExpr::Apply { fn_expr, args, .. } => {
             let callee = lower_expr(graph, fn_expr, scopes);
             let arg_ids: Vec<NodeId> = args.iter().map(|a| lower_expr(graph, a, scopes)).collect();
             graph.add_node(
-                IrNode::App {
+                IrNode::Apply {
                     callee,
                     args: arg_ids,
                 },
@@ -285,10 +285,10 @@ fn lower_expr(graph: &mut IrGraph, e: &CoreExpr, scopes: &mut ScopeSet) -> NodeI
                 meta,
             )
         }
-        CoreExpr::SetBang { name, value, .. } => {
+        CoreExpr::Assign { name, value, .. } => {
             let v = lower_expr(graph, value, scopes);
             graph.add_node(
-                IrNode::SetBang {
+                IrNode::Assign {
                     name: *name,
                     value: v,
                 },
@@ -305,9 +305,9 @@ fn lower_expr(graph: &mut IrGraph, e: &CoreExpr, scopes: &mut ScopeSet) -> NodeI
                 meta,
             )
         }
-        CoreExpr::Begin { body, .. } => {
+        CoreExpr::Do { body, .. } => {
             let ids: Vec<NodeId> = body.iter().map(|e| lower_expr(graph, e, scopes)).collect();
-            graph.add_node(IrNode::Begin { body: ids }, meta)
+            graph.add_node(IrNode::Do { body: ids }, meta)
         }
         CoreExpr::Module {
             name,
@@ -345,7 +345,7 @@ fn lower_expr(graph: &mut IrGraph, e: &CoreExpr, scopes: &mut ScopeSet) -> NodeI
             body,
             ..
         } => {
-            // 两绑定器 fresh scope（镜像 Lambda 的作用域语义——TD-004）
+            // 两绑定器 fresh scope（镜像 Fn 的作用域语义——TD-004）
             let scope = fresh_scope();
             scopes.add(scope);
             let h = lower_expr(graph, handler_body, scopes);
@@ -386,7 +386,7 @@ mod tests {
     #[test]
     fn shared_literal_dedup() {
         let exprs = vec![
-            Rc::new(CoreExpr::App {
+            Rc::new(CoreExpr::Apply {
                 fn_expr: lit(1),
                 args: vec![],
                 span: Span::dummy(),
@@ -401,7 +401,7 @@ mod tests {
         assert_eq!(shared.len(), 1);
         let shared2 = graph.find_shared(&LiteralKey::Int(2));
         assert_eq!(shared2.len(), 1);
-        // (2) 根数量完整；节点总数 = 1 App + 1 共享 Int(1) + 1 Int(2)
+        // (2) 根数量完整；节点总数 = 1 Apply + 1 共享 Int(1) + 1 Int(2)
         assert_eq!(graph.roots().len(), 4);
         assert_eq!(graph.len(), 3);
     }
@@ -409,12 +409,12 @@ mod tests {
     #[test]
     fn substitute_rewrites_var() {
         let exprs = vec![
-            Rc::new(CoreExpr::VarRef {
+            Rc::new(CoreExpr::Var {
                 name: Symbol(1),
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
             }),
-            Rc::new(CoreExpr::VarRef {
+            Rc::new(CoreExpr::Var {
                 name: Symbol(2),
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
@@ -422,11 +422,11 @@ mod tests {
         ];
         let graph = lower_program(&exprs);
         let graph2 = graph.substitute(Symbol(1), graph.roots()[1]);
-        // 替换后根 0 成为 VarRef(2)
+        // 替换后根 0 成为 Var(2)
         let root0 = graph2.roots()[0];
         match graph2.get_node(root0) {
-            IrNode::VarRef(s) => assert_eq!(*s, Symbol(2)),
-            other => panic!("期望 VarRef，实际 {:?}", other),
+            IrNode::Var(s) => assert_eq!(*s, Symbol(2)),
+            other => panic!("期望 Var，实际 {:?}", other),
         }
     }
 

@@ -175,7 +175,7 @@ pub fn expand_form(stx: &Stx, ctx: &mut ExpandCtxt) -> Result<Rc<CoreExpr>, Expa
             value: literal_from_stx(l),
             span: current.span,
         })),
-        StxDatum::Symbol(name) => Ok(Rc::new(CoreExpr::VarRef {
+        StxDatum::Symbol(name) => Ok(Rc::new(CoreExpr::Var {
             name: *name,
             scopes: current.scopes.clone(),
             span: current.span,
@@ -296,7 +296,7 @@ fn expand_list(
     for a in &items[1..] {
         args.push(expand_form(a, ctx)?);
     }
-    Ok(Rc::new(CoreExpr::App {
+    Ok(Rc::new(CoreExpr::Apply {
         fn_expr,
         args,
         span: stx.span,
@@ -333,10 +333,10 @@ pub(crate) fn init_keywords(table: &mut SymbolTable) {
         Keyword,
         &'static std::thread::LocalKey<std::cell::RefCell<Symbol>>,
     )> = vec![
-        (Keyword::Lambda, &WORD_LAMBDA),
-        (Keyword::SetBang, &WORD_SETBANG),
+        (Keyword::Fn, &WORD_LAMBDA),
+        (Keyword::Assign, &WORD_SETBANG),
         (Keyword::If, &WORD_IF),
-        (Keyword::Begin, &WORD_BEGIN),
+        (Keyword::Do, &WORD_BEGIN),
         (Keyword::Let, &WORD_LET),
         (Keyword::LetRec, &WORD_LETREC),
         (Keyword::Else, &WORD_ELSE),

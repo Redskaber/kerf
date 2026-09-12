@@ -10,14 +10,14 @@
 //!
 //! **裁定落地索引**（hm-inference-design.md §8）：
 //! - D2 值限制：泛化仅限语法值（lambda/字面量/变量引用）；set! 目标与
-//!   App 结果弱单态；
+//!   Apply 结果弱单态；
 //! - D3 set! join：具体类型格合并（Int|Float→Num；异型→Dynamic——零
 //!   误报）；变元目标（letrec 预置）首次赋值走合一；
 //! - D4 递归预置：顶层 define + letrec 展开形双特判——绑定名预置 fresh
 //!   变元，体内自引用与其合一（递归元数/域错可检出）；lambda-RHS 检查
 //!   完成后泛化；
 //! - D5 occurs check：必备、错误级、双端渲染；
-//! - D6 双点泛化：顶层 define 序 + let 形状（App-of-Lambda 识别——
+//! - D6 双点泛化：顶层 define 序 + let 形状（Apply-of-Fn 识别——
 //!   用户手写同形同待遇）；
 //! - D7 诊断：E0005 族 + 约束携带 Span + 形式级收集桶（P1-3 隔离）+
 //!   生成期 512 深度预算（超限零约束零诊断——与 A6 等价）；
@@ -92,7 +92,7 @@ impl Ty {
 /// 环境绑定形态（D2 值限制的载体）。
 #[derive(Debug, Clone)]
 enum Binding {
-    /// 弱单态（set! 目标 / App 结果 / letrec 预置期）——逐用点共享同一实例。
+    /// 弱单态（set! 目标 / Apply 结果 / letrec 预置期）——逐用点共享同一实例。
     Mono(Rc<Ty>),
     /// 泛化 scheme：quants 内变元在每次引用时 fresh 实例化。
     Poly { quants: Vec<u32>, body: Rc<Ty> },
@@ -362,7 +362,7 @@ fn zonk(st: &SolveState, t: &Rc<Ty>) -> Rc<Ty> {
 fn is_syntactic_value(e: &CoreExpr) -> bool {
     matches!(
         e,
-        CoreExpr::Literal { .. } | CoreExpr::Lambda { .. } | CoreExpr::VarRef { .. }
+        CoreExpr::Literal { .. } | CoreExpr::Fn { .. } | CoreExpr::Var { .. }
     )
 }
 
@@ -493,7 +493,7 @@ impl<'a> Gen<'a> {
         }
         match e.as_ref() {
             CoreExpr::Literal { value, .. } => Rc::new(literal_ty(value)),
-            CoreExpr::VarRef { name, .. } => {
+            CoreExpr::Var { name, .. } => {
                 let hit = self.env.get(name).cloned();
                 match hit {
                     Some(b) => self.instantiate(&b),
@@ -502,7 +502,7 @@ impl<'a> Gen<'a> {
                     None => Rc::new(Ty::Dynamic),
                 }
             }
-            CoreExpr::Lambda { params, body, .. } => {
+            CoreExpr::Fn { params, body, .. } => {
                 // 形参 fresh 变元（Mono）+ 体推断 → Arrow
                 let mut param_tys = Vec::with_capacity(params.len());
                 for p in params {
@@ -520,7 +520,7 @@ impl<'a> Gen<'a> {
                     ret,
                 })
             }
-            CoreExpr::App { fn_expr, args, .. } => self.infer_app(fn_expr, args, e, depth + 1),
+            CoreExpr::Apply { fn_expr, args, .. } => self.infer_app(fn_expr, args, e, depth + 1),
             CoreExpr::If {
                 cond,
                 then_branch,
@@ -557,7 +557,7 @@ impl<'a> Gen<'a> {
                     _ => lattice_join(&self.st, &tt, &te),
                 }
             }
-            CoreExpr::SetBang { name, value, .. } => {
+            CoreExpr::Assign { name, value, .. } => {
                 // D3 set!：变元目标（letrec/递归预置）→ 合一（D4 统一机制）；
                 // 具体目标 → 格 join（保守契约——赋值面零误报）；Poly 目标
                 // → 弱单态化（D2——set! 目标永久不泛化）
@@ -588,7 +588,7 @@ impl<'a> Gen<'a> {
                 }
                 Rc::new(Ty::Dynamic)
             }
-            CoreExpr::Begin { body, .. } => {
+            CoreExpr::Do { body, .. } => {
                 // 体首 define 提升形态（展开器产物）与顶层同构（C7：
                 // 两路径同点泛化）
                 let mut last = Rc::new(Ty::Nil);
@@ -605,7 +605,7 @@ impl<'a> Gen<'a> {
                 last
             }
             CoreExpr::Define { .. } => {
-                // 表达式位置的 define（Begin/Module 内）——走形式语义
+                // 表达式位置的 define（Do/Module 内）——走形式语义
                 self.infer_form(e, depth);
                 Rc::new(Ty::Dynamic)
             }
@@ -621,7 +621,7 @@ impl<'a> Gen<'a> {
             }
             // Handle 绑定器装订（与 infer_let save/restore 同型——纪律
             // 镜像）：payload = dispatch 注入的动态值 → Dynamic；resume =
-            // continuation 调用形态（D4 展开期脱糖为 App——App 头
+            // continuation 调用形态（D4 展开期脱糖为 Apply——Apply 头
             // Dynamic 保守零诊断，A4 纪律同源）→ Dynamic
             CoreExpr::Handle {
                 payload_var,
@@ -651,7 +651,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Begin/Module 内项：define 走形式（含预置/泛化）；其余走表达式。
+    /// Do/Module 内项：define 走形式（含预置/泛化）；其余走表达式。
     fn infer_form_value(&mut self, item: &Rc<CoreExpr>, depth: usize) -> Rc<Ty> {
         if matches!(item.as_ref(), CoreExpr::Define { .. }) {
             self.infer_form(item, depth);
@@ -668,24 +668,24 @@ impl<'a> Gen<'a> {
         app: &Rc<CoreExpr>,
         depth: usize,
     ) -> Rc<Ty> {
-        // ---- letrec 形状识别（D4：App[Lambda, nil] + 体首 SetBang 群） ----
-        if let CoreExpr::Lambda { params, body, .. } = fn_expr.as_ref() {
-            if let CoreExpr::Begin { body: items, .. } = body.as_ref() {
-                // 体首 SetBang 群（全部作用于形参 = letrec 展开形——
+        // ---- letrec 形状识别（D4：Apply[Fn, nil] + 体首 Assign 群） ----
+        if let CoreExpr::Fn { params, body, .. } = fn_expr.as_ref() {
+            if let CoreExpr::Do { body: items, .. } = body.as_ref() {
+                // 体首 Assign 群（全部作用于形参 = letrec 展开形——
                 // sugar.rs desugar_letrec 实况核对：((lambda (f...)
                 // (begin (set! f e)... body...)) nil...)
                 let mut leading_sets: Vec<(Symbol, Rc<CoreExpr>)> = Vec::new();
                 let mut all_params = true;
                 for it in items {
                     match it.as_ref() {
-                        CoreExpr::SetBang { name, value, .. } => {
+                        CoreExpr::Assign { name, value, .. } => {
                             if params.contains(name) {
                                 leading_sets.push((*name, value.clone()));
                             } else {
                                 all_params = false;
                             }
                         }
-                        // 扫描窗口终止：非 SetBang 前导形式即停——
+                        // 扫描窗口终止：非 Assign 前导形式即停——
                         // letrec 前导 set! 序列探测仅覆盖连续头部
                         _ => break,
                     }
@@ -695,16 +695,16 @@ impl<'a> Gen<'a> {
                 }
             }
         }
-        // ---- let 形状（D6 ②：App[Lambda, args] 同参数数） ----
-        if let CoreExpr::Lambda { params, body, .. } = fn_expr.as_ref() {
+        // ---- let 形状（D6 ②：Apply[Fn, args] 同参数数） ----
+        if let CoreExpr::Fn { params, body, .. } = fn_expr.as_ref() {
             if params.len() == args.len() {
                 return self.infer_let(params, body, args, depth);
             }
         }
         // ---- 通用应用 ----
         let arg_tys: Vec<Rc<Ty>> = args.iter().map(|a| self.infer_expr(a, depth)).collect();
-        // builtin 快路径：应用头 = VarRef 且未被 env 遮蔽
-        if let CoreExpr::VarRef { name, .. } = fn_expr.as_ref() {
+        // builtin 快路径：应用头 = Var 且未被 env 遮蔽
+        if let CoreExpr::Var { name, .. } = fn_expr.as_ref() {
             if !self.env.contains_key(name) {
                 if let Some(sig) = self.builtins.get(name) {
                     return self.infer_builtin_call(name, sig, args, &arg_tys, app, depth);

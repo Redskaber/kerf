@@ -62,16 +62,16 @@ fn nested_closure_capture_descriptors() {
     // (fn (x) (fn (y) (x y)))——内层捕获 x
     let x = kerf_syntax::Symbol(1);
     let y = kerf_syntax::Symbol(2);
-    let inner = Rc::new(CoreExpr::Lambda {
+    let inner = Rc::new(CoreExpr::Fn {
         params: vec![y],
         param_scopes: vec![kerf_syntax::ScopeSet::new()],
-        body: Rc::new(CoreExpr::App {
-            fn_expr: Rc::new(CoreExpr::VarRef {
+        body: Rc::new(CoreExpr::Apply {
+            fn_expr: Rc::new(CoreExpr::Var {
                 name: x,
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: Default::default(),
             }),
-            args: vec![Rc::new(CoreExpr::VarRef {
+            args: vec![Rc::new(CoreExpr::Var {
                 name: y,
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: Default::default(),
@@ -80,7 +80,7 @@ fn nested_closure_capture_descriptors() {
         }),
         span: Default::default(),
     });
-    let outer = Rc::new(CoreExpr::Lambda {
+    let outer = Rc::new(CoreExpr::Fn {
         params: vec![x],
         param_scopes: vec![kerf_syntax::ScopeSet::new()],
         body: inner,
@@ -91,7 +91,7 @@ fn nested_closure_capture_descriptors() {
     assert_eq!(program.protos[2].capture_names, vec![x]);
 }
 
-/// 求值顺序契约：App 参数从左到右、被调者最后（§19.3/§19.5 不变式 3）。
+/// 求值顺序契约：Apply 参数从左到右、被调者最后（§19.3/§19.5 不变式 3）。
 #[test]
 fn app_evaluation_order() {
     let out = compile_via_driver("(f a b)");

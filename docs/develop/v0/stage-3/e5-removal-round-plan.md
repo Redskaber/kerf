@@ -1,9 +1,9 @@
 # E5 移除轮开窗设计与自举 parity 链保护方案
 
 > **Author**: kerf-dev-agent
-> **Date**: 2026-09-16（**v1.1——r43 / 64-c S2 候选修正**：驱动源 = 用户指令「关键字完全重筛——语义清晰/无二义/标准符合 + 2026 前沿 + 内循环迭代收敛」+ 22 §12 D19-D33 深审裁定[八查询实证 tool-results/r43-search/]——S2 载荷候选修正：`set!→set` 修正为 `set!→assign`（否决 set——名空间经济：集合构造 2026 标配占用[E0020 全域排他]）/ `begin→seq` 修正为 `begin→do`（否决 seq——Clojure seq 序列生态核心名占用 + 动词化[原则 29]）；lambda→fn 维持（Rust/Janet/Gleam 三家族 2026 共识）；「其余 22 名零变更」复核确认[22 §12.2 全表]）；2026-09-15（**v1.0 首版——r42 / 63-a E5 开窗设计轮交付**：驱动源 = 用户指令「按照 sop.md 继续推进任务」+ v0.5-roadmap v0.5.0 末行指针「下一步移除轮（与 E5 同窗——23 §2.2 触发表驱动）」）
+> **Date**: 2026-09-17（**v1.2——r44 / 65-b E5 S3 分臂实施记录**：驱动源 = 用户指令「内部关键字与暴露面一致性 + 自举桥同类问题重构[正确 > 妥协]」+ 22 §13 D34-D40 深审裁定[四套名面八处不一致——r43「三域零变更」被裁定为过度引申]——S3 行分臂：**r44 = M-R 名面臂**（五件变体重命名 Lambda→Fn/SetBang→Assign/Begin→Do/App→Apply/VarRef→Var + kind_name 12 名表 + 桥 tag 六改 + Keyword 枚举对齐——五面同词根，834:0:0）+ **r45+ = 结构臂**（Define 脱糖/Do→Let 链/Module 迁移/de Bruijn IR——字节码 parity 最严口径按臂适用）；SetBang 行精确化：M-E 不迁维持 + **M-R 纯重命名独立合法已落地**（D35 ②）；`If→Branch`/`Literal→Const` 两行 NO-GO[22 §13 D35 一致性判据]）；2026-09-16（**v1.1——r43 / 64-c S2 候选修正**：驱动源 = 用户指令「关键字完全重筛——语义清晰/无二义/标准符合 + 2026 前沿 + 内循环迭代收敛」+ 22 §12 D19-D33 深审裁定[八查询实证 tool-results/r43-search/]——S2 载荷候选修正：`set!→set` 修正为 `set!→assign`（否决 set——名空间经济：集合构造 2026 标配占用[E0020 全域排他]）/ `begin→seq` 修正为 `begin→do`（否决 seq——Clojure seq 序列生态核心名占用 + 动词化[原则 29]）；lambda→fn 维持（Rust/Janet/Gleam 三家族 2026 共识）；「其余 22 名零变更」复核确认[22 §12.2 全表]）；2026-09-15（**v1.0 首版——r42 / 63-a E5 开窗设计轮交付**：驱动源 = 用户指令「按照 sop.md 继续推进任务」+ v0.5-roadmap v0.5.0 末行指针「下一步移除轮（与 E5 同窗——23 §2.2 触发表驱动）」）
 > **Status**: Active（**E5 窗开启的设计载体**——入口信号④「自举 parity 链保护方案评审」的评审对象即本文件；实施跟踪 = 各腿 worklog）
-> **处理程度**：P2（设计规范 + 分步验收方案；实施本体分腿承载）｜ **所属 Stage**：Stage 3 入场序列末件（批次 L ✅ r38 → 批次 M ✅ r39-r41 → **移除轮 = E5 窗**）
+> **处理程度**：P2（设计规范 + 分步验收方案；实施本体分腿承载）｜ **所属 Stage**：Stage 3 入场序列末件（批次 L ✅ r38 → 批次 M ✅ r39-r41 → **移除轮 = E5 窗**：S1 ✅ r42 / S2 ✅ r43 / S3-M-R ✅ r44 / S3-结构 r45+ / S4 收口末轮）
 
 ---
 
@@ -15,7 +15,7 @@ E5 是 **Stage 3 一次性窗**（23 §2.1 六窗时间线第 4 窗），载荷 
 |---|---|---|---|
 | **S1 表面腿**（库表面） | 旧名 27 件移除（`BUILTIN_ALIASES` 旧名列全部退役）→ E0021 移除名错误（携现代名指引）；W1001 弃用族随之退役（错误已升 E 级）；W1003 宏名遮蔽警告落地（22 §11 D11 排期本窗）；`?`/`->` 词法域收紧（**可选——本轮裁定**：维持不收紧，见 §5.4）；全语料现代名终态（引导 .krf ×4 + 测试 + 示例） | [20 §7](../../../lang-design/20-surface-conventions.md) 移除轮行 + [20 §8](../../../lang-design/20-surface-conventions.md) 映射表 | N1 名面退役（M-R 类反向操作 = 移除） |
 | **S2 关键字腿**（N4 面） | 25 关键字中历史形态候选切换（`lambda→fn`、`set!→assign`、`begin→do`——**r43 / 64-c 修正后候选**[22 §12 D19-D21：否决原 set/seq 候选——名空间经济判据（集合/序列生态占用）+ assign/do 语义动词化]；其余关键字零变更[22 §12.2 D22-D27 全表复核]）+ Reader 关键字表 + expander 核心形式 + E0021 扩展至关键字旧名[D29] + 全语料关键字迁移 | [01 §7.2](../../../lang-design/01-core-forms.md) + [22 §2.1 N4](../../../lang-design/22-namespace-design.md)（N4 唯一变更通道 = E5 窗）+ [22 §12](../../../lang-design/22-namespace-design.md)（重筛裁定单源） | N4 名面切换（M-R） |
-| **S3 ADT 腿**（内部语法） | CoreExpr 结构重构：`Define` 脱糖（M-D 消除）/ `Begin→Let` 链（M-D + M-A 新增 Let）/ `Module` 层级迁移（M-L）/ 重命名族（`Lambda→Fn`/`App→Apply`/`If→Branch`/`VarRef→Var`/`Literal→Const`——M-R）/ `Var` de Bruijn 索引化（M-I——**仅 IR 层**，展开层命名制不迁，E3 分层裁定）/ `SetBang` **不迁**（M-E 受控维持——D5 裁定原文：语义等价证明在位、实现义务不迁移） | [01 §8.3](../../../lang-design/01-core-forms.md) 十二行 + [21 §5.3](../../../lang-design/21-capability-architecture.md) 形态卡 | 语义原语结构变更（L 轴） |
+| **S3 ADT 腿**（内部语法——v1.2 分臂） | **M-R 名面臂 ✅ r44**：变体名五件同词根化（`Lambda→Fn`/`SetBang→Assign`/`Begin→Do`/`App→Apply`/`VarRef→Var`[22 §13 D35——If→Branch/Literal→Const 两件 NO-GO]）+ Keyword 枚举对齐（D36）+ kind_name 12 名表（D37）+ 桥 tag 六改 `'lambda→'fn`/`'set→'assign`/`'begin→'do`/`'app→'apply`/`'lit→'literal`/`'var` 维持（D38——自举桥重构）+ 全语料/测试迁移；**结构臂 r45+**：`Define` 脱糖（M-D 消除）/ `Do→Let` 链（M-D + M-A）/ `Module` 层级迁移（M-L）/ `Var` de Bruijn 索引化（M-I——仅 IR 层）；`Assign`（历名 SetBang）**M-E 不迁**（D5 受控维持——语义等价证明在位） | [01 §8.3](../../../lang-design/01-core-forms.md) v6.3 + [21 §5.3](../../../lang-design/21-capability-architecture.md) 形态卡 + [22 §13](../../../lang-design/22-namespace-design.md) D34-D40 | 语义原语结构变更（L 轴）——分臂推进 |
 | **S4 收口** | 窗 E5 出口条件对账（23 §2.2）+ 门审（§7.3 ≥30 case）+ 非正交点计数复核（21 §5.5） | 23 §2.2 E5 行 | — |
 
 **`SetBang` 不迁的边界声明**（21 §5.3 原文维持）：非正交点 3（SetBang/Define/Begin）→ S3 后 = 1（SetBang 受控维持）。非正交点 ≤1 满足出口口径（21 §5.5「3 → 1（SetBang 维持）或 0」）。
@@ -74,7 +74,7 @@ E5 窗全程复用 i1 切口设计的既立三门（零新造门——§2.3 原�
 |---|---|---|---|
 | **S1 表面腿** | **r42（本轮）** | 63-a 本设计 + 63-b 实施（旧名移除 + E0021 + W1003 + W1001 退役 + 语料/测试迁移）+ 63-z 打包 + 63-web | §3.2 S1 行断言 ①-⑤ |
 | **S2 关键字腿** | **r43（本轮）** | 关键字三件切换（fn/assign/do）+ Reader/expander + E0021 扩展 + 全语料 + 负例组 | §3.2 S2 行断言 ①-④ |
-| **S3 ADT 腿** | r44+（后续，可能分臂多轮） | Define 脱糖 / Begin→Let / Module 迁移 / 重命名族 / de Bruijn IR 层 | §3.2 S3 行断言 ①-④ |
+| **S3 ADT 腿** | **r44（M-R 名面臂 ✅ 已交付）** + r45+（结构臂，可能分臂多轮） | M-R：五件重命名 + kind_name/桥 tag/枚举/语料/测试 + 五面 grep 零旧形（65-a/65-b）；结构臂：Define 脱糖 / Do→Let / Module 迁移 / de Bruijn IR | §3.2 S3 行断言（名面臂 = CoreExpr 结构不变 + bytecode 全等；结构臂 = 字节码全等最严口径） |
 | **S4 收口** | 末轮 | 窗 E5 出口条件对账 + 门审 ≥30 case + 非正交点计数 | 23 §2.2 E5 行出口三条件 |
 
 **版本口径**：S1 = v0.9.0（「v1.0 前夜」序列首版——20 §7 移除轮版本位）；窗 E5 全闭 → v1.0.0。

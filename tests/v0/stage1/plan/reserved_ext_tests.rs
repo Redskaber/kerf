@@ -39,12 +39,12 @@ fn p0_lsp_position_every_core_node_carries_span() {
         value: LiteralValue::Int(1),
         span: Span::dummy(),
     };
-    let vr = CoreExpr::VarRef {
+    let vr = CoreExpr::Var {
         name: Symbol(0),
         scopes: kerf_syntax::ScopeSet::new(),
         span: Span::dummy(),
     };
-    let app = CoreExpr::App {
+    let app = CoreExpr::Apply {
         fn_expr: Rc::new(lit.clone()),
         args: vec![Rc::new(vr)],
         span: Span::dummy(),

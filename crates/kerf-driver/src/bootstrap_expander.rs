@@ -349,26 +349,29 @@ fn core_from_value(
     };
     let rest = &fields[4..];
     match tag {
-        "lit" => Ok(Rc::new(CoreExpr::Literal {
-            value: literal_from_value(rest.first().ok_or_else(|| internal_x("lit 缺值"))?, heap)?,
+        "literal" => Ok(Rc::new(CoreExpr::Literal {
+            value: literal_from_value(
+                rest.first().ok_or_else(|| internal_x("literal 缺值"))?,
+                heap,
+            )?,
             span,
         })),
         "var" => {
             let name = str_field(rest, 0)?;
             let scopes = scope_set_field(rest, 1, heap)?;
-            Ok(Rc::new(CoreExpr::VarRef {
+            Ok(Rc::new(CoreExpr::Var {
                 name: table.intern(name),
                 scopes,
                 span,
             }))
         }
-        "app" => {
+        "apply" => {
             let fn_expr = core_from_value(field(rest, 0)?, heap, file_id, table)?;
             let mut args = Vec::with_capacity(rest.len().saturating_sub(1));
             for a in &rest[1..] {
                 args.push(core_from_value(a, heap, file_id, table)?);
             }
-            Ok(Rc::new(CoreExpr::App {
+            Ok(Rc::new(CoreExpr::Apply {
                 fn_expr,
                 args,
                 span,
@@ -385,7 +388,7 @@ fn core_from_value(
                 span,
             }))
         }
-        "lambda" => {
+        "fn" => {
             if rest.len() != 3 {
                 return Err(internal_x("fn 节点字段数异常"));
             }
@@ -403,21 +406,21 @@ fn core_from_value(
                 .map(|sc| scope_set_from_value(sc, heap))
                 .collect::<Result<Vec<_>, _>>()?;
             let body = core_from_value(&rest[2], heap, file_id, table)?;
-            Ok(Rc::new(CoreExpr::Lambda {
+            Ok(Rc::new(CoreExpr::Fn {
                 params: names,
                 param_scopes,
                 body,
                 span,
             }))
         }
-        "set" => {
+        "assign" => {
             if rest.len() != 3 {
-                return Err(internal_x("set 节点字段数异常"));
+                return Err(internal_x("assign 节点字段数异常"));
             }
             let name = table.intern(as_str(&rest[0]).map_err(read_to_expand)?);
             let scopes = scope_set_from_value(&rest[1], heap)?;
             let value = core_from_value(&rest[2], heap, file_id, table)?;
-            Ok(Rc::new(CoreExpr::SetBang {
+            Ok(Rc::new(CoreExpr::Assign {
                 name,
                 scopes,
                 value,
@@ -432,12 +435,12 @@ fn core_from_value(
             let value = core_from_value(&rest[1], heap, file_id, table)?;
             Ok(Rc::new(CoreExpr::Define { name, value, span }))
         }
-        "begin" => {
+        "do" => {
             let mut body = Vec::with_capacity(rest.len());
             for b in rest {
                 body.push(core_from_value(b, heap, file_id, table)?);
             }
-            Ok(Rc::new(CoreExpr::Begin { body, span }))
+            Ok(Rc::new(CoreExpr::Do { body, span }))
         }
         "module" => {
             if rest.len() < 3 {

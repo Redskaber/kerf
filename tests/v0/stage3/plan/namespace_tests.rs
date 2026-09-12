@@ -20,7 +20,6 @@ use crate::common;
 
 use kerf_driver::{run_source, Stage};
 use kerf_span::DiagnosticCode;
-use kerf_vm::Value;
 
 const FNAME: &str = "ns.krf";
 
@@ -168,7 +167,7 @@ fn qualified_not_exported_known_ns_is_e0014() {
         "(define f (fn (x) (core/nonexist x)))",
         14,
         "「core」不导出「nonexist」",
-    ); // 嵌套深度（Lambda 体递归）
+    ); // 嵌套深度（Fn 体递归）
 }
 
 /// 未知命名空间 → E0014（不回落：不查全局/局部/其他模块）。
@@ -200,7 +199,7 @@ fn reserved_domain_module_name_is_e0015() {
 }
 
 /// 用户接管豁免（零误报纪律——与 R9 同口径）：define 含 `/` 名 +
-/// 引用同名 → 不触发 E0014；**Lambda 参数遮蔽**（R-N1：N3 局部绑定
+/// 引用同名 → 不触发 E0014；**Fn 参数遮蔽**（R-N1：N3 局部绑定
 /// 先于 N2——`(fn (foo/bar) foo/bar)` 是局部名非限定引用）。
 #[test]
 fn takeover_slash_named_define_exempt() {
@@ -961,7 +960,7 @@ fn s2_e0020_new_reserved_names() {
 
 /// S2 门 A（CoreExpr parity——e5-plan §3.2 S2 行断言①的集成形态）：
 /// 新形源码与旧形等价程序产相同行为（表面/内部分离原则 31 的行为面
-/// 验证——同映 CoreExpr::Lambda/SetBang/Begin）。
+/// 验证——同映 CoreExpr::Fn/Assign/Do）。
 #[test]
 fn s2_core_expr_parity_new_forms() {
     assert_eq!(common::run_rendered("((fn (x) (* x x)) 6)"), "36");

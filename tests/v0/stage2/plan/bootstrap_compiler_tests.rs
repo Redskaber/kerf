@@ -191,7 +191,7 @@ fn parity_begin() {
     parity("(do (if x 1 2) (define y 2) y)");
 }
 
-// ---- 正例 parity：Lambda / 闭包捕获（B3 最难段特化语料）----
+// ---- 正例 parity：Fn / 闭包捕获（B3 最难段特化语料）----
 
 #[test]
 fn parity_lambda_basic() {
@@ -225,7 +225,7 @@ fn parity_lambda_nested_captures() {
 
 #[test]
 fn parity_lambda_set_bang_paths() {
-    // assign 三路径：局部 / 捕获 / 全局（解析与 VarRef 同一口径）
+    // assign 三路径：局部 / 捕获 / 全局（解析与 Var 同一口径）
     parity("(define (f) (let ((x 1)) (assign x 5) x)) (f)");
     // 捕获写传播（共享可变单元——词法闭包语义）
     parity(
@@ -240,7 +240,7 @@ fn parity_lambda_set_bang_paths() {
     parity("(define (f x) (+ (assign x 3) x)) (f 1)");
 }
 
-// ---- 正例 parity：App / 尾位穿线（B9 TCO 必含面）----
+// ---- 正例 parity：Apply / 尾位穿线（B9 TCO 必含面）----
 
 #[test]
 fn parity_app_eval_order() {
@@ -706,7 +706,7 @@ fn gate_b_b1_programs_execute_as_bootstrap_chain() {
 
 // ---- r25/42-f 效应组：perform/handle 编译臂 parity（门 A 扩展——
 // 三原型帧编排 INSTALL_HANDLER/PERFORM 双路径逐字节一致 + trampoline
-// 惰性单例确定性 + resume 脱糖在展开段共享（App 通道——无需编译段
+// 惰性单例确定性 + resume 脱糖在展开段共享（Apply 通道——无需编译段
 // 特设）----
 
 #[test]

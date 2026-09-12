@@ -16,7 +16,7 @@
 //! - C 桶 6：复杂程序（嵌套 module/多模块协作/授权链/效应与宏组合）
 //! - D 桶 5：恢复（错误后同进程续跑 + 合并报告排序 + 双路径错误一致）
 //! - E 桶 5：修复边界（D10 E0020 双层/数据域跳过 + D4 组合闭包联合
-//!   缺失 + M1 Lambda 遮蔽 + B1/B2 契约 parity + D10 深位嵌套）
+//!   缺失 + M1 Fn 遮蔽 + B1/B2 契约 parity + D10 深位嵌套）
 //! - P 桶 7：正向 sanity + E2E 全导入路径三通道 + 计数锚 + 审计自证
 //!
 //! 合计 43 case：负向 26 + 恢复 5 + 正向 12（负向 ≥22）。
@@ -465,7 +465,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Boundary,
         polarity: Polarity::Positive,
         class: None,
-        // M1 修复边界：Lambda 参数遮蔽 R-N1——参数名 = 模块本地名 → 局部
+        // M1 修复边界：Fn 参数遮蔽 R-N1——参数名 = 模块本地名 → 局部
         // 胜出零 E0020 误报（非保留字名）
         src: "(define (f append) append) (f 42)",
         expect: Expect::OkDual("42"),

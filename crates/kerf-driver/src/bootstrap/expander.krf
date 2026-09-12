@@ -26,11 +26,11 @@
 ;     ('true s e sc) ('false s e sc) ('nil s e sc)
 ;     ('sym s e sc 名字str) ('list s e sc 项...) ('vec s e sc 项...)
 ; - 输出 core 节点 = (tag s e ...)（作用域仅在解析位点显式携带）：
-;     ('lit s e 值) ('var s e 名字str scopes)
-;     ('app s e 函数 参数...) ('if s e 条件 真分支 假分支)
-;     ('lambda s e (名字...) (作用域集列表...) 体)
-;     ('set s e 名字str scopes 值) ('define s e 名字str 值)
-;     ('begin s e 项...) ('module s e 名字str (导入) (导出) 体...)
+;     ('literal s e 值) ('var s e 名字str scopes)
+;     ('apply s e 函数 参数...) ('if s e 条件 真分支 假分支)
+;     ('fn s e (名字...) (作用域集列表...) 体)
+;     ('assign s e 名字str scopes 值) ('define s e 名字str 值)
+;     ('do s e 项...) ('module s e 名字str (导入) (导出) 体...)
 ;     ('require s e 能力str...)
 ; - E1-β 边界（显式登记，不静默——§2.3 原则 4）：
 ;     宏产物 Span 展开代次（expansion_id）不参与 parity 判据（r6
@@ -861,7 +861,7 @@
                               (sym-name name-node)
                               (list 'rules (head parsed) (second parsed)
                                     (node-scopes node)))
-                            (list 'lit s e x nil)))))))))))
+                            (list 'literal s e x nil)))))))))))
 
 ; rules 形式头判定：列表 + 首元素 sym "syntax-rules"（调用方前置校验）
 (define (is-syntax-rules-head? rules)
@@ -1012,7 +1012,7 @@
                        t
                        (let ((el (if (= (length items) 4)
                                      (expand-form (fourth items))
-                                     (list 'lit s e x nil))))
+                                     (list 'literal s e x nil))))
                          (if (err? el) el (list 'if s e x c t el)))))))))
       ((eq kw-name "assign")
        (if (not (= (length items) 3))
@@ -1023,18 +1023,18 @@
                  (let ((v (expand-form (third items))))
                    (if (err? v)
                        v
-                       (list 'set s e x (sym-name target)
+                       (list 'assign s e x (sym-name target)
                              (node-scopes target) v)))))))
       ((eq kw-name "define") (expand-define node))
       ((eq kw-name "do")
        (let ((r (expand-seq (form-args items))))
-         (if (err? r) r (cons 'begin (cons s (cons e (cons x r)))))))
+         (if (err? r) r (cons 'do (cons s (cons e (cons x r)))))))
       ((eq kw-name "module") (expand-module node))
       ((eq kw-name "quote")
        (if (not (= (length items) 2))
            (xperr "quote 形式：(quote 数据)" s e)
            (let ((v (datum->value (second items))))
-             (if (err? v) v (list 'lit s e x v)))))
+             (if (err? v) v (list 'literal s e x v)))))
       ((eq kw-name "require") (expand-require node))
       ((eq kw-name "perform") (expand-perform node))
       ((eq kw-name "handle") (expand-handle node))
@@ -1071,7 +1071,7 @@
                   (let ((body (expand-body body-forms)))
                     (if (err? body)
                         body
-                        (list 'lambda s e x
+                        (list 'fn s e x
                               (map sym-name params)
                               (map node-scopes params)
                               body))))))))))
@@ -1169,7 +1169,7 @@
 (define (wrap-body exprs forms)
   (if (is-nil (tail exprs))
       (head exprs)
-      (cons 'begin (cons (node-s (head forms))
+      (cons 'do (cons (node-s (head forms))
                          (cons (node-e (head forms))
                                (cons (node-exp (head forms)) exprs))))))
 
@@ -1482,7 +1482,7 @@
               (let ((a (expand-form (third items))))
                 (if (err? a)
                     a
-                    (cons 'app (cons s (cons e (cons x (cons f (list a)))))))))))))
+                    (cons 'apply (cons s (cons e (cons x (cons f (list a)))))))))))))
 
 ; ===== 展开主控（trampoline + 分派——镜像 expand_form/expand_list）=====
 
@@ -1515,20 +1515,20 @@
     (let ((tname (symbol-to-string tag)))
       (cond
       ((eq tname "int")
-       (list 'lit (node-s node) (node-e node) (node-exp node)
+       (list 'literal (node-s node) (node-e node) (node-exp node)
              (node-field node 0)))
       ((eq tname "float")
-       (list 'lit (node-s node) (node-e node) (node-exp node)
+       (list 'literal (node-s node) (node-e node) (node-exp node)
              (node-field node 0)))
       ((eq tname "str")
-       (list 'lit (node-s node) (node-e node) (node-exp node)
+       (list 'literal (node-s node) (node-e node) (node-exp node)
              (node-field node 0)))
       ((eq tname "true")
-       (list 'lit (node-s node) (node-e node) (node-exp node) true))
+       (list 'literal (node-s node) (node-e node) (node-exp node) true))
       ((eq tname "false")
-       (list 'lit (node-s node) (node-e node) (node-exp node) false))
+       (list 'literal (node-s node) (node-e node) (node-exp node) false))
       ((eq tname "nil")
-       (list 'lit (node-s node) (node-e node) (node-exp node) nil))
+       (list 'literal (node-s node) (node-e node) (node-exp node) nil))
       ((eq tname "sym")
        (list 'var (node-s node) (node-e node) (node-exp node)
              (sym-name node) (node-scopes node)))
@@ -1576,7 +1576,7 @@
                     (let ((args (expand-seq (form-args items))))
                       (if (err? args)
                           args
-                          (cons 'app (cons s (cons e (cons x
+                          (cons 'apply (cons s (cons e (cons x
                               (cons fn-core args))))))))))))))
 
 ; ===== 入口 =====

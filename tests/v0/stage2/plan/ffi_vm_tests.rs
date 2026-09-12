@@ -762,13 +762,13 @@ fn negative_stack_underflow_ffi_args() {
     assert!(e.message.contains("下溢"), "消息：{}", e.message);
 }
 
-/// lowering 面：非字面量实参（VarRef）→ 编译期拒绝（语言面 Stage 3
+/// lowering 面：非字面量实参（Var）→ 编译期拒绝（语言面 Stage 3
 /// 收窄的显式化）。
 #[test]
 fn negative_nonliteral_arg_rejected() {
     let mut st = SymbolTable::new();
     let sym = st.intern("write_stdout");
-    let var = kerf_core::CoreExpr::VarRef {
+    let var = kerf_core::CoreExpr::Var {
         name: st.intern("buf"),
         scopes: kerf_syntax::ScopeSet::new(),
         span: Span::dummy(),

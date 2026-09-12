@@ -1663,19 +1663,19 @@ mod tests {
     fn call_closure_invokes_function_with_args() {
         // (define (add x y) ...builtin +...) → run_program 加载全局 →
         // call_closure 以参数进入函数入口帧 → 底帧 RET 返回值（B3 宿主调用）
-        let body = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let body = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(100),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             args: vec![
-                StdRc::new(CoreExpr::VarRef {
+                StdRc::new(CoreExpr::Var {
                     name: Symbol(0),
                     scopes: ScopeSet::new(),
                     span: Span::dummy(),
                 }),
-                StdRc::new(CoreExpr::VarRef {
+                StdRc::new(CoreExpr::Var {
                     name: Symbol(1),
                     scopes: ScopeSet::new(),
                     span: Span::dummy(),
@@ -1683,7 +1683,7 @@ mod tests {
             ],
             span: Span::dummy(),
         });
-        let lam = StdRc::new(CoreExpr::Lambda {
+        let lam = StdRc::new(CoreExpr::Fn {
             params: vec![Symbol(0), Symbol(1)],
             param_scopes: vec![ScopeSet::new()],
             body,
@@ -1742,10 +1742,10 @@ mod tests {
         .unwrap_err();
         assert!(e2.message.contains("需要闭包"));
         // 闭包存在但参数数量不匹配
-        let lam = StdRc::new(CoreExpr::Lambda {
+        let lam = StdRc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
-            body: StdRc::new(CoreExpr::VarRef {
+            body: StdRc::new(CoreExpr::Var {
                 name: Symbol(0),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
@@ -1776,10 +1776,10 @@ mod tests {
     #[test]
     fn call_closure_cross_program_proto_rejected() {
         // 跨程序闭包：原型索引指向别的 program → 显式拒绝（P3 否决的运行时面）
-        let lam = StdRc::new(CoreExpr::Lambda {
+        let lam = StdRc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
-            body: StdRc::new(CoreExpr::VarRef {
+            body: StdRc::new(CoreExpr::Var {
                 name: Symbol(0),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
@@ -1812,8 +1812,8 @@ mod tests {
     #[test]
     fn call_closure_error_trace_collected() {
         // 被调闭包内部运行时错误 → 错误传播 + 调用帧追踪（与 run_program 同构）
-        let body = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let body = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(0),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
@@ -1821,7 +1821,7 @@ mod tests {
             args: vec![],
             span: Span::dummy(),
         });
-        let lam = StdRc::new(CoreExpr::Lambda {
+        let lam = StdRc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
             body,
@@ -1864,7 +1864,7 @@ mod tests {
 
     #[test]
     fn run_begin_sequence() {
-        let e = StdRc::new(CoreExpr::Begin {
+        let e = StdRc::new(CoreExpr::Do {
             body: vec![lit(1), lit(2), lit(3)],
             span: Span::dummy(),
         });
@@ -1874,15 +1874,15 @@ mod tests {
     #[test]
     fn define_and_call_closure() {
         // (define f (fn (x) (+ x 1))) (f 41) → 42
-        let plus = StdRc::new(CoreExpr::VarRef {
+        let plus = StdRc::new(CoreExpr::Var {
             name: Symbol(100),
             scopes: ScopeSet::new(),
             span: Span::dummy(),
         });
-        let body = StdRc::new(CoreExpr::App {
+        let body = StdRc::new(CoreExpr::Apply {
             fn_expr: plus,
             args: vec![
-                StdRc::new(CoreExpr::VarRef {
+                StdRc::new(CoreExpr::Var {
                     name: Symbol(0),
                     scopes: ScopeSet::new(),
                     span: Span::dummy(),
@@ -1891,7 +1891,7 @@ mod tests {
             ],
             span: Span::dummy(),
         });
-        let lam = StdRc::new(CoreExpr::Lambda {
+        let lam = StdRc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
             body,
@@ -1902,8 +1902,8 @@ mod tests {
             value: lam,
             span: Span::dummy(),
         });
-        let call = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let call = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(200),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
@@ -1925,29 +1925,29 @@ mod tests {
     fn closure_captures_shared_mutation() {
         // (define (make-counter) ...)：闭包捕获的 assign 语义——两闭包共享捕获单元
         // 程序：((fn (n) (fn () n)) 5) → 闭包；此处验证捕获值经 LOAD_CAPTURED
-        let inner = StdRc::new(CoreExpr::Lambda {
+        let inner = StdRc::new(CoreExpr::Fn {
             params: vec![],
             param_scopes: vec![ScopeSet::new()],
-            body: StdRc::new(CoreExpr::VarRef {
+            body: StdRc::new(CoreExpr::Var {
                 name: Symbol(0),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
             span: Span::dummy(),
         });
-        let outer = StdRc::new(CoreExpr::Lambda {
+        let outer = StdRc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
             body: inner,
             span: Span::dummy(),
         });
-        let make = StdRc::new(CoreExpr::App {
+        let make = StdRc::new(CoreExpr::Apply {
             fn_expr: outer,
             args: vec![lit(5)],
             span: Span::dummy(),
         });
         // ((...) ) 调用内部闭包 → 5
-        let call = StdRc::new(CoreExpr::App {
+        let call = StdRc::new(CoreExpr::Apply {
             fn_expr: make,
             args: vec![],
             span: Span::dummy(),
@@ -2044,10 +2044,10 @@ mod tests {
     #[test]
     fn arity_mismatch_error() {
         // (define f (fn (x) x)) (f 1 2) → 参数数量不匹配
-        let lam = StdRc::new(CoreExpr::Lambda {
+        let lam = StdRc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
-            body: StdRc::new(CoreExpr::VarRef {
+            body: StdRc::new(CoreExpr::Var {
                 name: Symbol(0),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
@@ -2059,8 +2059,8 @@ mod tests {
             value: lam,
             span: Span::dummy(),
         });
-        let call = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let call = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(200),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
@@ -2089,8 +2089,8 @@ mod tests {
             }
             Ok(Value::Int(a / b))
         });
-        let e = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let e = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(100),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
@@ -2120,7 +2120,7 @@ mod tests {
                 span: Span::dummy(),
             }));
         }
-        let e = StdRc::new(CoreExpr::Begin {
+        let e = StdRc::new(CoreExpr::Do {
             body,
             span: Span::dummy(),
         });
@@ -2148,9 +2148,9 @@ mod tests {
                     span: Span::dummy(),
                 });
             }
-            // (if (= n 0) 0 (loop (- n 1))) 简化为直构递归 App
-            StdRc::new(CoreExpr::App {
-                fn_expr: StdRc::new(CoreExpr::VarRef {
+            // (if (= n 0) 0 (loop (- n 1))) 简化为直构递归 Apply
+            StdRc::new(CoreExpr::Apply {
+                fn_expr: StdRc::new(CoreExpr::Var {
                     name: Symbol(200),
                     scopes: ScopeSet::new(),
                     span: Span::dummy(),
@@ -2173,33 +2173,33 @@ mod tests {
             let b = args.get(1).and_then(|v| v.as_int()).unwrap_or(0);
             Ok(Value::Int(a - b))
         });
-        let test_expr = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let test_expr = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(101),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
-            args: vec![StdRc::new(CoreExpr::VarRef {
+            args: vec![StdRc::new(CoreExpr::Var {
                 name: Symbol(0),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
             })],
             span: Span::dummy(),
         });
-        let recurse = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let recurse = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(200),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
             }),
-            args: vec![StdRc::new(CoreExpr::App {
-                fn_expr: StdRc::new(CoreExpr::VarRef {
+            args: vec![StdRc::new(CoreExpr::Apply {
+                fn_expr: StdRc::new(CoreExpr::Var {
                     name: Symbol(102),
                     scopes: ScopeSet::new(),
                     span: Span::dummy(),
                 }),
                 args: vec![
-                    StdRc::new(CoreExpr::VarRef {
+                    StdRc::new(CoreExpr::Var {
                         name: Symbol(0),
                         scopes: ScopeSet::new(),
                         span: Span::dummy(),
@@ -2216,7 +2216,7 @@ mod tests {
             else_branch: recurse,
             span: Span::dummy(),
         });
-        let lam = StdRc::new(CoreExpr::Lambda {
+        let lam = StdRc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
             body,
@@ -2227,8 +2227,8 @@ mod tests {
             value: lam,
             span: Span::dummy(),
         });
-        let call = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let call = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(200),
                 scopes: ScopeSet::new(),
                 span: Span::dummy(),
@@ -2247,8 +2247,8 @@ mod tests {
 
     #[test]
     fn type_error_carries_span_from_debug_table() {
-        let e = StdRc::new(CoreExpr::App {
-            fn_expr: StdRc::new(CoreExpr::VarRef {
+        let e = StdRc::new(CoreExpr::Apply {
+            fn_expr: StdRc::new(CoreExpr::Var {
                 name: Symbol(100),
                 scopes: ScopeSet::new(),
                 span: Span::new(0, 10, 20),

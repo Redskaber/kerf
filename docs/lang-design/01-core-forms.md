@@ -1,9 +1,9 @@
 # 最小自举单元的能力模型：九个核心原语
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-11（v6.2：批次 F 深审回写——literal_value 补 Symbol 变体（TD-002 r5）+ 作用域元数据增补措辞限定）；v6.0：新增 §8 内部语法设计——next3.md 第七轮吸收：类型安全 ADT 三原则 + 当前实现合规核验 + 旧→新迁移映射；v5.5：新增 §7 核心原语理论最小性与 2026 演进对照——next2.md 五轮吸收；v5.4：新增 §6 声明形式 require + 核心冻结边界精确化裁定；v5.2：糖推导示例「非穷举」注记（#5））
-> **Version**: v6.2
-> **Status**: Active（核心冻结对象，全生命周期不变）
+> **Date**: 2026-09-17（**v6.3——r44 / 65-b E5 S3 M-R 名面臂回写**：§2 OCaml 规范块变体名同词根化（Fn/Apply/Var/Assign/Do——规范↔代码互锚[R4]，语义零变更经 E5 窗 S3 腿通道[22 §13 D34-D40]）+ §7.2 表 r44 注记 + §8.3 迁移映射表修正（`If→Branch`/`Literal→Const` 两行 NO-GO[22 §13 D35 一致性判据否决] + 五件 M-R GO ✅ r44 已落地）+ §8.5 测试锚 r44 行）；2026-09-11（v6.2：批次 F 深审回写——literal_value 补 Symbol 变体（TD-002 r5）+ 作用域元数据增补措辞限定）；v6.0：新增 §8 内部语法设计——next3.md 第七轮吸收：类型安全 ADT 三原则 + 当前实现合规核验 + 旧→新迁移映射；v5.5：新增 §7 核心原语理论最小性与 2026 演进对照——next2.md 五轮吸收；v5.4：新增 §6 声明形式 require + 核心冻结边界精确化裁定；v5.2：糖推导示例「非穷举」注记（#5））
+> **Version**: v6.3
+> **Status**: Active（核心冻结对象，全生命周期不变——名面 M-R 臂经 E5 窗合法通道，语义原语集不变[原则 9 精确化：冻结的是语义集非词根集，22 §13 D34]）
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-core/src/expr.rs）｜ **所属 Stage**：Stage 0 定义、全生命周期冻结 ｜ **推迟项**：无（原语集合自身不变；周边能力的分级见 [13-能力矩阵](./13-capability-matrix.md)）
 
 > 本文件收录 stage0.md §3「最小自举单元的能力模型」全文，包括五个核心能力模块、九个核心原语（最终定义）、语法对象模型与能力边界的初步划定。九个核心原语是整个语言的核心冻结对象——本文件是 [02-语法模型](./02-syntax-model.md)、[03-宏系统](./03-macro-system.md)、[04-字节码 VM](./04-bytecode-vm.md)、[05-运行时](./05-runtime.md) 各实现文件的语义根基；其**行为规范**（归约规则）见 [06-操作语义](./06-operational-semantics.md)；核心冻结原则的规范出处见 [17-设计原则 §1 原则 9](./17-principles.md)；能力选型的批判性审视与 2026 年现代方案见 [14-替代设计](./14-design-alternatives.md)，Stage 0 的三层分类裁决见 [13-能力矩阵](./13-capability-matrix.md)。
@@ -20,18 +20,18 @@
 | **Bytecode VM** | 宿主语言/C | 执行字节码，验证语义 | `execute : Bytecode → Result<Value, RuntimeError>` |
 | **Minimal Runtime** | C | 内存分配、基础数据操作 | C ABI 接口 |
 
-## 2. 九个核心原语（最终定义）（原 §3.2）
+## 2. 九个核心原语（最终定义）（原 §3.2——名面 v6.3/r44 同词根化）
 
 ```ocaml
 type core_expr =
-  | Lambda of { params : string list; body : core_expr }
-  | App of { fn : core_expr; args : core_expr list }
+  | Fn of { params : string list; body : core_expr }        (* 表面关键字 fn *)
+  | Apply of { fn_expr : core_expr; args : core_expr list } (* 调用——无关键字（位置形式）*)
   | If of { cond : core_expr; then_branch : core_expr; else_branch : core_expr }
-  | VarRef of string
-  | Literal of literal_value
-  | SetBang of { name : string; value : core_expr }
+  | Var of string                                          (* 引用——无关键字 *)
+  | Literal of literal_value                               (* 字面——无关键字 *)
+  | Assign of { name : string; value : core_expr }          (* 表面关键字 assign *)
   | Define of { name : string; value : core_expr }
-  | Begin of core_expr list
+  | Do of core_expr list                                    (* 表面关键字 do *)
   | Module of { name : string; imports : import_spec list;
                 exports : export_spec list; body : core_expr list }
 
@@ -44,7 +44,14 @@ and literal_value =
                         LiteralKey::Symbol 为图 IR 共享去重键 *)
 ```
 
-> **v6.2 作用域元数据注记**：r13 作用域集解析（TD-004）为部分原语增补了**解析元数据字段**——`VarRef`/`SetBang` 携带引用作用域集、`Lambda` 携带 `param_scopes` 绑定作用域集；属位置/解析元数据而非语义字段（06 §1.1 同口径限定）。语义字段（原语行为规范）仍与本定义一致。
+> **v6.3/r44 名面注记**：上表变体名与 kerf-core/src/expr.rs 实现（r44 后）
+> 逐词根一致——规范↔代码互锚（§5 测试锚「变体逐字段对照」维持有效）。
+> 历史名（Lambda/App/VarRef/SetBang/Begin）仅存于文档历史段与 E0021 旧名
+> 指引表——代码面零残留（r44 grep 实证）；名面 M-R 变更经 E5 窗 S3 腿
+> 合法通道（22 §13 D34-D40），语义原语集不变（原则 9 精确化：冻结的是
+> 语义集非词根集）。
+
+> **v6.2 作用域元数据注记**：r13 作用域集解析（TD-004）为部分原语增补了**解析元数据字段**——`Var`/`Assign` 携带引用作用域集、`Fn` 携带 `param_scopes` 绑定作用域集；属位置/解析元数据而非语义字段（06 §1.1 同口径限定）。语义字段（原语行为规范）仍与本定义一致。
 
 **设计约束**：必须正交、必须完备、必须稳定（核心冻结原则——一旦定义，在整个语言生命周期内不变，[17-设计原则 §1 原则 9](./17-principles.md)）。九原语的小步归约规则（行为规范）见 [06-操作语义 §2](./06-operational-semantics.md)；运行时的归约状态与值域见同文件 §1。
 
@@ -146,6 +153,8 @@ type core_expr =
 
 > **r43 / E5 S2 表面切换注记（22 §12 D19-D33 重筛后终选）**：表面关键字三件已切换——`lambda→fn`/`set!→assign`/`begin→do`（set! 行导向替代 Assign 确认[原表第一候选兑现]；begin 行的 Seq 是 **ADT 层**候选[S3 载荷——表面层与 ADT 层解耦，原则 31]，表面层选 do[否决 seq——名空间经济：Clojure seq 生态占用]）；其余 22 名维持（22 §12.2 D22-D27 全表裁定）；表面/ADT 映射一致性对账见 22 §12.2 D30（fn↔Fn 对齐 / assign↔SetBang 分离合法[S3 不迁] / do↔Begin→Let 分离合法）。
 
+> **r44 / E5 S3 M-R 名面臂注记（22 §13 D34-D40——五面同词根终态）**：上表「行为导向替代」列的实现状态——`Fn`/`Apply`/`Var`/`Assign`/`Do` 五件已落地（r44）；`Branch`/`Const` 两件 NO-GO（一致性判据否决——If/Literal 维持终态）；本表历史名列（Lambda/App/VarRef/SetBang/Begin）转为历史对照语义（§2 规范块已同词根化——变体名 = 表面关键字词根）。
+
 ### 7.3 Stage 2+ 演进候选：效应原语化（next2 推荐 8 原语形态）
 
 next2 讨论的最终推荐（不考虑兼容性的重新设计）为 8 原语：`Fn / Let / Apply / Const / Var / Branch / Perform / Handle`——其中：
@@ -166,7 +175,7 @@ next2 讨论的最终推荐（不考虑兼容性的重新设计）为 8 原语�
 
 ### 8.1 三原则
 
-1. **类型安全而非命名安全**：AST 节点是编译器私有类型（`enum CoreExpr`）——安全性由类型系统保证，用户代码不可能构造 `CoreExpr::Lambda`（除非经编译器 API）。旧设计依赖 `#%` 前缀命名约定（用户不可 shadow 的逃生舱）——从「约定」到「强制」；
+1. **类型安全而非命名安全**：AST 节点是编译器私有类型（`enum CoreExpr`）——安全性由类型系统保证，用户代码不可能构造 `CoreExpr::Fn`（除非经编译器 API）。旧设计依赖 `#%` 前缀命名约定（用户不可 shadow 的逃生舱）——从「约定」到「强制」；
 2. **语义化命名而非历史命名**：名称精确描述节点行为（`Fn`/`Apply`/`Branch`/`Let`/`Const`/`Var`/`Perform`/`Handle`）而非 1960 年代数学传统（lambda/if/set!/define/begin）或逃生舱机制；
 3. **零冗余而非多层转义**：`42 → Const(Int(42))` 直接映射无中间层——对比 Racket 多层转义 `42 → #%datum 42 → (quote 42) → 42`。
 
@@ -178,26 +187,26 @@ next2 讨论的最终推荐（不考虑兼容性的重新设计）为 8 原语�
 | 语义化命名 > 历史命名 | 表面 S 表达式经 Reader 桥接到 CoreExpr（语法与 AST 分离） | ✅ 合规（表面/内部分离已落地） |
 | 零冗余 | Span 系统独立于命名携带元数据（`kind_name` 仅诊断渲染用） | ✅ 合规 |
 
-**命名本身**（Lambda/App/If/…）在冻结期内不变（§2 核心冻结 + §7.2 裁定）——三原则约束的是**架构形态**（私有 ADT / Reader 桥接 / Span 元数据），当前实现三项全合规；语义化命名形态（`Fn/Let/Apply/Const/Var/Branch/Perform/Handle`）作为 Stage 2 ADT 演进目标（§8.3）。
+> **r44 / E5 S3 M-R 名面臂注记（22 §13 D35-D40）**：上表（§8.3 原候选）经一致性判据重审——**五件 GO 已落地 r44**（`Lambda→Fn`/`SetBang→Assign`/`Begin→Do`/`App→Apply`/`VarRef→Var`——纯 M-R 零语义载荷；SetBang 行的 M-E[Perform(State)] 与 M-R 解耦：D5 否决的是效应化实现，重命名独立合法）；**两件 NO-GO 修正原表**（`If→Branch`：表面 `if` 是 D22 跨家族通用语，重命名制造新名面分离——一致性 > 行为导向微优化；`Literal→Const`：literal 精确覆盖 quote 产物[Symbol/Pair 字面数据]，const 偏编译期常量概念，不可变性由类型系统保证[原则 23/30]名无需编码）；结构臂（Define 脱糖/Do→Let 链/Module 迁移/de Bruijn）归 r45+ 承载（D39 分臂裁定——每臂独立 commit + 字节码 parity 先行）。
 
-### 8.3 旧→新迁移映射（Stage 2 ADT 演进目标）
+### 8.3 旧→新迁移映射（v6.3/r44 修正版——22 §13 D35 判据重审后）
 
-| 冻结原语（本设计 §2） | 8 原语形态 | 迁移性质 |
-|---------------------|-----------|--------|
-| Lambda | `Fn`（params: usize，de Bruijn） | 重命名 + 索引化 |
-| App | `Apply` | 重命名（动词化） |
-| If | `Branch` | 重命名（行为化） |
-| VarRef | `Var`（index，de Bruijn） | 重命名 + 索引化 |
-| Literal | `Const`（吸收 quote/#%datum 两层） | 重命名 + 零冗余化 |
-| SetBang | `Perform(State)` | 副作用 → 效应 |
-| Define | （消除——`Apply[Fn, value]` 语法糖） | 脱糖 |
-| Begin | `Let` 链（ANF 顺序） | 脱糖（`Let` 为新增原语） |
-| Module | （移至模块系统层，非语义原语） | 层级迁移 |
-| （新增）Let | `Let` | ANF 必需的新原语 |
-| （新增，r25 已引入）Perform/Handle | `Perform`/`Handle` | 效应执行/处理配对——**已落地**（CoreExpr 第 11/12 变体，[effect-language-design.md](../develop/v0/stage-2/effect-language-design.md)） |
-| Require（声明变体） | （保留——声明面与语义面两层不合流，§6 裁定） | 不变 |
+| 冻结原语（历史名） | 2026 形态 | 迁移性质 | 状态（r44 实况） |
+|---------------------|-----------|--------|------------------|
+| Lambda | `Fn` | 重命名（表面对齐——D35 ①） | ✅ **r44 已落地** |
+| App | `Apply` | 重命名（动词化——D35 ④） | ✅ **r44 已落地** |
+| If | `If`（维持） | ~~`Branch`~~ **NO-GO**（一致性判据否决——D35 ③） | ✅ 维持（终态） |
+| VarRef | `Var` | 重命名（三面统一——D35 ⑤） | ✅ **r44 已落地**（de Bruijn 索引化归 r45+ 结构臂） |
+| Literal | `Literal`（维持） | ~~`Const`~~ **NO-GO**（J-1 语义精确 + 原则 23/30——D35 ⑥） | ✅ 维持（终态） |
+| SetBang | `Assign` | **M-R 纯重命名**（M-E[Perform(State)] 与 M-R 解耦——D35 ②） | ✅ **r44 已落地**（M-R）；M-E 不迁（D5 维持） |
+| Define | （消除——`Apply[Fn, value]` 语法糖） | 脱糖 | r45+ 结构臂（D39） |
+| Begin | `Do`（M-R）/ `Let` 链（M-A 脱糖） | M-R 已落 + 脱糖分臂 | ✅ M-R **r44 已落地**；→Let 链归 r45+ |
+| Module | （移至模块系统层，非语义原语） | 层级迁移 | r45+ 结构臂（D39） |
+| （新增）Let | `Let` | ANF 必需的新原语 | r45+（E1 DEFER-TO-STAGE3 维持） |
+| （新增，r25 已引入）Perform/Handle | `Perform`/`Handle` | 效应执行/处理配对 | ✅ 已落地（r25） |
+| Require（声明变体） | （保留——声明面与语义面两层不合流，§6 裁定） | 不变 | ✅ 终态 |
 
-迁移须走 Stage 2 「目标语言完整化」门审查（同 §7.3 裁定：§13.2 切换期重构流程 + 委员会投票）。2026 形态完整 Rust ADT 定义（8 变体 + EffectKind + HandlerClause + LiteralValue）见 [upload/stage0.md §7.4.3](../stage0.md)；六维度对比表（安全性/精确性/冗余度/模式匹配/元数据/可扩展性）见同文件 §7.4.3。
+迁移须走 Stage 2 「目标语言完整化」门审查（同 §7.3 裁定：§13.2 切换期重构流程 + 委员会投票）——M-R 名面臂已经 E5 窗 S3 腿通道 + r44 实施验证（834:0:0 + 五审计集 ×5 + 五面 grep 零旧形）。2026 形态完整 Rust ADT 定义（8 变体 + EffectKind + HandlerClause + LiteralValue）见 [upload/stage0.md §7.4.3](../stage0.md)；六维度对比表（安全性/精确性/冗余度/模式匹配/元数据/可扩展性）见同文件 §7.4.3。
 
 ### 8.4 表面/内部语法严格分离（架构不变量）
 
@@ -210,3 +219,4 @@ next2 讨论的最终推荐（不考虑兼容性的重新设计）为 8 原语�
 | 内部 ADT 私有性 | kerf-core 单测：CoreExpr 十变体字段对照本文件 §2 + §8.2 三项合规（私有构造/Reader 桥接/Span 独立） | ✅ r9 在位（01 §5 既有锚点覆盖变体对照；三原则合规为架构审计项） |
 | 迁移映射完备性 | 设计审计：§8.3 十二行映射逐行覆盖 §2 全部原语（含 Require）+ 新增项 | ✅ 本节自检（十二行 = 9 原语 + Require + Let + Perform/Handle） |
 | 表面/内部分离 | 集成：同一 kerf 程序经 Reader 唯一入口产 CoreExpr（无表面语法直通内部 AST 的旁路） | ✅ r9 在位（driver front 管线唯一组合根，[15 §5.1](./15-architecture-layers.md)） |
+| **五面同词根**（r44 新增——22 §13 D34/D37） | 架构审计：`kind_name` 12 名表（9 原语级关键字名 ∈ Keyword 注册面 + 3 内部名 ∉ 关键字面）+ `Keyword::ALL` 25 名全量 roundtrip/互异 + 桥 tag = kind_name 穿透 | ✅ r44 在位（s3mr_kind_name_keyword_face_penetration + keyword_all_roundtrip_and_distinct + 既有 kind_name 全变体互异锚） |

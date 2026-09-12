@@ -49,7 +49,7 @@ const ENTRY_NAME: &str = "lexc-compile-program";
 
 /// main 原型名（渲染由调用方替换——种子 compile.rs 同款魔法符号）。
 const MAIN_PROTO_NAME: Symbol = Symbol(u32::MAX - 1);
-/// 无参 Lambda 原型名。
+/// 无参 Fn 原型名。
 const ANON_PROTO_NAME: Symbol = Symbol(u32::MAX - 2);
 
 /// 自举 Compiler 状态（每线程一份，惰性初始化）。
@@ -232,9 +232,9 @@ fn core_to_node(e: &CoreExpr, table: &SymbolTable, heap: &mut Heap) -> Value {
     let tag = |name: &str| Value::Symbol(Rc::from(name));
     let items: Vec<Value> = match e {
         CoreExpr::Literal { value, .. } => {
-            vec![tag("lit"), s, en, exp, litval_to_value(value, heap)]
+            vec![tag("literal"), s, en, exp, litval_to_value(value, heap)]
         }
-        CoreExpr::VarRef { name, scopes, .. } => vec![
+        CoreExpr::Var { name, scopes, .. } => vec![
             tag("var"),
             s,
             en,
@@ -242,10 +242,10 @@ fn core_to_node(e: &CoreExpr, table: &SymbolTable, heap: &mut Heap) -> Value {
             Value::Str(Rc::from(table.name(*name))),
             scope_list_value(scopes, heap),
         ],
-        CoreExpr::App { fn_expr, args, .. } => {
+        CoreExpr::Apply { fn_expr, args, .. } => {
             let f = core_to_node(fn_expr, table, heap);
             let arg_nodes: Vec<Value> = args.iter().map(|a| core_to_node(a, table, heap)).collect();
-            let mut v = vec![tag("app"), s, en, exp, f];
+            let mut v = vec![tag("apply"), s, en, exp, f];
             v.extend(arg_nodes);
             v
         }
@@ -260,7 +260,7 @@ fn core_to_node(e: &CoreExpr, table: &SymbolTable, heap: &mut Heap) -> Value {
             let el = core_to_node(else_branch, table, heap);
             vec![tag("if"), s, en, exp, c, t, el]
         }
-        CoreExpr::Lambda {
+        CoreExpr::Fn {
             params,
             param_scopes,
             body,
@@ -277,9 +277,9 @@ fn core_to_node(e: &CoreExpr, table: &SymbolTable, heap: &mut Heap) -> Value {
             let params_v = heap_list(heap, names);
             let scopes_v = heap_list(heap, scopes);
             let body_v = core_to_node(body, table, heap);
-            vec![tag("lambda"), s, en, exp, params_v, scopes_v, body_v]
+            vec![tag("fn"), s, en, exp, params_v, scopes_v, body_v]
         }
-        CoreExpr::SetBang {
+        CoreExpr::Assign {
             name,
             scopes,
             value,
@@ -288,7 +288,7 @@ fn core_to_node(e: &CoreExpr, table: &SymbolTable, heap: &mut Heap) -> Value {
             let sc = scope_list_value(scopes, heap);
             let val = core_to_node(value, table, heap);
             vec![
-                tag("set"),
+                tag("assign"),
                 s,
                 en,
                 exp,
@@ -308,10 +308,10 @@ fn core_to_node(e: &CoreExpr, table: &SymbolTable, heap: &mut Heap) -> Value {
                 val,
             ]
         }
-        CoreExpr::Begin { body, .. } => {
+        CoreExpr::Do { body, .. } => {
             let item_nodes: Vec<Value> =
                 body.iter().map(|b| core_to_node(b, table, heap)).collect();
-            let mut v = vec![tag("begin"), s, en, exp];
+            let mut v = vec![tag("do"), s, en, exp];
             v.extend(item_nodes);
             v
         }
@@ -355,7 +355,7 @@ fn core_to_node(e: &CoreExpr, table: &SymbolTable, heap: &mut Heap) -> Value {
             vec![tag("perform"), s, en, exp, f]
         }
         // ('handle s e x tagstr 载荷名 载荷作用域 恢复名 恢复作用域
-        //   handler节点 body节点)——两绑定器作用域集与 Lambda.param_scopes
+        //   handler节点 body节点)——两绑定器作用域集与 Fn.param_scopes
         // 同型（int 列表）
         CoreExpr::Handle {
             tag: htag,

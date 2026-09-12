@@ -56,7 +56,7 @@ fn tail_position_propagates_through_if_branches() {
     );
 }
 
-/// 尾位传播——Begin 末项（scheme 语义：do 尾调用 = 尾调用）。
+/// 尾位传播——Do 末项（scheme 语义：do 尾调用 = 尾调用）。
 /// 注：嵌套 do 末项经外层 do 末项链式传递尾位（三层传播）。
 #[test]
 fn tail_position_propagates_through_begin_last() {
@@ -67,7 +67,7 @@ fn tail_position_propagates_through_begin_last() {
     );
 }
 
-/// 尾位传播——let 糖（脱装为 Lambda+App 后 App 位于应用序尾位）。
+/// 尾位传播——let 糖（脱装为 Fn+Apply 后 Apply 位于应用序尾位）。
 #[test]
 fn tail_position_through_let_sugar() {
     common::assert_int(

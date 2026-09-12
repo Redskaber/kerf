@@ -2,9 +2,9 @@
 //!
 //! `CoreExpr` → `BcProgram`：
 //! - 顶层形式序列编译进 main 原型（entry = 0）；
-//! - Lambda 编译为独立原型 + 闭包捕获转换；
+//! - Fn 编译为独立原型 + 闭包捕获转换；
 //! - If 经跳转回填（emit_jump / patch_jump）；
-//! - 求值顺序契约（§19.5 不变式 3）：App 的参数从左到右、被调者最后压栈。
+//! - 求值顺序契约（§19.5 不变式 3）：Apply 的参数从左到右、被调者最后压栈。
 //!
 //! **全局符号解析**（Stage 0 名称基解析，TD-004 的既定近似）：
 //! LOAD_GLOBAL 未命中时按 `$hyg$N` 后缀剥离回退——使卫生重命名的引入
@@ -98,7 +98,7 @@ pub struct CompileCtxt {
     scopes: Vec<ScopeFrame>,
     /// 全部原型。
     protos: Vec<BcProto>,
-    /// 当前正在发射的原型索引（嵌套 Lambda 的切换点）。
+    /// 当前正在发射的原型索引（嵌套 Fn 的切换点）。
     current: usize,
     /// 常量池。
     pool: ConstPool,
@@ -283,8 +283,8 @@ pub fn compile_module(exprs: &[Rc<CoreExpr>]) -> Result<BcProgram, CompileError>
 /// 编译单条表达式（栈平衡：产物执行后栈净 +1，§19.3 不变式 1）。
 ///
 /// **尾位穿线（TD-022/H2——VM TCO）**：`tail = true` 表示本表达式位于
-/// 函数体尾位（Lambda 体 / If 两臂 / Begin 末项的传递闭包）——其中的
-/// `App` 编译为 `Op::TailCall`（帧复用：被调方返回直达当前调用者，跳过
+/// 函数体尾位（Fn 体 / If 两臂 / Do 末项的传递闭包）——其中的
+/// `Apply` 编译为 `Op::TailCall`（帧复用：被调方返回直达当前调用者，跳过
 /// 当前帧）。顶层形式恒 `tail = false`（主原型以 Halt 终止——不参与）。
 fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), CompileError> {
     let span = e.span();
@@ -312,7 +312,7 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), C
             ctx.emit(Op::PushConst(idx), span);
             Ok(())
         }
-        CoreExpr::VarRef { name, scopes, .. } => {
+        CoreExpr::Var { name, scopes, .. } => {
             match ctx.resolve_var(*name, scopes).source {
                 VarSource::Local(i) => ctx.emit(Op::LoadLocal(i), span),
                 VarSource::Captured(i) => ctx.emit(Op::LoadCaptured(i), span),
@@ -323,20 +323,20 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), C
             }
             Ok(())
         }
-        CoreExpr::Lambda {
+        CoreExpr::Fn {
             params,
             param_scopes,
             body,
             ..
         } => compile_lambda(ctx, params, param_scopes, body, span),
-        CoreExpr::App { fn_expr, args, .. } => {
+        CoreExpr::Apply { fn_expr, args, .. } => {
             // 求值顺序契约（06 §1.3/§2 A1，与 eval 路径一致——T1 定理归纳基础）：
             // 被调函数先求值，参数从左到右
             compile_expr(ctx, fn_expr, false)?;
             for a in args {
                 compile_expr(ctx, a, false)?;
             }
-            // 尾位 App → TailCall（帧复用）；其余 → Call（帧增长 + MAX_FRAMES 守卫）
+            // 尾位 Apply → TailCall（帧复用）；其余 → Call（帧增长 + MAX_FRAMES 守卫）
             let op = if tail {
                 Op::TailCall(args.len() as u32)
             } else {
@@ -360,14 +360,14 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), C
             ctx.patch_jump(j_end);
             Ok(())
         }
-        CoreExpr::SetBang {
+        CoreExpr::Assign {
             name,
             scopes,
             value,
             ..
         } => {
             // 栈平衡（§19.3 不变式 1）：set! 表达式的值为被赋值——
-            // 值入栈后 DUP 再存储，栈净 +1（目标解析与 VarRef 同一口径，TD-004）
+            // 值入栈后 DUP 再存储，栈净 +1（目标解析与 Var 同一口径，TD-004）
             compile_expr(ctx, value, false)?;
             ctx.emit(Op::Dup, span);
             match ctx.resolve_var(*name, scopes).source {
@@ -403,7 +403,7 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), C
             ctx.emit(Op::DefineGlobal(gi), span);
             Ok(())
         }
-        CoreExpr::Begin { body, .. } => {
+        CoreExpr::Do { body, .. } => {
             if body.is_empty() {
                 ctx.emit(Op::PushNil, span);
                 return Ok(());
@@ -443,7 +443,7 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), C
             Ok(())
         }
         CoreExpr::Perform { effect, span } => {
-            // r25/42-f（R10-perform）：效应值先求值（求值顺序契约 App
+            // r25/42-f（R10-perform）：效应值先求值（求值顺序契约 Apply
             // 序不变——效应值表达式求值后入栈）→ PERFORM（解构 (tag .
             // payload) + 扫描分派 + continuation 快照 + 栈截回水位）。
             // 恒非尾位：控制转移后未恢复则本表达式永不完成（body 剩余
@@ -512,10 +512,10 @@ fn compile_literal_value(
     }
 }
 
-/// Lambda 编译：闭包捕获转换（§8.5 基础闭包 + §19.3 CLOSURE 指令）。
+/// Fn 编译：闭包捕获转换（§8.5 基础闭包 + §19.3 CLOSURE 指令）。
 ///
 /// 步骤：
-/// 1. 计算 Lambda 的自由变量出现（名 + 首现引用作用域集，TD-004）；
+/// 1. 计算 Fn 的自由变量出现（名 + 首现引用作用域集，TD-004）；
 /// 2. 对每个自由变量按 `(name, scopes ⊆)` 解析当前作用域栈：
 ///    Local/Captured → 捕获槽（携带命中绑定的绑定作用域集）；Global → 原型内全局引用；
 /// 3. 压入捕获值（与捕获表顺序一致），发射 CLOSURE；
@@ -592,7 +592,7 @@ fn compile_lambda(
     });
 
     // 体编译（尾部 RET 保证返回语义）——切入新原型。
-    // 函数体 = 尾位（TCO）：体尾 App → TailCall（帧复用直达调用者）
+    // 函数体 = 尾位（TCO）：体尾 Apply → TailCall（帧复用直达调用者）
     let enclosing = ctx.current;
     ctx.current = proto_idx as usize;
     compile_expr(ctx, body, true)?;
@@ -628,7 +628,7 @@ fn compile_lambda(
 /// 发射：`InstallHandler { handler: H, body: B, tag: k, trampoline: T }`
 /// （VM 从当前帧取两原型捕获 → 压 handler 帧 + thunk 帧 → 转移执行
 /// body——编译器不发射 Closure/Call：帧编排由指令原子完成）。捕获
-/// 源描述符随原型冻结（与 Lambda 同机制）。 tag 入常量池（SymLit——
+/// 源描述符随原型冻结（与 Fn 同机制）。 tag 入常量池（SymLit——
 /// 符号字面量同型）。
 #[allow(clippy::too_many_arguments)]
 fn compile_handle(
@@ -781,7 +781,7 @@ mod tests {
     }
 
     fn var(n: u32) -> Rc<CoreExpr> {
-        Rc::new(CoreExpr::VarRef {
+        Rc::new(CoreExpr::Var {
             name: Symbol(n),
             scopes: ScopeSet::new(),
             span: Span::dummy(),
@@ -789,7 +789,7 @@ mod tests {
     }
 
     fn app(f: Rc<CoreExpr>, args: Vec<Rc<CoreExpr>>) -> Rc<CoreExpr> {
-        Rc::new(CoreExpr::App {
+        Rc::new(CoreExpr::Apply {
             fn_expr: f,
             args,
             span: Span::dummy(),
@@ -813,7 +813,7 @@ mod tests {
     #[test]
     fn const_pool_dedup_in_program() {
         // (do 1 1 1) → 常量池只含一个 Int(1)（§19.3 陷阱）
-        let exprs = vec![Rc::new(CoreExpr::Begin {
+        let exprs = vec![Rc::new(CoreExpr::Do {
             body: vec![lit(1), lit(1), lit(1)],
             span: Span::dummy(),
         })];
@@ -862,7 +862,7 @@ mod tests {
     fn lambda_closure_conversion() {
         // (fn (x) (f x))——f 自由 → 全局引用（Stage 0 单帧无捕获源）
         let body = app(var(5), vec![var(0)]);
-        let lam = Rc::new(CoreExpr::Lambda {
+        let lam = Rc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
             body,
@@ -874,7 +874,7 @@ mod tests {
         assert_eq!(closure_proto.arity(), 1);
         assert!(closure_proto.capture_names.is_empty());
         // 原型体：LOAD_GLOBAL f, LOAD_LOCAL 0, TAIL_CALL 1, RET
-        // （06 §2 A1：函数先求值，参数从左到右；体尾 App = TailCall——
+        // （06 §2 A1：函数先求值，参数从左到右；体尾 Apply = TailCall——
         // TD-022/H2 TCO 尾位发射，帧复用语义）
         assert_eq!(
             closure_proto.code,
@@ -901,13 +901,13 @@ mod tests {
     #[test]
     fn nested_lambda_captures() {
         // (fn (x) (fn (y) (x y)))——内层捕获 x
-        let inner = Rc::new(CoreExpr::Lambda {
+        let inner = Rc::new(CoreExpr::Fn {
             params: vec![Symbol(1)],
             param_scopes: vec![ScopeSet::new()],
             body: app(var(0), vec![var(1)]),
             span: Span::dummy(),
         });
-        let outer = Rc::new(CoreExpr::Lambda {
+        let outer = Rc::new(CoreExpr::Fn {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
             body: inner,
@@ -930,7 +930,7 @@ mod tests {
             ]
         );
         // 原型 2：LOAD_CAPTURED 0(x), LOAD_LOCAL 0(y), TAIL_CALL 1, RET
-        // （06 §2 A1 求值顺序：被调者先于参数；体尾 App = TailCall——
+        // （06 §2 A1 求值顺序：被调者先于参数；体尾 Apply = TailCall——
         // TD-022/H2 TCO 尾位发射）
         assert_eq!(
             p.protos[2].code,

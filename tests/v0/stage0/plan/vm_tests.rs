@@ -7,24 +7,24 @@ use crate::common;
 
 use common::{assert_int, dual_path_agrees};
 
-/// 9 原语逐项语义验证：Literal / VarRef / Lambda / App / If / SetBang / Define / Begin / Module。
+/// 9 原语逐项语义验证：Literal / Var / Fn / Apply / If / Assign / Define / Do / Module。
 #[test]
 fn nine_primitives_semantics() {
     // Literal
     assert_int("42", 42);
     assert_int("\"str\" 1", 1); // 字符串值 + 尾表达式
     assert_int("nil 7", 7);
-    // VarRef / Define
+    // Var / Define
     assert_int("(define x 99) x", 99);
-    // Lambda / App
+    // Fn / Apply
     assert_int("((fn (x) x) 42)", 42);
     assert_int("((fn (x y) (- x y)) 10 4)", 6);
     // If（真/假/无 else）
     assert_int("(if true 1 2)", 1);
     assert_int("(if false 1 2)", 2);
-    // SetBang
+    // Assign
     assert_int("(define n 1) (assign n 5) n", 5);
-    // Begin
+    // Do
     assert_int("(do 1 2 3)", 3);
     // Module
     assert_int("(module m (define x 8) x)", 8);
@@ -179,7 +179,7 @@ fn lambda_duplicate_params_rejected_at_expand() {
     assert!(err.contains("参数重名"), "展开期应拒绝重名形参：{}", err);
 }
 
-/// T1 对账（[06-操作语义 §1.3/§2 A1]）：App 求值顺序 = 函数先、参数从左到右。
+/// T1 对账（[06-操作语义 §1.3/§2 A1]）：Apply 求值顺序 = 函数先、参数从左到右。
 /// 错误排序场景：((undefined-a) undefined-b) 双路径必须同报 fn 位置的
 /// 未绑定（span 指向 undefined-a），而非参数位置（修复前 VM 先求参数，
 /// 会报 undefined-b——T1 定理反例面）。

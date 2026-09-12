@@ -1,3 +1,23 @@
+## v0.11.0-r44（2026-09-17）——E5 S3 M-R 名面臂：内部关键字全栈一致性深审（D34-D40）+ 五面同词根 + 自举桥 tag 域重构（65-a/65-b/65-z/65-web——用户指令「内部关键字和候选衍生关键字的完全重新筛选 + 原语本身也是关键字/暴露面与编译器内部一致性[不然内部设计一套开发一套算什么？] + 关键字正交性 + 自举桥同类问题也需重构[正确 > 妥协]」+「按 sop.md 继续推进」+「同步完整打包 tar.gz 与 web page」）
+
+### 交付零：内部关键字全栈一致性深审（65-a——22 §13 D34-D40 + 四查询实证）
+- **四套名面现状矩阵**（22 §13.1）：表面关键字 / 自举桥 quote 符号与 tag / Rust ADT 变体名 / kind_name 诊断名——**四语义 8 处不一致 + Keyword 枚举内自身不一致 3 处**（fn↔'lambda↔Lambda↔"lambda" / assign↔'set[第三形——非 set! 非 assign]↔SetBang↔"set!" / do↔'begin↔Begin↔"begin" + var/lit/app 两形并存）；r43「三域零变更」被裁定为**把债务当资产引用的过度引申**（域隔离是防误伤流程 ≠ 名面漂移合法）
+- **一致性总则（D34——判据新增）**：「一个语义一个名」：原语级关键字的表面名 = 桥 quote/tag = ADT 变体词根 = kind_name = 渲染面，五面同词根；派生关键字经宏/糖展开到原语（无独立 ADT 节点）；无表面关键字的语义（apply/var/literal）用内部统一名三面同名。**原则 31 精确化**：分离的是语法形态（皮肤可替换），不是名词根（名面一致）——名面漂移不是分离原则的推论而是其违反（正向：Python AST 同词根[ast.If↔if]；反向：Racket `#%plain-lambda` 双轨家族病活体实证）
+- **M-R 重命名族逐名裁定（D35——修正 01 §8.3 原候选）**：五件 GO（`Lambda→Fn`/`SetBang→Assign`/`Begin→Do`/`App→Apply`/`VarRef→Var`——M-R 与 M-E 解耦：D5 否决的是效应化实现，纯重命名零语义载荷独立合法）；**两件 NO-GO**（`If→Branch`：表面 if 是 D22 跨家族通用语，重命名制造新分离——一致性 > 行为导向微优化；`Literal→Const`：literal 精确覆盖 quote 产物，const 偏编译期常量概念，不可变性由类型系统保证[原则 23/30]名无需编码）——判据先于先例的操作实例（01 §8.3 是 next3 轮裁定，新判据推翻其中两行）
+- **S3 分臂裁定（D39）**：r44 = M-R 名面臂 + 三域一致化（~270 Rust 处 + 桥语料 ~30 处 + 测试期望）；结构臂（Define 脱糖/Do→Let 链/Module 迁移/de Bruijn IR）归 r45+ 分臂承载（每臂独立 commit + 字节码 parity 断言先行）；**六域候选空间完备性收敛证明（D40）**：Fn/Assign/Do/Apply/Var/Literal 六域 × 4-5 候选全展开，每域收敛唯一解 + 否决记录保留（Branch/Const 两否决入档）
+- **关键字正交性对账（§13.3——用户指令「每个关键字的定位/职责/边界/能力」）**：9 原语级关键字 × 五要素表 + 3 内部名 + 13 派生/声明/数据位——25 表面名每名职责唯一无重叠（M-R 零语义载荷不改正交结构）；知识搜索四查询实证（tool-results/r44-search/：Python AST 节点同词根 / 自举双实现同步 / Racket #%plain-lambda 双轨 / PEP8-C# 命名一致性）
+
+### 交付一：M-R 名面臂实施（65-b——§3.2 六命令 + 834:0:0）
+- **变体五件重命名**（expr.rs 枚举定义 + OCaml 规范块同词根化[规范↔代码互锚] + 15 crate 文件 + 7 测试文件 ~244 处 + 注释面全清扫——crates/tests/examples 旧名 grep 零残留）；**Keyword 枚举对齐**（D36：`Keyword::Fn/Assign/Do` 变体名 = as_str 字面 + `Keyword::ALL` 25 名单源[预内部化与 roundtrip 共享]）；**kind_name 12 名表**（D37：fn/apply/if/var/literal/assign/define/do/module/require/perform/handle——诊断面与桥 tag 同名穿透）
+- **自举桥 tag 域重构（D38——用户指令点名载荷）**：六处改名 `'lambda→'fn`/`'set→'assign`/`'begin→'do`/`'app→'apply`/`'lit→'literal`（全词统一——两形并存清偿）/`'var` 维持；expander.krf（产出点）+ compiler.krf（双 pass 匹配点）+ bootstrap_compiler.rs（tag 表）+ bootstrap_expander.rs（消费臂）四文件双侧对称迁移；tag 改名 parity 影响分析：tag 是数据协议标记非 bytecode 组成——门 A CoreExpr parity 恒成立 + 门 B fixpoint 随语料变更重建（SHA 重锚合法）
+- **新增机器断言 ×2**：`s3mr_kind_name_keyword_face_penetration`（五面穿透——9 原语级 kind_name ∈ Keyword 注册面 + 3 内部名 ∉ 关键字面[内部名独立域不侵蚀 E0020 全域排他]）+ `keyword_all_roundtrip_and_distinct`（25 名全量 roundtrip + 字面互异 + 计数锚）；architecture_audit 12 名表同步 + r43 遗留 unused import 清偿（clippy -D warnings 0）
+- §3.2 六命令 clean 起步全绿（build 14.26s 零告警 / check 0 / fmt 0 / clippy --all-targets -D warnings 0 / **test 834:0:0**[615 集成 + 219 单元——净 +2]）+ 五审计集 EXIT 0 ×5（233）+ CLI 四路径（fib 144 / macros 42 / check ok / E0021 端到端 REAL_EXIT 1 携「现代形式「fn」」）
+- 对账：22 v1.7（§13 D34-D40 + 13.4 实施实录）/ 01 v6.3（§2 OCaml 块同词根化 + §8.3 修正版 + §8.5 五面锚）/ 17 v6.6（原则 31 精确化）/ 20 v1.5 注记（S3-M-R 行 ✅）/ e5-plan v1.2（S3 分臂记录）/ matrix v0.1.0-r44 / RELEASE v0.11.0-r44 / v0.5-roadmap v0.8.0-r44
+
+- **里程碑：E5 S3 M-R 名面臂交付——「1970 表面」清算第三腿（S1 库面 r42 + S2 表面 r43 + S3 内部名面 r44 三腿闭合，五面同词根终态）；下一步 E5 S3 结构臂 r45+（Define 脱糖/Do→Let 链/Module 迁移/de Bruijn IR——字节码 parity 最严口径）→ S4 收口（非正交点 3→≤1 + 门审 ≥30 case）**
+
+---
+
 ## v0.10.0-r43（2026-09-16）——E5 S2 关键字腿：关键字完全重筛深审（D19-D33）+ 三件切换 fn/assign/do + E0021 扩展（64-a/64-b/64-c/64-e/64-z/64-web——用户指令「内部关键字与候选衍生关键字的完全重新筛选——语义清晰/无二义/标准符合 + 2026 前沿 + 内循环迭代收敛」+「按 sop.md 继续推进」+「同步完整打包 tar.gz 与 web page」）
 
 ### 交付零：关键字完全重筛深审轮（64-a/64-b/64-c——22 §12 D19-D33 + 八查询实证）

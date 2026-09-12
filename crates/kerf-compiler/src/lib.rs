@@ -7,7 +7,7 @@
 //! **编译骨架**（§19.3）：
 //! - 跳转回填：`emit_jump` 占位 → `patch_jump` 回填（`finish` 断言占位清空）；
 //! - 常量池：`intern_const` 按值哈希去重（陷阱：常量池去重）；
-//! - 闭包捕获转换：Lambda 的自由变量解析为捕获向量（LOAD/STORE_CAPTURED）；
+//! - 闭包捕获转换：Fn 的自由变量解析为捕获向量（LOAD/STORE_CAPTURED）；
 //! - debug_info_table：每条指令 (pc, Span) 映射——VM 错误反查源码（§8.12）。
 //!
 //! **核心不变式**（§19.3）：

@@ -1,15 +1,16 @@
-//! `CoreExpr`：9 个正交核心原语（stage0.md §3.2 最终定义）。
+//! `CoreExpr`：9 个正交核心原语（stage0.md §3.2 最终定义——名面 r44/
+//! E5 S3 M-R 臂同词根化：变体名 = 表面关键字词根，语义零变更）。
 //!
 //! ```ocaml
 //! type core_expr =
-//!   | Lambda of { params : string list; body : core_expr }
-//!   | App of { fn : core_expr; args : core_expr list }
+//!   | Fn of { params : string list; body : core_expr }        (* 表面 fn *)
+//!   | Apply of { fn_expr : core_expr; args : core_expr list } (* 调用——无关键字 *)
 //!   | If of { cond; then_branch; else_branch }
-//!   | VarRef of string
-//!   | Literal of literal_value
-//!   | SetBang of { name : string; value : core_expr }
+//!   | Var of string                                          (* 引用——无关键字 *)
+//!   | Literal of literal_value                               (* 字面——无关键字 *)
+//!   | Assign of { name : string; value : core_expr }          (* 表面 assign *)
 //!   | Define of { name : string; value : core_expr }
-//!   | Begin of core_expr list
+//!   | Do of core_expr list                                    (* 表面 do *)
 //!   | Module of { name; imports; exports; body }
 //!   | Require of { caps : capability list }   (* r8：能力声明，零运行时语义 *)
 //! ```
@@ -89,26 +90,33 @@ fn render_elem(v: &Rc<LiteralValue>) -> String {
 /// kerf-reader → kerf-expander 桥接到本类型（无旁路）；Span 独立携带
 /// 元数据（`kind_name` 仅诊断渲染用）。
 ///
+/// **E5 S3 M-R 名面臂（r44——22 §13 D34-D40）**：变体名与表面关键字
+/// 同词根化已落地——`Fn`/`Assign`/`Do`/`Apply`/`Var` 五件 M-R 重命名
+/// （零语义载荷，经 E5 窗 S3 腿通道）；`If→Branch`/`Literal→Const` 两件
+/// NO-GO（一致性判据否决——22 §13 D35）；结构臂（Define 脱糖/Do→Let
+/// 链/Module 迁移/de Bruijn IR）归 r45+ 承载（D39 分臂裁定）。
+///
 /// **Stage 2 ADT 演进目标（lang-design 01 §8.3 迁移映射——冻结维持：
 /// K1 终门审 r35 + K2 深审 r36 复核维持冻结，迁移窗口随 Stage 3「目标
 /// 语言完整化」重评）**：
-/// Lambda→`Fn`（de Bruijn）/ App→`Apply` / If→`Branch` / VarRef→`Var` /
-/// Literal→`Const` / SetBang→`Perform(State)` / Define→脱糖消除 /
-/// Begin→`Let` 链 / Module→模块系统层 / 新增 `Let`+`Perform`/`Handle` /
-/// Require→保留（声明面）。迁移须经 §13.2 切换期重构流程 + 委员会投票。
+/// M-R 名面臂 ✅ r44（Fn/Apply/Assign/Do/Var）；If/Literal 维持（D35
+/// NO-GO 修正 01 §8.3 原候选 Branch/Const）；Define→脱糖消除 /
+/// Do→`Let` 链 / Module→模块系统层 / de Bruijn = r45+ 结构臂（D39）；
+/// 新增 `Let`+`Perform`/`Handle` 已在位（r25）。迁移须经 §13.2 切换期
+/// 重构流程 + 委员会投票。
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreExpr {
-    /// `(lambda (params...) body)`——`param_scopes[i]` = 第 i 个形参的
+    /// `(fn (params...) body)`——`param_scopes[i]` = 第 i 个形参的
     /// **绑定作用域集**（绑定器符号的作用域集，TD-004；与 `params`
     /// 平行等长，由展开器在绑定形式 fresh scope 注入后捕获）。
-    Lambda {
+    Fn {
         params: Vec<Symbol>,
         param_scopes: Vec<ScopeSet>,
         body: Rc<CoreExpr>,
         span: Span,
     },
-    /// `(fn-expr arg1 arg2 ...)`
-    App {
+    /// `(fn-expr arg1 arg2 ...)`（调用——无表面关键字，位置形式）
+    Apply {
         fn_expr: Rc<CoreExpr>,
         args: Vec<Rc<CoreExpr>>,
         span: Span,
@@ -125,16 +133,16 @@ pub enum CoreExpr {
     /// `scopes` = 引用处作用域集（TD-004，r13）：编译器/eval 按
     /// `(name, scopes ⊆)` 匹配绑定（Racket 式集合作用域解析——空集
     /// 绑定 ⊆ 任意引用集，故全局/内置天然充当名称基兜底路径）。
-    VarRef {
+    Var {
         name: Symbol,
         scopes: ScopeSet,
         span: Span,
     },
     /// 字面量（含 quote 产物的点对结构）
     Literal { value: LiteralValue, span: Span },
-    /// `(set! name value)`——`scopes` = 赋值目标符号的引用处作用域集
-    /// （与 VarRef 同一解析口径，TD-004）。
-    SetBang {
+    /// `(assign name value)`——`scopes` = 赋值目标符号的引用处作用域集
+    /// （与 Var 同一解析口径，TD-004）。
+    Assign {
         name: Symbol,
         scopes: ScopeSet,
         value: Rc<CoreExpr>,
@@ -146,8 +154,8 @@ pub enum CoreExpr {
         value: Rc<CoreExpr>,
         span: Span,
     },
-    /// `(begin e1 e2 ...)`（返回最后一个表达式的值）
-    Begin { body: Vec<Rc<CoreExpr>>, span: Span },
+    /// `(do e1 e2 ...)`（返回最后一个表达式的值）
+    Do { body: Vec<Rc<CoreExpr>>, span: Span },
     /// `(module name (import ...) (export ...) body...)`
     Module {
         name: Symbol,
@@ -161,7 +169,7 @@ pub enum CoreExpr {
     /// 编译期权限验证（R9/E0006）与 driver 令牌铸造消费）。
     Require { caps: Vec<Capability>, span: Span },
     /// `(perform ⟨effect-value⟩)`（r25/42-f——effect-language-design
-    /// §2.1/R10：效应上抛。`effect` 先求值（求值顺序契约 App 序不变），
+    /// §2.1/R10：效应上抛。`effect` 先求值（求值顺序契约 Apply 序不变），
     /// 结果须为 `(tag . payload)` 点对（tag = Symbol 分派键；非此形态报
     /// 运行时类型错）。控制转移非值归约——resume 后值由恢复点注入，
     /// 未恢复则本表达式求值永不完成（body 剩余部分被 dispatch 丢弃）。
@@ -169,8 +177,8 @@ pub enum CoreExpr {
     /// `(handle ⟨tag⟩ ((⟨payload-var⟩ ⟨resume-var⟩) ⟨result-expr⟩) ⟨body⟩)`
     /// （R11——浅处理，D2：handler 处理一层效应；嵌套 handle = 用户侧
     /// 组合深处理）。`payload_var`/`resume_var` 为绑定器（绑定作用域集
-    /// 平行字段与 Lambda.param_scopes 同口径，TD-004）；`resume` 非独立
-    /// 原语——continuation 值的调用形态（D4，展开期脱糖为 App）。
+    /// 平行字段与 Fn.param_scopes 同口径，TD-004）；`resume` 非独立
+    /// 原语——continuation 值的调用形态（D4，展开期脱糖为 Apply）。
     Handle {
         /// 效应族标签（match 单键分派——D1：与 syntax-rules 字面量集合同型；
         /// 符号字面量同型载体 `Rc<str>`——与 LiteralValue::Symbol 一致，
@@ -216,14 +224,14 @@ impl CoreExpr {
     /// 节点 Span。
     pub fn span(&self) -> Span {
         match self {
-            CoreExpr::Lambda { span, .. }
-            | CoreExpr::App { span, .. }
+            CoreExpr::Fn { span, .. }
+            | CoreExpr::Apply { span, .. }
             | CoreExpr::If { span, .. }
-            | CoreExpr::VarRef { span, .. }
+            | CoreExpr::Var { span, .. }
             | CoreExpr::Literal { span, .. }
-            | CoreExpr::SetBang { span, .. }
+            | CoreExpr::Assign { span, .. }
             | CoreExpr::Define { span, .. }
-            | CoreExpr::Begin { span, .. }
+            | CoreExpr::Do { span, .. }
             | CoreExpr::Module { span, .. }
             | CoreExpr::Require { span, .. }
             | CoreExpr::Perform { span, .. }
@@ -231,17 +239,18 @@ impl CoreExpr {
         }
     }
 
-    /// 原语名（诊断与 dump 用）。
+    /// 原语名（诊断与 dump 用——22 §13 D37 五面同词根：与表面关键字/
+    /// 桥 tag/渲染面同词根，12 名表 r44 落地）。
     pub fn kind_name(&self) -> &'static str {
         match self {
-            CoreExpr::Lambda { .. } => "lambda",
-            CoreExpr::App { .. } => "app",
+            CoreExpr::Fn { .. } => "fn",
+            CoreExpr::Apply { .. } => "apply",
             CoreExpr::If { .. } => "if",
-            CoreExpr::VarRef { .. } => "var-ref",
+            CoreExpr::Var { .. } => "var",
             CoreExpr::Literal { .. } => "literal",
-            CoreExpr::SetBang { .. } => "set!",
+            CoreExpr::Assign { .. } => "assign",
             CoreExpr::Define { .. } => "define",
-            CoreExpr::Begin { .. } => "begin",
+            CoreExpr::Do { .. } => "do",
             CoreExpr::Module { .. } => "module",
             CoreExpr::Require { .. } => "require",
             CoreExpr::Perform { .. } => "perform",
@@ -250,16 +259,15 @@ impl CoreExpr {
     }
 
     /// S 表达式形式渲染（需符号表解析函数；测试与 dump 用）。
-    /// 渲染面跟随表面关键字（r43 / E5 S2：fn/assign/do——r42
-    /// `#<builtin:head>` 先例：渲染随表面名更新；kind_name 维持
-    /// 内部 ADT 名[原则 31——S3 腿才改]）。
+    /// 渲染面/诊断面/tag 面五面同词根（r43 表面切换 + r44 内部名面
+    /// 闭合——22 §13 D34：一个语义一个名）。
     pub fn render(&self, resolve: &dyn Fn(Symbol) -> String) -> String {
         match self {
-            CoreExpr::Lambda { params, body, .. } => {
+            CoreExpr::Fn { params, body, .. } => {
                 let ps: Vec<String> = params.iter().map(|p| resolve(*p)).collect();
                 format!("(fn ({}) {})", ps.join(" "), body.render(resolve))
             }
-            CoreExpr::App { fn_expr, args, .. } => {
+            CoreExpr::Apply { fn_expr, args, .. } => {
                 let mut parts = vec![fn_expr.render(resolve)];
                 parts.extend(args.iter().map(|a| a.render(resolve)));
                 format!("({})", parts.join(" "))
@@ -275,15 +283,15 @@ impl CoreExpr {
                 then_branch.render(resolve),
                 else_branch.render(resolve)
             ),
-            CoreExpr::VarRef { name, .. } => resolve(*name),
+            CoreExpr::Var { name, .. } => resolve(*name),
             CoreExpr::Literal { value, .. } => value.render(),
-            CoreExpr::SetBang { name, value, .. } => {
+            CoreExpr::Assign { name, value, .. } => {
                 format!("(assign {} {})", resolve(*name), value.render(resolve))
             }
             CoreExpr::Define { name, value, .. } => {
                 format!("(define {} {})", resolve(*name), value.render(resolve))
             }
-            CoreExpr::Begin { body, .. } => {
+            CoreExpr::Do { body, .. } => {
                 let parts: Vec<String> = body.iter().map(|e| e.render(resolve)).collect();
                 format!("(do {})", parts.join(" "))
             }
@@ -355,13 +363,13 @@ impl CoreExpr {
     /// 首现优先。
     pub fn free_var_occurrences(&self, bound: &mut Vec<Symbol>, out: &mut Vec<(Symbol, ScopeSet)>) {
         match self {
-            CoreExpr::VarRef { name, scopes, .. } => {
+            CoreExpr::Var { name, scopes, .. } => {
                 if !bound.contains(name) && !out.iter().any(|(s, _)| s == name) {
                     out.push((*name, scopes.clone()));
                 }
             }
             CoreExpr::Literal { .. } => {}
-            CoreExpr::Lambda { params, body, .. } => {
+            CoreExpr::Fn { params, body, .. } => {
                 let shadowed = params.len();
                 for p in params {
                     if !bound.contains(p) {
@@ -373,7 +381,7 @@ impl CoreExpr {
                     bound.pop();
                 }
             }
-            CoreExpr::App { fn_expr, args, .. } => {
+            CoreExpr::Apply { fn_expr, args, .. } => {
                 fn_expr.free_var_occurrences(bound, out);
                 for a in args {
                     a.free_var_occurrences(bound, out);
@@ -389,7 +397,7 @@ impl CoreExpr {
                 then_branch.free_var_occurrences(bound, out);
                 else_branch.free_var_occurrences(bound, out);
             }
-            CoreExpr::SetBang {
+            CoreExpr::Assign {
                 name,
                 scopes,
                 value,
@@ -407,7 +415,7 @@ impl CoreExpr {
                     bound.push(*name);
                 }
             }
-            CoreExpr::Begin { body, .. } => {
+            CoreExpr::Do { body, .. } => {
                 for e in body {
                     e.free_var_occurrences(bound, out);
                 }
@@ -430,7 +438,7 @@ impl CoreExpr {
                 body,
                 ..
             } => {
-                // 绑定屏蔽（与 Lambda 同型——两绑定器先入 bound，体遍历
+                // 绑定屏蔽（与 Fn 同型——两绑定器先入 bound，体遍历
                 // 后弹出；tag 为符号常量非变量引用）
                 let shadowed = 2;
                 for p in [payload_var, resume_var] {
@@ -473,7 +481,7 @@ mod tests {
     }
 
     fn var(n: u32) -> Rc<CoreExpr> {
-        Rc::new(CoreExpr::VarRef {
+        Rc::new(CoreExpr::Var {
             name: sym(n),
             scopes: ScopeSet::new(),
             span: Span::dummy(),
@@ -483,12 +491,12 @@ mod tests {
     #[test]
     fn free_variables_lambda_shadows() {
         // (fn (a) (f a b)) → 自由变量 {f, b}（a 被参数屏蔽）
-        let body = Rc::new(CoreExpr::App {
+        let body = Rc::new(CoreExpr::Apply {
             fn_expr: var(6),
             args: vec![var(0), var(1)],
             span: Span::dummy(),
         });
-        let lam = CoreExpr::Lambda {
+        let lam = CoreExpr::Fn {
             params: vec![sym(0)],
             param_scopes: vec![ScopeSet::new()],
             body,
@@ -501,17 +509,17 @@ mod tests {
     #[test]
     fn free_variables_nested() {
         // (fn (x) (fn (y) (x y z))) → 自由变量 {z}
-        let inner = CoreExpr::Lambda {
+        let inner = CoreExpr::Fn {
             params: vec![sym(1)],
             param_scopes: vec![ScopeSet::new()],
-            body: Rc::new(CoreExpr::App {
+            body: Rc::new(CoreExpr::Apply {
                 fn_expr: var(0),
                 args: vec![var(1), var(2)],
                 span: Span::dummy(),
             }),
             span: Span::dummy(),
         };
-        let outer = CoreExpr::Lambda {
+        let outer = CoreExpr::Fn {
             params: vec![sym(0)],
             param_scopes: vec![ScopeSet::new()],
             body: Rc::new(inner),

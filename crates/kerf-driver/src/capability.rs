@@ -34,7 +34,7 @@
 //!
 //! **R9 规则**（保守静态——零误报契约，与 R1-R8 同纪律）：
 //! 程序中任何对门控内置名（read-line/read-int/read-num/read；print/
-//! newline/write-string/write）的**引用**（VarRef 任意位置）都要求对应
+//! newline/write-string/write）的**引用**（Var 任意位置）都要求对应
 //! `(require io ...)` 声明；**用户接管豁免**：程序自身 define/set! 该
 //! 名字时视为用户全局（非内置使用，不标记——确定性边界，防误报）。
 //! 卫生回退符号（`name$hyg$N`）按基名判定（与 driver 运行时回退同则）。
@@ -176,8 +176,8 @@ fn collect_module_needs(
                 out.push((module_name, needs, *span));
             }
         }
-        CoreExpr::Lambda { body, .. } => collect_module_needs(body, table, out),
-        CoreExpr::App { fn_expr, args, .. } => {
+        CoreExpr::Fn { body, .. } => collect_module_needs(body, table, out),
+        CoreExpr::Apply { fn_expr, args, .. } => {
             collect_module_needs(fn_expr, table, out);
             for a in args {
                 collect_module_needs(a, table, out);
@@ -193,10 +193,10 @@ fn collect_module_needs(
             collect_module_needs(then_branch, table, out);
             collect_module_needs(else_branch, table, out);
         }
-        CoreExpr::SetBang { value, .. } | CoreExpr::Define { value, .. } => {
+        CoreExpr::Assign { value, .. } | CoreExpr::Define { value, .. } => {
             collect_module_needs(value, table, out)
         }
-        CoreExpr::Begin { body, .. } => {
+        CoreExpr::Do { body, .. } => {
             for item in body {
                 collect_module_needs(item, table, out);
             }
@@ -208,7 +208,7 @@ fn collect_module_needs(
             collect_module_needs(handler_body, table, out);
             collect_module_needs(body, table, out);
         }
-        CoreExpr::VarRef { .. } | CoreExpr::Literal { .. } | CoreExpr::Require { .. } => {}
+        CoreExpr::Var { .. } | CoreExpr::Literal { .. } | CoreExpr::Require { .. } => {}
     }
 }
 
@@ -223,8 +223,8 @@ fn collect_requirements(e: &CoreExpr, req: &mut IoRequirements) {
                 }
             }
         }
-        CoreExpr::Lambda { body, .. } => collect_requirements(body, req),
-        CoreExpr::App { fn_expr, args, .. } => {
+        CoreExpr::Fn { body, .. } => collect_requirements(body, req),
+        CoreExpr::Apply { fn_expr, args, .. } => {
             collect_requirements(fn_expr, req);
             for a in args {
                 collect_requirements(a, req);
@@ -240,14 +240,14 @@ fn collect_requirements(e: &CoreExpr, req: &mut IoRequirements) {
             collect_requirements(then_branch, req);
             collect_requirements(else_branch, req);
         }
-        CoreExpr::SetBang { value, .. } => collect_requirements(value, req),
+        CoreExpr::Assign { value, .. } => collect_requirements(value, req),
         CoreExpr::Define { value, .. } => collect_requirements(value, req),
-        CoreExpr::Begin { body, .. } | CoreExpr::Module { body, .. } => {
+        CoreExpr::Do { body, .. } | CoreExpr::Module { body, .. } => {
             for item in body {
                 collect_requirements(item, req);
             }
         }
-        CoreExpr::VarRef { .. } | CoreExpr::Literal { .. } => {}
+        CoreExpr::Var { .. } | CoreExpr::Literal { .. } => {}
         // r25/42-f：效应子树递归（D10 正交——效应体内 require/门控
         // 引用照常提取/验证；能力管线零感知效应语义）
         CoreExpr::Perform { effect, .. } => collect_requirements(effect, req),
@@ -465,7 +465,7 @@ fn verify_refs(
     table: &SymbolTable,
 ) -> Option<Diagnostic> {
     match e {
-        CoreExpr::VarRef { name, span, .. } => {
+        CoreExpr::Var { name, span, .. } => {
             let raw = table.name(*name).to_string();
             let base = hygienic_base(&raw).to_string();
             if takeover.contains(&raw)
@@ -486,8 +486,8 @@ fn verify_refs(
                 _ => None,
             }
         }
-        CoreExpr::Lambda { body, .. } => verify_refs(body, declared, takeover, table),
-        CoreExpr::App { fn_expr, args, .. } => verify_refs(fn_expr, declared, takeover, table)
+        CoreExpr::Fn { body, .. } => verify_refs(body, declared, takeover, table),
+        CoreExpr::Apply { fn_expr, args, .. } => verify_refs(fn_expr, declared, takeover, table)
             .or_else(|| {
                 args.iter()
                     .find_map(|a| verify_refs(a, declared, takeover, table))
@@ -500,7 +500,7 @@ fn verify_refs(
         } => verify_refs(cond, declared, takeover, table)
             .or_else(|| verify_refs(then_branch, declared, takeover, table))
             .or_else(|| verify_refs(else_branch, declared, takeover, table)),
-        CoreExpr::SetBang {
+        CoreExpr::Assign {
             name, value, span, ..
         } => {
             // set! 目标：若名字是门控内置且未被接管 → 内置状态写入（无此
@@ -514,7 +514,7 @@ fn verify_refs(
             let _ = name;
             verify_refs(value, declared, takeover, table)
         }
-        CoreExpr::Begin { body, .. } | CoreExpr::Module { body, .. } => body
+        CoreExpr::Do { body, .. } | CoreExpr::Module { body, .. } => body
             .iter()
             .find_map(|item| verify_refs(item, declared, takeover, table)),
         CoreExpr::Require { .. } | CoreExpr::Literal { .. } => None,
@@ -546,12 +546,12 @@ pub(crate) fn collect_takeover(e: &CoreExpr, table: &SymbolTable, out: &mut Hash
             out.insert(table.name(*name).to_string());
             collect_takeover(value, table, out);
         }
-        CoreExpr::SetBang { name, value, .. } => {
+        CoreExpr::Assign { name, value, .. } => {
             out.insert(table.name(*name).to_string());
             collect_takeover(value, table, out);
         }
-        CoreExpr::Lambda { body, .. } => collect_takeover(body, table, out),
-        CoreExpr::App { fn_expr, args, .. } => {
+        CoreExpr::Fn { body, .. } => collect_takeover(body, table, out),
+        CoreExpr::Apply { fn_expr, args, .. } => {
             collect_takeover(fn_expr, table, out);
             for a in args {
                 collect_takeover(a, table, out);
@@ -567,12 +567,12 @@ pub(crate) fn collect_takeover(e: &CoreExpr, table: &SymbolTable, out: &mut Hash
             collect_takeover(then_branch, table, out);
             collect_takeover(else_branch, table, out);
         }
-        CoreExpr::Begin { body, .. } | CoreExpr::Module { body, .. } => {
+        CoreExpr::Do { body, .. } | CoreExpr::Module { body, .. } => {
             for item in body {
                 collect_takeover(item, table, out);
             }
         }
-        CoreExpr::Require { .. } | CoreExpr::VarRef { .. } | CoreExpr::Literal { .. } => {}
+        CoreExpr::Require { .. } | CoreExpr::Var { .. } | CoreExpr::Literal { .. } => {}
         // r25/42-f：效应子树递归（接管名可藏于效应体内——同提取口径）
         CoreExpr::Perform { effect, .. } => collect_takeover(effect, table, out),
         CoreExpr::Handle {
@@ -644,7 +644,7 @@ mod tests {
         let fid = sm.add_file("t.krf", src);
         let mut t = SymbolTable::new();
         let print = t.intern("print");
-        let core = vec![Rc::new(CoreExpr::VarRef {
+        let core = vec![Rc::new(CoreExpr::Var {
             name: print,
             scopes: kerf_syntax::ScopeSet::new(),
             span: Span::new(fid, 1, 6),
@@ -666,7 +666,7 @@ mod tests {
                 caps: vec![Capability::IoWrite],
                 span: Span::dummy(),
             }),
-            Rc::new(CoreExpr::VarRef {
+            Rc::new(CoreExpr::Var {
                 name: print,
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
@@ -685,7 +685,7 @@ mod tests {
                 caps: vec![Capability::IoWrite],
                 span: Span::dummy(),
             }),
-            Rc::new(CoreExpr::VarRef {
+            Rc::new(CoreExpr::Var {
                 name: rl,
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
@@ -710,7 +710,7 @@ mod tests {
                 }),
                 span: Span::dummy(),
             }),
-            Rc::new(CoreExpr::VarRef {
+            Rc::new(CoreExpr::Var {
                 name: print,
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
@@ -725,11 +725,11 @@ mod tests {
         let mut t = SymbolTable::new();
         let print = t.intern("print");
         let my = t.intern("my-print");
-        // (define my-print print)——值侧 VarRef print 未被接管（接管的是
+        // (define my-print print)——值侧 Var print 未被接管（接管的是
         // my-print）→ 正确标记（别名确实使用内置）
         let core = vec![Rc::new(CoreExpr::Define {
             name: my,
-            value: Rc::new(CoreExpr::VarRef {
+            value: Rc::new(CoreExpr::Var {
                 name: print,
                 scopes: kerf_syntax::ScopeSet::new(),
                 span: Span::dummy(),
@@ -745,7 +745,7 @@ mod tests {
     fn hygienic_base_resolves_gated_reference() {
         let mut t = SymbolTable::new();
         let print_hyg = t.intern("print$hyg$3");
-        let core = vec![Rc::new(CoreExpr::VarRef {
+        let core = vec![Rc::new(CoreExpr::Var {
             name: print_hyg,
             scopes: kerf_syntax::ScopeSet::new(),
             span: Span::dummy(),
@@ -756,7 +756,7 @@ mod tests {
         // 非数字后缀不剥离（保守判定——与运行时回退同则）
         let mut t2 = SymbolTable::new();
         let not_hyg = t2.intern("print$hyg$x");
-        let core2 = vec![Rc::new(CoreExpr::VarRef {
+        let core2 = vec![Rc::new(CoreExpr::Var {
             name: not_hyg,
             scopes: kerf_syntax::ScopeSet::new(),
             span: Span::dummy(),
