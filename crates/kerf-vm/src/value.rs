@@ -40,6 +40,12 @@ pub enum Value {
     /// `Call` 通道）。堆根性：携带帧链/数据栈快照——可含堆子引用
     /// （GC 六来源扩展：活跃 continuation 帧，M5）。
     Continuation(Rc<ContinuationValue>),
+    /// FFI 外部令牌（r30/48-d——ffi-ownership-model §5：CPointer/
+    /// Opaque 令牌；线性性经「消费全局生效」实现——Rc 共享 + 内嵌
+    /// 状态单元，一处 FreeExternal 后所有共享绑定同步失效）。装箱
+    /// 形态 = `HeapObj::Foreign`（载荷 Rc&lt;ExternalToken&gt;，无 GC 子
+    /// 引用——令牌载荷不参与 GC 可达性）。
+    External(Rc<crate::ffi::ExternalToken>),
 }
 
 impl Value {
@@ -57,6 +63,7 @@ impl Value {
             Value::Closure(_) => "procedure",
             Value::Builtin(_) => "builtin-procedure",
             Value::Continuation(_) => "continuation",
+            Value::External(_) => "external",
         }
     }
 
@@ -107,6 +114,9 @@ impl Value {
             (Value::Closure(a), Value::Closure(b)) => Rc::ptr_eq(a, b),
             (Value::Builtin(a), Value::Builtin(b)) => Rc::ptr_eq(a, b),
             (Value::Continuation(a), Value::Continuation(b)) => Rc::ptr_eq(a, b),
+            // r30/48-d：令牌按标识（同一 Rc = 同一令牌；共享引用
+            // 消费全局失效——eq? 语义与闭包同型）
+            (Value::External(a), Value::External(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
     }
@@ -257,6 +267,15 @@ pub fn render_value(v: &Value, heap: &Heap) -> String {
         // r25/42-f：continuation 渲染（print/write-line 输出形态——
         // Racket `#<continuation>` 惯例：不透明值，不枚举帧链）
         Value::Continuation(_) => "#<continuation>".to_string(),
+        // r30/48-d：FFI 令牌渲染（不透明——外部域地址不进用户面
+        // 渲染；失效态可见性供诊断）
+        Value::External(t) => {
+            if t.is_valid() {
+                "#<external>".to_string()
+            } else {
+                "#<external:invalid>".to_string()
+            }
+        }
         Value::Closure(_) => "#<procedure>".to_string(),
         Value::Builtin(b) => format!("#<builtin:{}>", b.name),
     }
@@ -344,6 +363,14 @@ fn render_foreign(b: &Rc<kerf_runtime::ForeignBox>) -> String {
         "#<procedure>".to_string()
     } else if let Some(f) = b.any.as_ref().downcast_ref::<BuiltinFn>() {
         format!("#<builtin:{}>", f.name)
+    } else if let Some(t) = b.any.as_ref().downcast_ref::<crate::ffi::ExternalToken>() {
+        // r30/48-d：FFI 令牌的装箱渲染（与直接值形态同形——往返
+        // 渲染一致性，TD-010 同型纪律）
+        if t.is_valid() {
+            "#<external>".to_string()
+        } else {
+            "#<external:invalid>".to_string()
+        }
     } else {
         "#<foreign>".to_string()
     }

@@ -54,6 +54,10 @@ pub struct GcRef(pub u32);
 /// 早期版本误写 Boxed(BoxedInput) 变体——实际不存在：闭包/内置函数不可装箱
 /// 是显式裁定（序对元素为闭包/内置时以标记字符串占位，TD-010 登记，
 /// Stage 2 以 HeapObj::Foreign 承载——目标时机随批次 F 深审改判，见登记册）。
+/// **r30/48-d 注记**：`HeapObj::Foreign` 载荷扩展承载 **FFI 外部令牌**
+/// （`Rc<ExternalToken>`——ffi-ownership-model §7「令牌载荷不参与 GC
+/// 可达性」：追踪器 no-op、children 为空；闭包/内置/continuation/令牌
+/// 四形态共用 Foreign 变体——TD-010 追踪器协议的自然扩展）。
 pub enum HeapObj { /* Pair(GcRef, GcRef) | Str(Rc<str>) | Int(i64) | Float(f64)
                      | Bool(bool) | Nil | Symbol(Rc<str>) */ }
 
@@ -64,6 +68,9 @@ pub struct Slot { /* obj: HeapObj; marked: bool */ }
 /// 堆（分配器 + 标记-清除回收器 + 外部引用登记簿）。
 pub struct Heap {
     // slots: Vec<Slot>; free: Vec<GcRef>; foreign_roots: Vec<GcRef>;
+    // pin_counts: Vec<(GcRef, u32)>;  // Φ 计数簿（r30/48-d——foreign_roots
+    //                                 // 的计数化泛化：supp(Φ) 并入 mark
+    //                                 // 起点；归零摘根——ffi-ownership-model §3）
     // allocs_since_gc: u64; gc_threshold: usize; gc_enabled: bool;
 }
 
@@ -100,6 +107,19 @@ impl Heap {
     pub fn register_foreign_ref(&mut self, r: GcRef);
     pub fn foreign_roots(&self) -> &[GcRef];
 
+    /// Φ 计数簿（r30/48-d——[ffi-ownership-model §3](../develop/v0/stage-2/ffi-ownership-model.md)
+    /// P/U 归约规则的运行形态；`register_foreign_ref` 的**计数化泛化**——
+    /// 持久根与窗口计数根并存，supp(Φ) 并入 mark 起点）：
+    /// - `pin_object`（P1）：`Φ[v] += 1`（可重复累计——引计数式屏障）；
+    /// - `unpin_object`（U1）：`Φ[v] -= 1` 归零摘根（下一轮回收周期
+    ///   可回收）；U2 下溢 → `Err`（E8 口径——结构配对保证不可达）；
+    /// - `pin_count`/`pinned_refs`：Φ 可观测性（测试/审计面）；
+    /// - F-PIN 引理：周期起点 Φ(v) ≥ 1 ⟹ 本轮 sweep 不回收 v。
+    pub fn pin_object(&mut self, r: GcRef);
+    pub fn unpin_object(&mut self, r: GcRef) -> Result<(), RuntimeError>;
+    pub fn pin_count(&self, r: GcRef) -> u32;
+    pub fn pinned_refs(&self) -> Vec<GcRef>;
+
     /// 统计（基准与测试观测点）。
     pub fn stats(&self) -> GcStats;
 }
@@ -131,7 +151,7 @@ impl RootSet {
 pub fn mark_sweep_cycle(heap: &mut Heap, roots: &RootSet) -> GcStats;
 ```
 
-**根集五来源（根集完备性不变式，本文 §4；v5.2 修订——原「四来源」漏帧捕获槽）**：(1) VM 数据栈；(2) 调用帧局部槽；(3) **帧捕获槽**（`Rc<RefCell<Value>>` 共享单元格——可变捕获的根，VM 侧 `collect_roots` 逐帧枚举 locals 与 captures 两组）；(4) 全局环境；(5) `register_foreign_ref` 登记的外部引用（回收周期起点并入标记工作栈）。五类根缺一不可——漏根 = 悬垂指针（P0 级安全缺陷）。
+**根集五来源（根集完备性不变式，本文 §4；v5.2 修订——原「四来源」漏帧捕获槽）**：(1) VM 数据栈；(2) 调用帧局部槽；(3) **帧捕获槽**（`Rc<RefCell<Value>>` 共享单元格——可变捕获的根，VM 侧 `collect_roots` 逐帧枚举 locals 与 captures 两组）；(4) 全局环境；(5) `register_foreign_ref` 登记的外部引用（回收周期起点并入标记工作栈；r30/48-d 起 = 持久根 **∪ supp(Φ)**——pin 计数簿（P/U 规则）为第五来源的计数化泛化，F-PIN 引理维持完备性不变式）。五类根缺一不可——漏根 = 悬垂指针（P0 级安全缺陷）。
 
 **屏障接口的边界裁定**：Stage 0 的屏障为 no-op（无分代/并发，无屏障需求）；`register_foreign_ref` 在 Stage 0 **不是** no-op（外部持有的 GcRef 必须作为根保存，否则悬垂）——两个接口的成熟度分级不同，见 [13-能力矩阵 §3.1.3](./13-capability-matrix.md)。
 

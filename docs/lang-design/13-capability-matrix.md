@@ -763,6 +763,8 @@ pub trait FfiBoundary {
 
 **自举合规注记**：FFI 的**实现**推迟至 Stage 2（破坏自举闭环——见 本文 §3.2）；本预留仅为类型形状与 GC 边界协议，不引入对宿主 C ABI 的编译期依赖，不触碰自举链（[12-路线图 §2](./12-roadmap.md) 后端策略同口径）。
 
+**行为规格与实现锚（r30/48-d 做实）**：行为语义 = [stage-2/ffi-ownership-model](../develop/v0/stage-2/ffi-ownership-model.md)（G3 冻结——三原语所有权责任矩阵 + GC pin/unpin 跨边界语义 + 线性令牌 + 13 边界 case）；VM 执行面已落地：操作码三指令（`CALL_EXTERNAL`/`ALLOC_EXTERNAL`/`FREE_EXTERNAL`——[04-字节码 VM §1](./04-bytecode-vm.md) 第十组，43→46）+ `FfiBoundary` 真实实现（`kerf-driver/src/ffi.rs`——P/U 规则经 Heap Φ 计数簿）+ extern 符号表（符号解析 fail-closed = E0012）+ E0010-E0012 诊断族（[18-术语 §6](./18-terminology.md)）；**语言面形式 = Stage 3**（编译臂不发射——IR/VM 面做实即 Stage 2 验收条件 4 兑现）。**§21.3 条件 4 状态：✅**。
+
 #### 3.3.5 增量编译查询接口（P0）
 
 **为什么必须预留**：查询式架构（[15-架构分层 §3.1](./15-architecture-layers.md)）要求所有编译中间结果通过统一接口访问——这必须在编译器架构中预留（参考 rustc 查询系统与 Salsa 框架）。

@@ -795,6 +795,26 @@ fn op_from_value(v: &Value, heap: &Heap) -> Result<Op, CompileError> {
             need(0)?;
             Op::Perform
         }
+        // r30/48-d FFI 三码（opcode.rs 声明序 43/44/45——compiler.krf
+        // OP-* 常量同表；编译臂不发射（语言面 Stage 3）——桥完整
+        // 化仅为码表完备（码序三方冻结：enum ↔ 桥 ↔ krf 表））
+        43 => {
+            need(2)?;
+            Op::CallExternal {
+                symbol: operands[0] as u32,
+                n_args: operands[1] as u32,
+            }
+        }
+        44 => {
+            need(1)?;
+            Op::AllocExternal {
+                size: operands[0] as u32,
+            }
+        }
+        45 => {
+            need(0)?;
+            Op::FreeExternal
+        }
         other => {
             return Err(internal_x(&format!("未知操作码 {}", other)));
         }

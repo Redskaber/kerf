@@ -181,9 +181,13 @@ b   ::= 内置函数句柄（driver 注册，见 [09-标准库 §2](./09-stdlib.
 (E6)  DuplicateDefine   —— 顶层重定义
 (E7)  RuntimeError      —— I/O 通道失败（[05-运行时 §1](./05-runtime.md)）
 (E8)  内部不变式破坏    —— 仅可能来自编译器缺陷（如栈失衡），视为编译器 P0 缺陷而非用户错误
+(E9)  FfiTokenInvalid   —— FFI 令牌失效后使用（双释/用后传递/用后使用；
+                          [ffi-ownership-model §5](../develop/v0/stage-2/ffi-ownership-model.md)，r30/48-d 落位 E0010）
+(E10) FfiOwnershipViolation —— FFI 所有权/类型违规（释放 Opaque/非令牌值/实参形状不匹配；同上 §2，落位 E0011）
+(E11) FfiSymbolResolution  —— FFI 符号解析失败（extern 符号表未登记；同上 §4，落位 E0012）
 ```
 
-错误携带 `Span`（源位置）传播至诊断层（[02-语法模型 §3](./02-syntax-model.md)）——错误信息是一等公民（[17-设计原则 §1 原则 16](./17-principles.md)）。**无未定义行为**：任何输入要么归约到值、要么进入确定的 Err 态（E0–E7 全集覆盖用户程序可触发的全部终态；E8 是编译器自身的质量边界）。
+错误携带 `Span`（源位置）传播至诊断层（[02-语法模型 §3](./02-syntax-model.md)）——错误信息是一等公民（[17-设计原则 §1 原则 16](./17-principles.md)）。**无未定义行为**：任何输入要么归约到值、要么进入确定的 Err 态（E0–E7 全集覆盖用户程序可触发的全部终态；E8 是编译器自身的质量边界；E9–E11 是 FFI 面的用户可触发终态与链接终态——r30/48-d 按 [ffi-ownership-model §3 错误面闭合](../develop/v0/stage-2/ffi-ownership-model.md) 裁定延伸，E0–E7 全集覆盖声明随之扩为 **E0–E11**；FFI 族的 unpin 下溢归 E8 口径——4 位码面经 E0004 运行时通用族承载，见 [18-术语 §6 码位登记表](./18-terminology.md)）。
 
 ---
 

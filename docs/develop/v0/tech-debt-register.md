@@ -2,7 +2,7 @@
 
 > **Author**: kerf-dev-agent（ARCH-A 角色）
 > **Date**: 2026-09-11（r27/48-a 批次 J 规划轮：TD-003/TD-005/TD-015 目标时机改判 Stage 3（零消费缺口 + R6/R7 收敛纪律——依据 stage-2/plan §5d 处置表；等级/状态不动）；r17：TD-013 resolved（双路径恢复 + 合并报告 + CLI 切换）+ TD-024 新增（本地码 PoC 边界 B1）；r16：批次 F 深审全量对账——索引表补全（r3 后新增 TD-015+ 此前无索引行）+ TD-012 标记 resolved / TD-013 与 TD-009/010/014/017/018 目标时机改判 Stage 2（附 Stage 1 门放行裁定）/ TD-019/020 断档登记 / TD-023 新增（P2）；r3：TD-001/006 断档记录 + TD-005/008/011 详情补齐 + TD-012/013/014 新增 + TD-009 注记更新）
-> **Version**: v0.3.0-r24
+> **Version**: v0.3.0-r30（r30/48-d：TD-026 新增——FFI 语言面形式 + 编组消费子集收窄登记）
 > **Status**: Active（**r24 批次 I 执行 42-e：TD 五项 resolved（TD-010 Foreign 装箱 + TD-011 字符串全序 + TD-014 嵌套 define 归因 + TD-018 消息单源统一 + TD-023 根扫描对症——GcCell 摘要 + 缓冲复用，非尾形基准 -27%）+ TD-008 裁定 DEFER（实测依据三面——见详情）**；r23 批次 I 执行 42-d：TD-017 + TD-009 联动 resolved（INC7 清单兑现——eval 参考路径退役，两域随路径注销）；r21/r22 批次 I 执行 42-b/42-c：无新增/无 resolved（段迁移零债务面——module 名覆写值等价注记入 i1-design v1.2）；r20 批次 I 执行启动：无新增/无 resolved——设计轮（42-a I1 切口设计）零债务面；eval 退役裁定已设计锁定排 42-d（INC7）——兑现于 r23；r19 批间插入轮：无新增/无 resolved——设计轮 + 骨架冻结零债务面；口径注记：矩阵 r18 版集成计数 438 勘误为 436（198+438=636≠634 内部矛盾——实测 436 与 r17 增量链 409+27 吻合））
 > **规则**: sop.md §6.2.1——新增已解决项/调整剩余项优先级（每子阶段必检）
 
@@ -35,6 +35,7 @@
 | TD-023 | gc_stress 深递归 GC 根扫描回归（超线性） | P3（r18 降级） | **resolved（r24 / 42-e）**：基准重定型（gc_stress_nontail 非尾形锚定——改前 144.06ms/轮 + 2×→3.2-3.7× 超线性实测成立）+ 对症双件（GcCell 堆根性摘要——非堆单元 O(1) 跳过；根扫描缓冲跨周期复用——无分配化路径 B）→ **非尾形 -27.1%（144.06→105.15ms）**；尾形 gc_stress -2.8% / fib -3.1%（±5% 噪声带 ✓）；残留超线性（2×→3.4×）如实归因 = 帧栈内存 churn + 每周期固定成本（精确 MS 栈根扫描的结构性成本，非分配模式缺陷） | ~~Stage 2 批次 I2~~ 已交付 |
 | TD-024 | 本地码后端 PoC 边界（整数域十二原语 + 直接调用；闭包/Float/Str/Pair/set!/module/IO/函数值一等边界外；**r25 扩界注记**：perform/handle 效应形式同口径显式拒绝——效应语义由 VM 路径承载（anf LowerError B1 类），native 效应化属 Stage 3 后端演进评估项） | P3 | **登记（r17 / 38-b·38-c）**：显式错误非静默降级（B1 类）；FFI 面（print/write_stdout）按 ffi-ownership-model 批次 I 做实；闭包/GC 协同批次 H/I | Stage 2 批次 H-I（GC-后端协同轮） |
 | TD-025 | 自举侧 retag 无均匀标记快路径（包装宏链 O(N²) VM 工作） | P3 | **resolved（r18 / 40-f）**：krf 六头字段协议落地——`(tag s e exp scopes uni . fields)`（`uni = ('uni . scopes)` 均匀证书，make-node 默认 nil + retag 重建置位 + inject-scope 注入清除 + 桥 stx_to_node 同步）；retag-scope 快路径（uni 命中 → 整棵子树 O(1) 共享——种子 uniform_tag 镜像）；实测门审计 C02 包装链 **>540s → 7.37s（73×+）**；双审计集 EXIT 0（stage0 41 + stage1 51，20s/28s） | ~~Stage 3~~ 已交付 |
+| TD-026 | FFI 语言面形式 + 编组消费子集收窄（FFI 三操作码 VM 面 r30 已做实；**语言面语法/extern 声明形式 = Stage 3**（编译臂不发射——操作码直接构造 + `compile_ffi_call_program` 字面量 lowering 承载 Stage 2）；CStruct 逐字段递归编组/CFunction 回调通路/`FfiCall::FreeExternal` 非令牌实参 lowering 均未消费——注册面显式拒绝或编译期拒绝（诚实收窄注记）） | P3 | **登记（r30 / 48-d）**：IR/VM 面 + Φ 簿 + E0010-E0012 + 13 case 已落地（ffi_vm_tests 37 case）；语言面与编组扩展为 Stage 3 锚（ffi-ownership-model §8 同口径） | Stage 3（语言面形式批次） |
 
 ## 详情
 
@@ -417,3 +418,24 @@ lang-design 全部对账面）。推断与 TD-001/006 同型：跳号笔误而�
   3.4×）由帧栈内存 churn（每帧 2 Vec 分配）+ 每周期固定成本构成——
   精确 mark-sweep 栈根扫描的结构性成本（非登记的分配模式缺陷——已治愈）；
   分代/压缩对该残留对症有限（TD-008 裁定 DEFER 的②依据）。
+
+### TD-026 FFI 语言面形式 + 编组消费子集收窄（P3，r30 新增——48-d 做实边界登记）
+
+- **登记背景（r30 / 48-d）**：FFI VM 面（§21.3 条件 4）已做实——操作码
+  三指令（43→46）+ `FfiBoundary` 真实实现（Heap Φ 计数簿——P/U 归约
+  规则）+ extern 符号表（E0012 fail-closed）+ 线性令牌状态机（E0010/
+  E0011）+ 13 边界 case（ffi_vm_tests 37 case + driver ffi 单元 8）；
+  **残留两域显式登记**：
+  1. **语言面形式**（extern 声明语法/FFI 调用表达形式——「批次 G1/I
+     定」既定 Stage 3，plan §5b 批次 J 排程注 3）：编译臂不发射三操作
+     码——Stage 2 消费面 = 操作码直接构造（测试/审计）+
+     `compile_ffi_call_program`（冻结 FfiCall 的字面量实参 lowering）；
+  2. **编组消费子集**（ffi-ownership-model §2.1 三分法的 Stage 2 实现
+     子集）：CInt/CPointer(char* 窗口借用 + 令牌传递)/Opaque 已消费；
+     **CStruct 逐字段递归编组未消费**（注册面拒绝）+ **CFunction 回调
+     通路不存在**（§6 case 3——形状非回调注册面）+ `FfiCall::
+     FreeExternal` 非令牌实参 lowering 拒绝（实参需运行时令牌值）。
+- **等级 P3 依据**：零实现债务（接口预留成本 = 类型维护——13 §2.5.1
+  解读要点原文口径）；收窄面均显式拒绝非静默（报错 > 静默，§2.3-4）。
+- **目标阶段**：Stage 3（语言面形式批次——ffi-ownership-model §8
+  「语言面形式批次 G1/I 定」同口径锚）。

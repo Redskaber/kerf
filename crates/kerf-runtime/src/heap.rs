@@ -7,6 +7,7 @@ use std::any::Any;
 use std::rc::Rc;
 
 use crate::gc::RootSet;
+use crate::io::RuntimeError;
 
 /// 堆对象引用（槽位索引）。构造仅经 `Heap`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -116,6 +117,12 @@ pub struct Heap {
     gc_enabled: bool,
     /// foreign ref 持久根（§8.8/§15 预留：FFI 根登记，Stage 0 可为空集）。
     foreign_roots: Vec<GcRef>,
+    /// pin 计数簿 Φ（r30/48-d——ffi-ownership-model §3：`foreign_roots`
+    /// 的**计数化泛化**。`Vec<(GcRef, u32)>` 有序对（supp(Φ) 插入序；
+    /// 计数归零即移除——「unpin 到 0 → 从 supp(Φ) 摘除，下一轮回收
+    /// 周期可回收」的运行形态）。与持久根并存：持久根 = 零计数前身
+    /// （登记即根保存，永不摘除）；Φ = 窗口借用配对计数。
+    pin_counts: Vec<(GcRef, u32)>,
     /// 统计：总分配数。
     total_allocs: u64,
     /// 距上次回收的分配数（分配计数驱动的触发器——回收成本按分配量摊销）。
@@ -146,6 +153,7 @@ impl Heap {
             gc_threshold,
             gc_enabled: true,
             foreign_roots: Vec::new(),
+            pin_counts: Vec::new(),
             total_allocs: 0,
             allocs_since_gc: 0,
             collections: 0,
@@ -281,6 +289,52 @@ impl Heap {
         &self.foreign_roots
     }
 
+    /// pin 对象（P1 规则：`Φ[v] += 1`；未登记则插入计数 1）。
+    /// 可重复 pin 同一对象——计数累计（引计数式屏障）。
+    pub fn pin_object(&mut self, r: GcRef) {
+        if let Some(entry) = self.pin_counts.iter_mut().find(|(g, _)| *g == r) {
+            entry.1 += 1;
+        } else {
+            self.pin_counts.push((r, 1));
+        }
+    }
+
+    /// unpin 对象（U1 规则：`Φ[v] -= 1`，归零移除出 supp(Φ)——
+    /// 对象**下一轮**回收周期才可回收，非立即回收）。
+    /// U2 规则：未登记（`Φ(v) = 0`）→ `Err`（06-操作语义 §3 E8
+    /// 口径——内部不变式破坏 = 边界实现簿记缺陷，P0 级，非用户错误；
+    /// 窗口规程结构性配对保证用户程序不可触达）。
+    pub fn unpin_object(&mut self, r: GcRef) -> Result<(), RuntimeError> {
+        let idx = self.pin_counts.iter().position(|(g, _)| *g == r);
+        match idx {
+            Some(i) => {
+                self.pin_counts[i].1 -= 1;
+                if self.pin_counts[i].1 == 0 {
+                    self.pin_counts.remove(i);
+                }
+                Ok(())
+            }
+            None => Err(RuntimeError::new(
+                "pin 计数下溢（E8 口径——边界实现簿记缺陷，结构配对保证不可达）",
+            )),
+        }
+    }
+
+    /// Φ 计数查询（P1/U1 可观测性——测试与协议审计面）。
+    pub fn pin_count(&self, r: GcRef) -> u32 {
+        self.pin_counts
+            .iter()
+            .find(|(g, _)| *g == r)
+            .map(|(_, c)| *c)
+            .unwrap_or(0)
+    }
+
+    /// supp(Φ) 引用集（计数 > 0 的全部引用——mark 起点并入；
+    /// GC 周期 `collect` 消费，外部观测供测试）。
+    pub fn pinned_refs(&self) -> Vec<GcRef> {
+        self.pin_counts.iter().map(|(g, _)| *g).collect()
+    }
+
     /// 子引用枚举（标记阶段的图遍历边）。
     fn children(&self, r: GcRef) -> Vec<GcRef> {
         match &self.get(r).map(|s| &s.obj) {
@@ -323,6 +377,12 @@ impl Heap {
         // 1. 标记：显式工作栈（§19.4——防递归爆栈）
         let mut work: Vec<GcRef> = roots.refs.clone();
         work.extend_from_slice(&self.foreign_roots);
+        // supp(Φ) 并入 mark 起点（ffi-ownership-model §3——Φ 独立于
+        // 标记位持久：计数簿是程序态，标记位是周期态；F-PIN 引理：
+        // 周期起点 Φ(v) ≥ 1 ⟹ 本轮 sweep 不回收 v）
+        for (r, _) in &self.pin_counts {
+            work.push(*r);
+        }
         while let Some(r) = work.pop() {
             if let Some(slot) = self.slots.get_mut(r.0 as usize) {
                 if slot.marked {

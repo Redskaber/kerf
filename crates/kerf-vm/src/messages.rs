@@ -50,3 +50,22 @@ pub fn err_continuation_resumed_twice(first: &str) -> String {
 pub fn err_resume_arity(n: usize) -> String {
     format!("resume 恰接受一个值（continuation 调用实参数 {n}）")
 }
+
+/// E0010：FFI 令牌失效后使用（r30/48-d——ffi-ownership-model E9：
+/// 双重释放/用后传递/用后使用——消费全局生效后的吸收态）。
+pub fn err_ffi_token_invalid(context: &str) -> String {
+    format!("FFI 令牌已失效（{context}）")
+}
+
+/// E0011：FFI 所有权/类型违规（ffi-ownership-model E10——释放
+/// Opaque 令牌/释放非令牌值/实参形状不匹配/零尺寸防御）。
+pub fn err_ffi_ownership(detail: &str) -> String {
+    format!("FFI 所有权违规（{detail}）")
+}
+
+/// E0012：FFI 符号解析失败（ffi-ownership-model E11——extern 符号
+/// 表未登记；QBE AOT 路径的链接期符号解析在 VM 路径的调用期对应
+/// 物——双路径一致 fail-closed）。
+pub fn err_ffi_symbol_resolution(name: &str) -> String {
+    format!("外部符号 '{name}' 未在 extern 符号表登记（符号解析失败）")
+}

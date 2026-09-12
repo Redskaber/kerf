@@ -163,6 +163,9 @@
 (define OP-HALT 40)
 (define OP-INSTALL-HANDLER 41) ; (op 41 handler body tag trampoline)——r25/42-f
 (define OP-PERFORM 42)          ; 效应上抛（R10）
+(define OP-CALL-EXTERNAL 43)    ; (op 43 symbol n_args)——r30/48-d FFI（ffi-ownership-model §2/§8）
+(define OP-ALLOC-EXTERNAL 44)   ; (op 44 size)——外部域分配（不经过 GC）
+(define OP-FREE-EXTERNAL 45)    ; 令牌消费释放——编译臂不发射（语言面 Stage 3）
 
 ; 跳转占位操作数（Rust u32::MAX——回填前哨兵）
 (define PATCH-SENTINEL 4294967295)

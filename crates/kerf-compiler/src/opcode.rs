@@ -11,7 +11,11 @@
 //! - **算术与比较**：ADD / SUB / MUL / DIV / MOD / NUM_LT / NUM_GT / NUM_LE /
 //!   NUM_GE / NUM_EQ / EQ / NOT；
 //! - **谓词**：IS_NULL / IS_PAIR / IS_INT / IS_BOOL / IS_PROCEDURE；
-//! - **终止**：HALT。
+//! - **终止**：HALT；
+//! - **效应（r25/42-f）**：INSTALL_HANDLER / PERFORM；
+//! - **FFI（r30/48-d）**：CALL_EXTERNAL / ALLOC_EXTERNAL / FREE_EXTERNAL
+//!   （IR/VM 面做实——语言面形式 Stage 3，编译臂不发射；ffi-ownership-model
+//!   §2/§8 窗口规程与三原语的字节码面）。
 
 /// 操作码（Debug 渲染 + PartialEq 供同结果测试比对）。
 #[derive(Debug, Clone, PartialEq)]
@@ -132,6 +136,29 @@ pub enum Op {
     /// 执行帧（locals = [payload, κ]，ext1 清除——浅处理一次）→
     /// 数据栈截回安装水位。未匹配 = E0007（逃逸到顶层）。
     Perform,
+
+    // ---- FFI（r30/48-d——ffi-ownership-model §2/§8；IR/VM 面做实，
+    // 语言面形式 Stage 3（plan §5b 批次 J 排程注 3））----
+    /// 调用外部函数（符号经 extern 符号表按名解析——E0012 fail-closed；
+    /// `symbol` = 常量池 SymLit 索引（extern 符号名——扁平符号空间，
+    /// 独立于用户词法环境，不可被 define/set! 遮蔽）。
+    /// 窗口规程（ffi-ownership-model §2.1 步 2-4，边界包装层执行）：
+    /// 实参已按序压栈（步 1 由先前指令完成）→ 装载边界（堆实参 pin
+    /// Φ[v]+=1 + 令牌实参校验有效性，Invalid = E0010）→ 宿主调用
+    /// （VM 挂起）→ 返回包装 + 全部堆实参 unpin（Φ[v]-=1）。
+    CallExternal {
+        symbol: u32,
+        n_args: u32,
+    },
+    /// 分配外部内存（外部 malloc 域——**不经过 GC**；产出 CPointer
+    /// 令牌）。`size = 0` 编译期拒绝（lowering 面）+ 运行期防御
+    /// 拒绝（E0011）——防御纵深（§6 case 4）。
+    AllocExternal {
+        size: u32,
+    },
+    /// 释放外部内存（消费语义：槽级失效标记全局生效；Invalid 再释放
+    /// = E0010 双重释放；Opaque 令牌 = E0011；非令牌值 = E0011）。
+    FreeExternal,
 }
 
 impl Op {
@@ -181,6 +208,9 @@ impl Op {
             Op::Halt => "HALT",
             Op::InstallHandler { .. } => "INSTALL_HANDLER",
             Op::Perform => "PERFORM",
+            Op::CallExternal { .. } => "CALL_EXTERNAL",
+            Op::AllocExternal { .. } => "ALLOC_EXTERNAL",
+            Op::FreeExternal => "FREE_EXTERNAL",
         }
     }
 
@@ -212,7 +242,11 @@ impl Op {
                     handler, body, tag, trampoline
                 )
             }
-            // _ 臂理由：无操作数指令（PushNil/Pop/Dup/Ret/算术/比较/谓词/Car/Cdr/Halt/Perform 等）——无操作数后缀
+            Op::CallExternal { symbol, n_args } => {
+                format!(" symbol={} n_args={}", symbol, n_args)
+            }
+            Op::AllocExternal { size } => format!(" size={}", size),
+            // _ 臂理由：无操作数指令（PushNil/Pop/Dup/Ret/算术/比较/谓词/Car/Cdr/Halt/Perform/FreeExternal 等）——无操作数后缀
             _ => String::new(),
         }
     }
@@ -224,11 +258,13 @@ mod tests {
 
     #[test]
     fn opcode_count_matches_spec() {
-        // 冻结契约：41 个操作码（04-bytecode-vm §1 全枚举对齐）。
+        // 冻结契约：46 个操作码（04-bytecode-vm §1 全枚举对齐）。
         // 逐一列举以保证计数稳定——新增/删除任何变体都必须同步
         // 04 文档与本清单（双向冻结：enum ↔ 测试 ↔ 文档三方一致）。
         // r21/42-b 修正：TailCall（r18/40-c TCO 引入）此前漏列于本
         // 清单——三方冻结漂移按 R4（代码为准 + 本次修正文档）补齐。
+        // r30/48-d 扩：FFI 三指令（43→46，第十组——ffi-ownership-model
+        // §2/§8 的字节码面；语言面形式 Stage 3——plan §5b 排程注 3）。
         let ops = [
             // 栈操作（7）
             Op::PushConst(0),
@@ -291,11 +327,20 @@ mod tests {
                 trampoline: 0,
             },
             Op::Perform,
+            // FFI（3：r30/48-d——ffi-ownership-model §2/§8；IR/VM 面
+            // 做实，语言面形式 Stage 3；04 文档与 compiler.krf OP-* 表
+            // 三方同步）
+            Op::CallExternal {
+                symbol: 0,
+                n_args: 0,
+            },
+            Op::AllocExternal { size: 0 },
+            Op::FreeExternal,
         ];
         assert_eq!(
             ops.len(),
-            43,
-            "操作码总数（r25/42-f 效应面 41→43——04 文档与 compiler.krf OP-* 表三方同步）"
+            46,
+            "操作码总数（r30/48-d FFI 面 43→46——04 文档与 compiler.krf OP-* 表三方同步）"
         );
     }
 

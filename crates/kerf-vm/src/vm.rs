@@ -145,7 +145,8 @@ pub struct VmError {
 }
 
 impl VmError {
-    fn new(message: impl Into<String>, span: Span) -> Self {
+    /// 构造（crate 内 + ffi 边界包装层共用——E0004 通用族）。
+    pub(crate) fn new(message: impl Into<String>, span: Span) -> Self {
         VmError {
             message: message.into(),
             span,
@@ -154,8 +155,9 @@ impl VmError {
         }
     }
 
-    /// 携结构化码构造（E0007-E0009 效应族——messages 单源消息配套）。
-    fn new_code(code: u32, message: impl Into<String>, span: Span) -> Self {
+    /// 携结构化码构造（E0007-E0009 效应族 + E0010-E0012 FFI 族——
+    /// messages 单源消息配套）。
+    pub(crate) fn new_code(code: u32, message: impl Into<String>, span: Span) -> Self {
         VmError {
             message: message.into(),
             span,
@@ -195,10 +197,43 @@ const GC_COOLDOWN_MULTIPLIER: u64 = 64;
 ///
 /// `vm::run(&bytecode, &mut runtime)` 形态：全局环境作为参数
 /// （driver 注册内置后传入；返回最终值）。
+///
+/// **FFI 面（r30/48-d）**：本入口的 extern 符号表 = **空表**
+/// （fail-closed：任何 FFI 操作码经此入口执行 → E0012 符号解析
+/// 失败——生产 run 路径无 FFI 注册面）。带外部函数注册的执行面走
+/// [`run_program_with_externs`]；自举模块（Reader/Expander/
+/// Compiler）不含 FFI 操作码——`call_closure` 同型维持空表口径。
 pub fn run_program(
     program: &BcProgram,
     globals: &mut HashMap<Symbol, Value>,
     heap: &mut Heap,
+) -> Result<Value, VmError> {
+    let externs = crate::ffi::ExternSymbolTable::new();
+    run_program_frames(program, globals, heap, &externs)
+}
+
+/// 带 extern 符号表的执行入口（r30/48-d——FFI 注册面：
+/// [`crate::ffi::call_external`] 窗口规程的驱动入口）。
+///
+/// 语义与 [`run_program`] 同构；区别仅在 FFI 操作码的符号解析域
+/// （extern 符号表——扁平符号空间，ffi-ownership-model §4）。
+/// 未登记符号 = E0012（fail-closed——QBE AOT 链接期解析在 VM
+/// 路径的调用期对应物）。
+pub fn run_program_with_externs(
+    program: &BcProgram,
+    globals: &mut HashMap<Symbol, Value>,
+    heap: &mut Heap,
+    externs: &crate::ffi::ExternSymbolTable,
+) -> Result<Value, VmError> {
+    run_program_frames(program, globals, heap, externs)
+}
+
+/// 执行程序帧初始化 + 追踪快照（run_program 系共体）。
+fn run_program_frames(
+    program: &BcProgram,
+    globals: &mut HashMap<Symbol, Value>,
+    heap: &mut Heap,
+    externs: &crate::ffi::ExternSymbolTable,
 ) -> Result<Value, VmError> {
     let mut frames: Vec<Frame> = vec![Frame {
         ret_proto: 0,
@@ -209,7 +244,14 @@ pub fn run_program(
         ext: FrameExt::new(),
         call_span: Span::dummy(),
     }];
-    let outcome = execute(program, globals, heap, &mut frames, MAX_INSTRUCTIONS);
+    let outcome = execute(
+        program,
+        globals,
+        heap,
+        &mut frames,
+        MAX_INSTRUCTIONS,
+        externs,
+    );
     outcome.map_err(|mut e| {
         // 调用点追踪（§8.12 运行时错误捕获）：错误发生时的活跃帧链。
         // 跳过主帧；保留最内 16 帧（深递归下外层无信息量，防诊断爆炸）；
@@ -235,12 +277,27 @@ const MAX_TRACE_FRAMES: usize = 16;
 /// 预算参数化执行入口（TD-022/H2——测试面）：与 [`run_program`] 同构，
 /// 但指令预算可注入（无限尾循环负例用小预算快速触发护栏——38-c
 /// find_qbe 纯函数注入同型）。生产路径恒用 [`MAX_INSTRUCTIONS`]。
+/// FFI 面：空表 fail-closed 口径（同 [`run_program`]——预算测试
+/// 不消费 FFI 操作码）。
 #[doc(hidden)]
 pub fn run_program_with_budget(
     program: &BcProgram,
     globals: &mut HashMap<Symbol, Value>,
     heap: &mut Heap,
     max_instructions: u64,
+) -> Result<Value, VmError> {
+    let externs = crate::ffi::ExternSymbolTable::new();
+    run_program_with_budget_inner(program, globals, heap, max_instructions, &externs)
+}
+
+/// 预算入口内体（externs 参数化——测试注入面）。
+#[doc(hidden)]
+pub fn run_program_with_budget_inner(
+    program: &BcProgram,
+    globals: &mut HashMap<Symbol, Value>,
+    heap: &mut Heap,
+    max_instructions: u64,
+    externs: &crate::ffi::ExternSymbolTable,
 ) -> Result<Value, VmError> {
     let mut frames: Vec<Frame> = vec![Frame {
         ret_proto: 0,
@@ -251,7 +308,14 @@ pub fn run_program_with_budget(
         ext: FrameExt::new(),
         call_span: Span::dummy(),
     }];
-    execute(program, globals, heap, &mut frames, max_instructions)
+    execute(
+        program,
+        globals,
+        heap,
+        &mut frames,
+        max_instructions,
+        externs,
+    )
 }
 
 /// 宿主侧闭包调用入口（自举 Reader 等宿主消费方使用，B3）。
@@ -326,7 +390,15 @@ pub fn call_closure(
         ext: FrameExt::new(),
         call_span: Span::dummy(),
     }];
-    let outcome = execute(program, globals, heap, &mut frames, MAX_INSTRUCTIONS);
+    let externs = crate::ffi::ExternSymbolTable::new();
+    let outcome = execute(
+        program,
+        globals,
+        heap,
+        &mut frames,
+        MAX_INSTRUCTIONS,
+        &externs,
+    );
     outcome.map_err(|mut e| {
         // 调用点追踪：与 run_program 同构（内层 16 帧）
         if e.trace.is_empty() && frames.len() > 1 {
@@ -351,6 +423,7 @@ fn execute(
     heap: &mut Heap,
     frames: &mut Vec<Frame>,
     max_instructions: u64,
+    externs: &crate::ffi::ExternSymbolTable,
 ) -> Result<Value, VmError> {
     let mut stack: Vec<Value> = Vec::new();
     let mut pc: u32 = 0;
@@ -1060,6 +1133,44 @@ fn execute(
                 }
                 pc = 0;
             }
+            // ---- FFI（r30/48-d——ffi-ownership-model §2/§8；语言面
+            // 形式 Stage 3，编译臂不发射——操作码直接构造/测试面驱动）----
+            Op::CallExternal { symbol, n_args } => {
+                // 符号按名解析（extern 符号表——SymLit 常量承载符号名；
+                // 扁平符号空间，不可被 define/set! 遮蔽）
+                let name = match &program.consts[*symbol as usize] {
+                    BcConst::SymLit(s) => s.clone(),
+                    _ => {
+                        return Err(VmError::new(
+                            "CALL_EXTERNAL 操作数需要符号字面量（SymLit 常量）",
+                            span,
+                        ))
+                    }
+                };
+                let n = *n_args as usize;
+                if stack.len() < n {
+                    return Err(VmError::new(
+                        format!("数据栈下溢（FFI 实参不足：需要 {n}，实际 {}）", stack.len()),
+                        span,
+                    ));
+                }
+                // 实参正序切出（压栈序 = 正序——栈顶为末实参）
+                let args: Vec<Value> = stack.split_off(stack.len() - n);
+                // 窗口规程步 2-4（边界包装层——crate::ffi）
+                let v = crate::ffi::call_external(externs, &name, &args, heap, span)?;
+                push!(v);
+            }
+            Op::AllocExternal { size } => {
+                // 外部域分配（不经过 GC；size=0 运行期纵深防御 = E0011）
+                let v = crate::ffi::alloc_external(*size, span)?;
+                push!(v);
+            }
+            Op::FreeExternal => {
+                // 消费语义释放（槽级失效全局标记；判定序 = §5 非法迁移表）
+                let v = pop!();
+                let r = crate::ffi::free_external(&v, span)?;
+                push!(r);
+            }
         }
 
         // GC 安全点（§19.4 陷阱 2：只在指令边界触发；每 256 条指令轮询；
@@ -1130,8 +1241,19 @@ pub fn box_value(v: &Value, heap: &mut Heap) -> GcRef {
             any: rc.clone(),
             tracer: trace_foreign_continuation,
         }),
+        // r30/48-d：FFI 令牌装箱——ForeignBox 承载 Rc<ExternalToken>
+        // （解箱往返恒等——同型 TD-010）；追踪器 no-op（令牌载荷
+        // 不参与 GC 可达性——ffi-ownership-model §7 裁定）
+        Value::External(rc) => heap.alloc_foreign(ForeignBox {
+            any: rc.clone(),
+            tracer: trace_foreign_noop,
+        }),
     }
 }
+
+/// FFI 令牌装箱追踪器（r30/48-d——no-op：令牌载荷不参与 GC 可达
+/// 性，无堆子引用；ffi-ownership-model §7「Foreign 槽无 GC 子引用」）。
+fn trace_foreign_noop(_any: &Rc<dyn Any>, _out: &mut Vec<GcRef>) {}
 
 /// continuation 装箱追踪器（M5——堆内可达性：数据栈快照 + 帧链
 /// locals/captures 的堆引用全量入 out；嵌套 κ 递归 trace_value_refs
@@ -1184,6 +1306,10 @@ pub fn unbox_slot(r: GcRef, heap: &Heap) -> Value {
             // r25/42-f：continuation 解箱（往返恒等——M5 存活验证面）
             if let Ok(k) = b.any.clone().downcast::<crate::value::ContinuationValue>() {
                 return Value::Continuation(k);
+            }
+            // r30/48-d：FFI 令牌解箱（往返恒等——TD-010 同型）
+            if let Ok(t) = b.any.clone().downcast::<crate::ffi::ExternalToken>() {
+                return Value::External(t);
             }
             // 防御：未知 Foreign 载体（不发生于当前装箱方——上游不变式）
             Value::Nil

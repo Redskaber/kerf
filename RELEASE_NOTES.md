@@ -1,3 +1,29 @@
+## v0.4.0-r30（2026-09-12）——批次 J 执行：J3 FFI VM 面做实（窗口规程 Φ 簿 + 线性令牌 + E0010-E0012 + 13 边界 case，758 全绿）
+
+### 交付一：48-d J3 FFI VM 面做实（会话 Task 51-a——plan §5b 第三 MUV，§21.3 条件 4 兑现）
+
+- **操作码三指令 43→46**（CALL_EXTERNAL symbol, n_args / ALLOC_EXTERNAL size / FREE_EXTERNAL——04-bytecode-vm §1 第十组 + compiler.krf OP-* 常量表 + bootstrap_compiler.rs 桥三臂，三方冻结同步；**语言面形式 Stage 3，编译臂不发射**——IR/VM 面做实即验收条件 4 兑现，plan §5b 批次 J 排程注 3 如实注记）
+- **窗口规程（ffi-ownership-model §2.1 步 2-4，边界包装层执行）**：装载边界（char* 实参装箱堆槽 pin `Φ[v]+=1` + 令牌实参校验 Invalid→E0010）→ 宿主调用（VM 挂起——§6 case 6 时序：外部 malloc 零 kerf 分配计数）→ **unpin 配平先于返回包装**（不依赖实参堆对象）；char* marshalling = Str 值装箱堆槽（GC 追踪形态）+ 数据指针借用出界（窗口借用——F-PIN 存活保证）
+- **Heap Φ 计数簿**（kerf-runtime——`register_foreign_ref` 的计数化泛化）：`pin_object`（P1 可重复累计）/ `unpin_object`（U1 归零摘根；U2 下溢 Err——E8 口径）/ `pin_count`/`pinned_refs`（可观测性）；supp(Φ) 并入 mark 起点（F-PIN 引理——根集第五来源计数化，完备性不变式维持）；持久根与窗口计数根并存
+- **线性令牌状态机（§5）**：`Value::External(Rc<ExternalToken>)`（CPointer/Opaque + Cell 状态——**消费全局生效**：一处 FreeExternal 后所有共享绑定同步失效）；装箱 `HeapObj::Foreign` 载荷（追踪器 no-op——不参与 GC 可达性，§7）；NULL 哨兵（Valid 空令牌——free = 合法 no-op，case 13）；外部域纪律 = Rust 宿主堆 Box<[u8]>（真 C ABI = QBE AOT 路径）
+- **E0010-E0012 诊断族落位**（18 §6 码位登记 r18 预留兑现——E9 FfiTokenInvalid/E10 FfiOwnershipViolation/E11 FfiSymbolResolution）：messages.rs 单源三构造器（TD-018 纪律）+ VM 携码经 driver from_vm 映射；E0012 = 符号解析 fail-closed（QBE AOT 链接期解析在 VM 路径的调用期对应物）；空表默认入口（run_program）E0012
+- **§21.3 条件 4 冻结形状消费面**：FfiBoundary 真实实现（driver ffi.rs HeapFfiBoundary——P1/P2/U1 经 Φ 簿；冻结签名 U2 经 expect E8 口径承载）+ compile_ffi_call_program（FfiCall → 操作码序——字面量实参子集 + AllocExternal size=0 编译期拒绝 + FreeExternal 运行时令牌依赖拒绝——诚实收窄）+ default_extern_table（write_stdout char* 注册——ExternalType 形状消费：CInt(Usize)/CPointer(Char)；CStruct/CFunction 子集外注册拒绝）+ run_program_with_externs（extern 注册执行入口）
+- **正例端到端**：冻结 FfiCall → lowering → 操作码 → 窗口规程 → kerf_runtime 真实 I/O（CInt 返回 = 写入字节数）
+- **ffi_vm_tests 37 case**：13 边界 case 全判定落地（覆盖映射表——case 1 F-PIN/case 2 绑定变更/case 3 CFunction 拒绝/case 4 双面拒绝/case 5 E0010/case 6 外部零分配/case 7 Opaque/case 8 浅 pin 等价/case 9 三容忍观测（错误路径泄漏 + panic unwind + 槽回收）/case 10 单线程注记/case 11 共享失效/case 12 非令牌/case 13 NULL no-op）+ 正负比 7:22（功能点粒度 ≥1:3，§9.4.3）+ Φ/P-U 机制组 6 件 + E0010/E0011/E0012 码断言
+- TD-026 登记（P3）：FFI 语言面形式 + 编组消费子集收窄（CStruct 递归编组/CFunction 回调/FreeExternal lowering——显式拒绝非静默；Stage 3 锚）
+
+### 交付二：51-z 收尾（r30）
+
+- §3.2 六命令全绿 + 对账六面（06 §3 E0-E11 + 05 §3.1 Φ 簿/Foreign 令牌注记/根集五来源 supp(Φ) + 13 §3.3.4 实现锚（§21.3 条件 4 ✅）+ 04 §1 十组 46 + 18 §6 落位 + TD 登记册 TD-026 + plan §5b J 执行注记 r30）+ r30 tar.gz + 包内自举验证 + web 同步 + E2E
+
+### 质量口径
+
+- cargo test --release --workspace：**758:0:0**（713 零回归 + 净 45 = ffi_vm_tests 37 集成 + driver ffi 单元 8；门审计集三件 144 case 另计全过）
+- cargo clippy --all-targets --workspace：**0 警告**（超集口径）
+- cargo fmt --check：0 diff
+
+---
+
 ## v0.4.0-r29（2026-09-11）——批次 J 执行：J2 HM 旗标期切换（`kerf check` 判定面 = HM 推断 + 契约重定义 + 双缺口修复，713 全绿）
 
 ### 交付一：48-c J2 HM 旗标期切换（会话 Task 50-a——plan §5b 第二 MUV，D8 阶段 2）

@@ -15,6 +15,7 @@
 //! 其余类型报 TypeMismatch（避免 JavaScript 式隐式转换的语义泥潭）。
 
 pub mod eval;
+pub mod ffi;
 pub mod messages;
 pub mod value;
 pub mod vm;
@@ -22,9 +23,14 @@ pub mod vm;
 // 显式 re-export（§10.1 规则 4：禁止 glob re-export）。
 // 约定：本 crate 暴露执行层全部公共类型与入口。
 pub use eval::{apply_value, eval_expr, eval_program, Env, EvalError};
+pub use ffi::{
+    alloc_external, call_external, free_external, BorrowedArg, ExternEntry, ExternKind,
+    ExternSymbolTable, ExternalToken, HostFn, HostRet, TokenKind, TokenState,
+};
 pub use messages::{err_if_cond_bool, err_not_bool, err_pair_op, err_setbang_unbound};
 pub use value::{render_value, BuiltinFn, ClosureValue, GcCell, Value};
 pub use vm::{box_value, unbox_slot};
 pub use vm::{
-    call_closure, run_program, run_program_with_budget, Frame, FrameExt, Rt, TraceFrame, VmError,
+    call_closure, run_program, run_program_with_budget, run_program_with_externs, Frame, FrameExt,
+    Rt, TraceFrame, VmError,
 };

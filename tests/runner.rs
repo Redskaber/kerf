@@ -166,3 +166,11 @@ mod bootstrap_compiler_tests;
 
 #[path = "v0/stage2/plan/effect_tests.rs"]
 mod effect_tests;
+
+// 批次 J（r30：48-d J3 FFI VM 面做实——ffi-ownership-model §2/§3/§5/§6
+// 的字节码执行面：窗口规程（Φ pin 计数簿）+ 线性令牌状态机 + E0010-
+// E0012 诊断族 + 13 边界 case；语言面形式 Stage 3——操作码直接构造
+// 驱动 + 冻结 FfiCall lowering 面）
+
+#[path = "v0/stage2/plan/ffi_vm_tests.rs"]
+mod ffi_vm_tests;

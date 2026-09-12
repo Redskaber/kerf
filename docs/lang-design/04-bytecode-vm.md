@@ -12,7 +12,7 @@
 
 ## 1. 字节码 VM（原 §8.12）
 
-switch-dispatch 循环，设计估算约 35 个操作码（原 §8.12）；**Stage 0 冻结实现为 43 个操作码**（kerf-compiler/src/opcode.rs，enum 显式枚举 + 守护测试 `opcode_count_matches_spec` 逐项列举断言 43——「enum ↔ 测试 ↔ 文档」三方冻结。**r21/42-b 修正**：TAIL_CALL（r18/40-c TD-022 TCO 引入）此前漏列于测试枚举与本文表格——三方冻结漂移按 sop R4（代码为准 + 本次修正文档）补齐，40→41；**r25/42-f 扩**：效应两指令（41→43，第九组——effect-language-design D6 原语集 9→11 的字节码面））。**全 43 项显式枚举（九组，与 opcode.rs 模块头分组逐项一致）**：
+switch-dispatch 循环，设计估算约 35 个操作码（原 §8.12）；**Stage 0 冻结实现为 46 个操作码**（kerf-compiler/src/opcode.rs，enum 显式枚举 + 守护测试 `opcode_count_matches_spec` 逐项列举断言 46——「enum ↔ 测试 ↔ 文档」三方冻结。**r21/42-b 修正**：TAIL_CALL（r18/40-c TD-022 TCO 引入）此前漏列于测试枚举与本文表格——三方冻结漂移按 sop R4（代码为准 + 本次修正文档）补齐，40→41；**r25/42-f 扩**：效应两指令（41→43，第九组——effect-language-design D6 原语集 9→11 的字节码面）；**r30/48-d 扩**：FFI 三指令（43→46，第十组——ffi-ownership-model §2/§8 的字节码面：CALL_EXTERNAL/ALLOC_EXTERNAL/FREE_EXTERNAL；语言面形式 Stage 3，编译臂不发射））。**全 46 项显式枚举（十组，与 opcode.rs 模块头分组逐项一致）**：
 
 | 组 | 操作码（个数） |
 |----|----------------|
@@ -25,6 +25,7 @@ switch-dispatch 循环，设计估算约 35 个操作码（原 §8.12）；**Sta
 | 谓词（5） | `IS_NULL` / `IS_PAIR` / `IS_INT` / `IS_BOOL` / `IS_PROCEDURE` |
 | 终止（1） | `HALT` |
 | 效应（2，r25/42-f） | `INSTALL_HANDLER handler, body, tag, trampoline`（handle 表达式原子帧编排：压 handler 帧（ext1 = 分派数据 + 数据栈水位）+ body thunk 帧（ret = (trampoline, 0)）→ 转移执行；捕获由 VM 按两原型描述符从当前帧取） / `PERFORM`（效应上抛：弹效应值 `(tag . payload)` → 扫描最近匹配 handler 帧 → continuation 快照（帧链含 handler 帧本身 + 数据栈整栈 + 恢复点）→ 帧变形为 handler 体执行帧 → 栈截回水位；未匹配 = E0007） |
+| FFI（3，r30/48-d） | `CALL_EXTERNAL symbol, n_args`（外部函数调用——窗口规程步 2-4 边界包装层执行：装载边界（堆实参 pin Φ[v]+=1 + 令牌校验，Invalid = E0010）→ 宿主调用（VM 挂起）→ 返回包装 + 全部堆实参 unpin；符号经 extern 符号表按名解析，未登记 = E0012 fail-closed；实参求值由先前指令完成） / `ALLOC_EXTERNAL size`（外部域分配——不经过 GC，产出 CPointer 令牌；size=0 编译期拒绝 + 运行期纵深 E0011） / `FREE_EXTERNAL`（消费语义释放：槽级失效全局标记；双重释放 = E0010、Opaque = E0011、非令牌 = E0011）——**语言面形式 Stage 3，编译臂不发射**（操作码直接构造/`compile_ffi_call_program` lowering 面驱动；ffi-ownership-model §2/§8） |
 
 **操作码漂移注记（v5.2 重写，设计 vs 实现对账——早期版本「全部扩落在既有分组内」的表述不实，更正如下）**：超出原 §8.12 七组清单的扩是**真实存在的再分组**：(1) 原设计将 `=`/`<`/`>` 复用算术组并漏列 `<=`/`>=`/`mod`——实现扩为**算术与比较** 12 项显式指令（链式比较按序折叠）；(2) 原设计无**谓词组**——实现的 `IS_NULL/IS_PAIR/IS_INT/IS_BOOL/IS_PROCEDURE` 5 项是 **Stage 0 扩展分组**（`null?` 等内置的底层执行机制，[09-标准库 §2](./09-stdlib.md)）；(3) 零操作数快推 `PUSH_NIL/PUSH_TRUE/PUSH_FALSE`（避免常量池哈希查找的快路径）；(4) 闭包捕获**读写双指令** `LOAD_CAPTURED/STORE_CAPTURED`（共享单元格捕获协议要求可变捕获，本文 §1.1）；(5) **`DEFINE_GLOBAL`**（v5.1 依据 [06-操作语义 §2 R6/E6 与 §5 T1 定理](./06-operational-semantics.md) 新增的第 40 号冻结契约：define 与 set! 的全局存储语义分裂修复——`StoreGlobal` 收紧为 S1/E3 语义「只写已存在绑定，未绑定报错」；`DefineGlobal` 承载 D1/E6 语义「只新增绑定，同层重复报错」；Define 编译模式改为 `value; DUP; DefineGlobal` 使返回值 = v 与 eval 路径对齐）。另注：设计草稿中的 `Ne`（不等比较）**未实现**——不等由 `NOT` 组合 `=`/`NUM_EQ` 表达，冻结清单不含此项。分组数统一为**八组**（[06-操作语义 §5.2 L1](./06-operational-semantics.md) 的指令组归纳同步对齐）。后续演进的正确路径：**新增操作码 = 冻结新契约 + 回填本文档 + 同步守护测试枚举**，禁止未注记的静默漂移。
 
@@ -115,7 +116,7 @@ fn compile_expr(e: &CoreExpr, out: &mut CodeBuf) -> Result<(), CompileError> {
 
 ## 3. VM 执行循环（原 §19.5）
 
-switch-dispatch 循环，处理全部 **43 个操作码**（冻结实现，本文 §1 全枚举；操作码按**九组**分类：栈操作 7 / 变量访问 7 / 控制流 2 / 函数操作 4（含 TAIL_CALL——r21 修正补齐） / 算术与比较 12 / 数据构造 3 / 谓词 5 / 终止 1 / **效应 2（r25/42-f——INSTALL_HANDLER/PERFORM）**——设计估算约 35 的偏差见 §1 漂移注记）。运行时错误捕获含堆栈追踪生成（run_program 错误路径保留**最内 16 帧**调用点，渲染为 note 行——深递归下外层无信息量，防诊断爆炸；`VmError.trace` 的唯一生产者）。**迭代式主循环**：递归经调用帧栈承载，Rust 栈深度恒定（深递归程序不爆宿主栈——与 [05-运行时 §4](./05-runtime.md) 显式工作栈同构的防御；帧数上限 `MAX_FRAMES = 100_000`，超限报结构化「调用帧超过上限」错误）。
+switch-dispatch 循环，处理全部 **46 个操作码**（冻结实现，本文 §1 全枚举；操作码按**十组**分类：栈操作 7 / 变量访问 7 / 控制流 2 / 函数操作 4（含 TAIL_CALL——r21 修正补齐） / 算术与比较 12 / 数据构造 3 / 谓词 5 / 终止 1 / 效应 2（r25/42-f——INSTALL_HANDLER/PERFORM） / **FFI 3（r30/48-d——CALL_EXTERNAL/ALLOC_EXTERNAL/FREE_EXTERNAL；语言面形式 Stage 3，编译臂不发射）**——设计估算约 35 的偏差见 §1 漂移注记）。运行时错误捕获含堆栈追踪生成（run_program 错误路径保留**最内 16 帧**调用点，渲染为 note 行——深递归下外层无信息量，防诊断爆炸；`VmError.trace` 的唯一生产者）。**迭代式主循环**：递归经调用帧栈承载，Rust 栈深度恒定（深递归程序不爆宿主栈——与 [05-运行时 §4](./05-runtime.md) 显式工作栈同构的防御；帧数上限 `MAX_FRAMES = 100_000`，超限报结构化「调用帧超过上限」错误）。
 
 **执行循环骨架**：
 

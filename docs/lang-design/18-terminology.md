@@ -280,6 +280,8 @@ Landin 借用这个概念：**函数加上其捕获的环境，形成了一个"�
 | **E0007** | **效应未处理逃逸**（未匹配 tag 上抛到顶层） | **r25/42-f** | effect-language-design D9；messages.rs `err_effect_unhandled`（单源——VM `Perform` 扫描无匹配） |
 | **E0008** | **continuation 二次恢复**（线性唯一性违反——含首次恢复位置追踪） | **r25/42-f** | 同上 D3/D9；`err_continuation_resumed_twice`（VM `Call`/`TailCall` 的 Continuation 臂） |
 | **E0009** | **resume 元数面**（continuation 调用恰一实参；非 continuation 值被调用的类型面归 E0004 通用族——effect-language-design v1.1 执行注记口径） | **r25/42-f** | 同上 D4；`err_resume_arity` |
-| E0010-E0012 | FFI 实现族（**预留**——ffi-ownership-model E9/E10/E11 暂名落位；避免与运行时效应族冲突） | 预留（r18 登记） | ffi-ownership-model.md（W3 码位冲突预防） |
+| **E0010** | **FFI 令牌失效后使用**（双释/用后传递/用后使用——消费全局生效后的吸收态） | **r30/48-d 落位** | ffi-ownership-model §5；messages.rs `err_ffi_token_invalid`（单源——VM free_external/call_external 令牌校验） |
+| **E0011** | **FFI 所有权/类型违规**（释放 Opaque 令牌/非令牌值/实参形状不匹配/零尺寸纵深防御） | **r30/48-d 落位** | 同上 §2/§6-case4；`err_ffi_ownership`（VM 编组与 free 判定序） |
+| **E0012** | **FFI 符号解析失败**（extern 符号表未登记——fail-closed；QBE AOT 链接期解析在 VM 路径的调用期对应物） | **r30/48-d 落位** | 同上 §4；`err_ffi_symbol_resolution`（VM CallExternal 符号解析 + 空表默认入口） |
 
 **登记纪律**：新码位 = 先查本表占位 → 模型层单源构造（TD-018）→ 回填本表 + 对应族文档锚。禁止未登记静默占位。

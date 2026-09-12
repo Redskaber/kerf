@@ -33,6 +33,7 @@ pub mod cache;
 pub mod capability;
 pub mod driver;
 pub mod effects;
+pub mod ffi;
 pub mod hash;
 pub mod reserved;
 
