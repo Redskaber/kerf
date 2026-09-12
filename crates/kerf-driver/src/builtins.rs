@@ -18,6 +18,13 @@
 //! （注册面 57→84——20 §6.4 ①/§8 映射表实施单源）；别名共享旧名同一
 //! 分派体（同行为同诊断——天然 parity 20 §9.3）；I/O 六门控名零新名
 //! （门控表零变更——20 §6.4 ③）。
+//!
+//! **批次 M 首件 M1（v0.6 命名空间层，r39）**：`STDLIB_MODULES` 七模块
+//! export 面注册（N2 限定名可见面——`ns/本地名` 形态，47 限定名，
+//! 20 §5.2 单源转译）；io 模块限定名按授权面 fail-closed 注册（22 §5.1
+//! 矩阵唯一对齐点）；E0014 不导出/E0015 保留域由 driver 编译期验证承载
+//! （verify_qualified_refs——22 §3.3 R-N3 不回落）；限定名签名在
+//! `builtin_sigs` 按底层名派生（同分派 → 同静态检查面）。
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -900,6 +907,39 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         let sym = table.intern(name);
         globals.insert(sym, Value::Builtin(f));
     }
+    // ------------------------------------------------------------------
+    // 批次 M 首件 M1（v0.6 命名空间层，r39）——N2 限定名可见面：
+    // 七模块 export 面（47 限定名 `ns/本地名` → 底层共享分派体）。
+    // 机制 = 22 §2.1 N2「限定名可见面」+ §3.3 R-N3（不回落：解析仅
+    // 查 export 面——E0014 诊断由 driver verify_qualified_refs 编译期
+    // 承载）。io 模块 fail-closed：按授权分项注册（22 §5.1 矩阵唯一
+    // 对齐点「门控全集 ≡ 导出全集」+ 红线 3 缺省拒绝）。
+    // ------------------------------------------------------------------
+    for &(ns, local, underlying) in STDLIB_MODULES {
+        if ns == "io" {
+            // io 限定名：仅当对应授权分项在场才注册（fail-closed——
+            // 未授权限定名不在册；编译期 E0006 由 R9 归一化先行阻断）
+            let need_read = crate::capability::READ_GATED.contains(&underlying);
+            let need_write = crate::capability::WRITE_GATED.contains(&underlying);
+            let authorized = if need_read {
+                grant.read_handle().is_some()
+            } else if need_write {
+                grant.write_handle().is_some()
+            } else {
+                true
+            };
+            if !authorized {
+                continue;
+            }
+        }
+        let u = table.intern(underlying);
+        let f = match globals.get(&u) {
+            Some(Value::Builtin(f)) => Rc::clone(f),
+            _ => panic!("限定名底层内置未注册：{}/{} → {}", ns, local, underlying),
+        };
+        let qualified = format!("{}/{}", ns, local);
+        globals.insert(table.intern(&qualified), Value::Builtin(f));
+    }
     globals
 }
 
@@ -949,6 +989,75 @@ pub static BUILTIN_ALIASES: &[(&str, &str)] = &[
     ("symbol-to-string", "symbol->string"),
     // 断言（R3：断言是动词非谓词）
     ("assert-eq", "assert-eq?"),
+];
+
+/// 批次 M 首件 M1（v0.6 命名空间层，r39）标准库模块表：七模块 export 面。
+///
+/// 行 = (命名空间段, 本地名, 底层内置名)——限定名 `ns/本地名` 注册为
+/// 与底层共享同一 `Rc<BuiltinFn>`（同 r38 别名层 parity 形态）。单源 =
+/// docs/lang-design/20-surface-conventions.md §5.2（模块树终态版图）；
+/// 机制规则 = 22-namespace-design §2-§3（N2 限定名可见面 + R-N3 不
+/// 回落——E0014 编译期诊断由 driver `verify_qualified_refs` 承载）。
+/// `io` 模块限定名按授权面 fail-closed 注册（22 §5.1 矩阵唯一对齐
+/// 点）；运算符族 N1 永驻不入表（R-N7——「core 不导出全局运算符」
+/// 20 §8 裁定）；Reader 运行时服务四件（`str->pos-chars` 等）引导
+/// 私有不入用户面（20 §5.2 注记）。M2（r40）承载 import 注入面/别名
+/// （R-N5）与 R-N1/N2 全序——本表 M1 先落「限定名可见面」。
+pub static STDLIB_MODULES: &[(&str, &str, &str)] = &[
+    // kerf/core（14）——值谓词域 + 关系域（20 §5.2 首行）
+    ("core", "is-nil", "is-nil"),
+    ("core", "is-bool", "is-bool"),
+    ("core", "is-int", "is-int"),
+    ("core", "is-float", "is-float"),
+    ("core", "is-number", "is-number"),
+    ("core", "is-string", "is-string"),
+    ("core", "is-symbol", "is-symbol"),
+    ("core", "is-pair", "is-pair"),
+    ("core", "is-list", "is-list"),
+    ("core", "is-procedure", "is-procedure"),
+    ("core", "eq", "eq"),
+    ("core", "not", "not"),
+    ("core", "error", "error"),
+    ("core", "assert-eq", "assert-eq"),
+    // kerf/pair（3）——序对域
+    ("pair", "cons", "cons"),
+    ("pair", "head", "car"),
+    ("pair", "tail", "cdr"),
+    // kerf/list（9）——表域（nth←list-ref、drop←list-tail）
+    ("list", "list", "list"),
+    ("list", "length", "length"),
+    ("list", "append", "append"),
+    ("list", "reverse", "reverse"),
+    ("list", "nth", "list-ref"),
+    ("list", "drop", "list-tail"),
+    ("list", "member", "member"),
+    ("list", "assoc", "assoc"),
+    ("list", "last-pair", "last-pair"),
+    // kerf/string（11）——字符串域（R4 双向：to-symbol/from-symbol）
+    ("string", "append", "string-append"),
+    ("string", "length", "string-length"),
+    ("string", "substring", "string-substring"),
+    ("string", "index-of", "string-index-of"),
+    ("string", "contains", "string-contains"),
+    ("string", "starts-with", "string-starts-with"),
+    ("string", "ends-with", "string-ends-with"),
+    ("string", "to-upper", "string-to-upper"),
+    ("string", "to-lower", "string-to-lower"),
+    ("string", "to-symbol", "string-to-symbol"),
+    ("string", "from-symbol", "symbol-to-string"),
+    // kerf/symbol（2）——转换域 R4 双向双家（与 string 侧对偶）
+    ("symbol", "to-string", "symbol-to-string"),
+    ("symbol", "from-string", "string-to-symbol"),
+    // kerf/io（6）——I/O 域（唯一对齐点：门控全集 ≡ 导出全集）
+    ("io", "print", "print"),
+    ("io", "write-string", "write-string"),
+    ("io", "newline", "newline"),
+    ("io", "read-line", "read-line"),
+    ("io", "read-int", "read-int"),
+    ("io", "read-num", "read-num"),
+    // kerf/char（2）——Unicode 属性判定域（与引导私有的边界裁定 20 §5.2）
+    ("char", "is-whitespace", "char-whitespace?"),
+    ("char", "is-alphabetic", "char-alphabetic?"),
 ];
 
 /// I/O 内置的能力参数化注册（r8——13 §3.1.3 条款 4「driver 注册的
@@ -1544,11 +1653,24 @@ static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
 ];
 
 /// 构造内置静态签名表（符号 → 签名；check_program 的注入入口）。
+///
+/// 批次 M 首件 M1（r39）：限定名签名**按模块表派生**——`ns/本地名`
+/// 与底层同签名（同分派 → 同静态检查面；`read-line` 底层不列的口径
+/// 维持——底层无签名则派生跳过）。派生而非静态枚举：与
+/// `STDLIB_MODULES` 自动同步（零漂移——22 §8 R-N1/R-N3 行的静态面）。
 pub fn builtin_sigs(table: &mut SymbolTable) -> HashMap<Symbol, BuiltinSig> {
-    BUILTIN_SIGS
+    let mut map: HashMap<Symbol, BuiltinSig> = BUILTIN_SIGS
         .iter()
         .map(|(name, sig)| (table.intern(name), *sig))
-        .collect()
+        .collect();
+    for &(ns, local, underlying) in STDLIB_MODULES {
+        let u = table.intern(underlying);
+        if let Some(sig) = map.get(&u).copied() {
+            let qualified = format!("{}/{}", ns, local);
+            map.insert(table.intern(&qualified), sig);
+        }
+    }
+    map
 }
 
 fn cmp_builtin(name: &'static str, cmp: Cmp) -> Rc<BuiltinFn> {
@@ -1654,7 +1776,13 @@ mod tests {
         let g = register_globals(&mut t, &full_grant());
         let sigs = builtin_sigs(&mut t);
         assert_eq!(BUILTIN_ALIASES.len(), 27, "别名表长度应为 27（20 §8）");
-        assert_eq!(g.len(), 84, "全授权注册面应为 84（57 基础 + 27 别名）");
+        // r39 M1 计数锚升级：全授权面 84 基础（57+27 别名）+ 47 限定名
+        // （STDLIB_MODULES——r38 时点锚 84 已随模块表注册增量演进）
+        assert_eq!(
+            g.len(),
+            131,
+            "全授权注册面应为 131（84 基础 + 47 限定——r39 M1）"
+        );
         let mut seen: Vec<&str> = Vec::new();
         for &(alias, old) in BUILTIN_ALIASES {
             assert!(!seen.contains(&alias), "别名重复：{}", alias);
@@ -1676,6 +1804,89 @@ mod tests {
                 .get(&o)
                 .unwrap_or_else(|| panic!("旧名缺签名：{}", old));
             assert_eq!(sa, so, "别名签名应与旧名一致：{} vs {}", alias, old);
+        }
+    }
+
+    /// 批次 M M1 模块表闭合守卫（r39——22 §8 实施对账表的结构锚）：
+    /// ①总行数 47 + 七模块分面计数（20 §5.2 逐行对账：14/3/9/11/2/6/2）；
+    /// ②全授权面：每限定名已注册 + 每底层已注册 + 全局面恰 131
+    /// （84 基础[57+27 别名] + 47 限定名——计数锚同时拦截限定名撞基础名
+    /// 的 HashMap 覆写陷阱）；③限定名与基础面零同名（防覆写）；
+    /// ④零授权面：非 io 限定名 41 件恒注册（io 族按授权分项 fail-closed
+    /// ——22 §5.1 矩阵）；⑤限定名签名派生 = 底层签名（read-line 除外
+    /// ——底层不列口径维持）。
+    #[test]
+    fn stdlib_modules_closed_and_qualified_registered() {
+        let mut t = SymbolTable::new();
+        let g = register_globals(&mut t, &full_grant());
+        let sigs = builtin_sigs(&mut t);
+        // ① 行数与分面计数（20 §5.2）
+        assert_eq!(STDLIB_MODULES.len(), 47, "模块表总行数应为 47");
+        let mut per_ns: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+        for &(ns, _, _) in STDLIB_MODULES {
+            *per_ns.entry(ns).or_default() += 1;
+        }
+        for (ns, expect) in [
+            ("core", 14),
+            ("pair", 3),
+            ("list", 9),
+            ("string", 11),
+            ("symbol", 2),
+            ("io", 6),
+            ("char", 2),
+        ] {
+            assert_eq!(
+                per_ns.get(ns).copied().unwrap_or(0),
+                expect,
+                "模块 {} 面计数漂移（20 §5.2）",
+                ns
+            );
+        }
+        // ② 全授权：双注册 + 计数锚 131
+        assert_eq!(g.len(), 131, "全授权注册面应为 131（84 基础 + 47 限定）");
+        for &(ns, local, underlying) in STDLIB_MODULES {
+            let q = t.intern(&format!("{}/{}", ns, local));
+            assert!(g.contains_key(&q), "限定名未注册：{}/{}", ns, local);
+            let u = t.intern(underlying);
+            assert!(g.contains_key(&u), "底层未注册：{}", underlying);
+            // ⑤ 派生签名与底层一致（read-line 除外——底层不列）
+            let sig_q = sigs.get(&q);
+            let sig_u = sigs.get(&u);
+            if underlying != "read-line" {
+                assert!(sig_q.is_some(), "限定名缺派生签名：{}/{}", ns, local);
+                assert_eq!(
+                    sig_q.copied(),
+                    sig_u.copied(),
+                    "派生签名漂移：{}/{} vs {}",
+                    ns,
+                    local,
+                    underlying
+                );
+            }
+        }
+        // ④ 零授权面：非 io 限定名 41 恒注册（io fail-closed——分项检查）
+        let mut t2 = SymbolTable::new();
+        let none_grant = IoGrant::from_requirements(crate::capability::IoRequirements {
+            read: false,
+            write: false,
+        });
+        let g0 = register_globals(&mut t2, &none_grant);
+        // 零授权：基础 51（57 - 6 门控名未注册）+ 27 别名 + 41 非 io 限定 = 119
+        assert_eq!(
+            g0.len(),
+            119,
+            "零授权面应为 119（51 基础 + 27 别名 + 41 非 io 限定）"
+        );
+        for &(ns, local, _) in STDLIB_MODULES {
+            let q = t2.intern(&format!("{}/{}", ns, local));
+            let registered = g0.contains_key(&q);
+            assert_eq!(
+                registered,
+                ns != "io",
+                "零授权面限定名注册态异常：{}/{}（io 应 fail-closed 不注册）",
+                ns,
+                local
+            );
         }
     }
 

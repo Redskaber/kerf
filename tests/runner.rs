@@ -172,5 +172,12 @@ mod effect_tests;
 // E0012 诊断族 + 13 边界 case；语言面形式 Stage 3——操作码直接构造
 // 驱动 + 冻结 FfiCall lowering 面）
 
+// ---------------------------------------------------------------------------
+// Stage 3 入场序列（批次 M 命名空间层 M1——r39）：plan 套件
+// ---------------------------------------------------------------------------
+
+#[path = "v0/stage3/plan/namespace_tests.rs"]
+mod namespace_tests;
+
 #[path = "v0/stage2/plan/ffi_vm_tests.rs"]
 mod ffi_vm_tests;

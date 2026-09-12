@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-12（**v6.4：r32 / 53-a 表面现代化审查轮**——新增 §4 命名规范层指针（[20-表面规范](./20-surface-conventions.md) R1-R6 + 57 项映射表——谓词 `?`→`is-`、转换 `->`→`to/from`、`car/cdr`→`head/tail`、`str-` 全词化；§2 表标注为 v0.4 遗留口径——新语料按现代名书写）；v6.3：r24 / 42-e stdlib 缺口补齐**——类型谓词 5 件（string?/symbol?/float?/number?/list?——Value 变体判别完备面 + Floyd 龟兔环安全）+ prelude foldr（foldl 对偶）+ **TD-011 解决**：字符串全序码点序参与全部比较族（静态面 R3 同步）；v6.2：批次 F 深审回写——TD-021 hofs 用户面已 r15 解决；v5.6：r8——I/O 六内置能力门控；v5.5：r7——TD-016 链式比较全操作数前置校验；v5.4：r6 B3——高阶函数四件套 kerf 源码化 + 4 自举 Reader 原语）
-> **Version**: v6.7（**r38 / 59-a 批次 L 别名层实施**：§2 增 r38 双注册注记[57→84——旧名清单口径维持为 δ 函数表事实源，别名层为增量双注册] + §4 增实施状态 ✅；v6.6：r34 十一域口径；v6.5：r33；v6.4：r32 命名规范层首增）
+> **Version**: v6.8（**r39 / 60-a 批次 M M1**：§2 增限定名可见面注记[47 限定名 + E0014/E0015]；v6.7：r38 批次 L 别名层实施；v6.6：r34 十一域口径；v6.5：r33；v6.4：r32 命名规范层首增）
 > **Status**: Active
 > **处理程度**：P1（最小集 Stage 0 已实现；标准库最小集（阶段门条件 3：列表/字符串/I/O 各 ≥8）r5 已交付；高阶函数 kerf 源码实现 r6 已交付（reader.krf 序章）；**r24 / 42-e：谓词完备面 + foldr + 字符串全序交付——I2 stdlib 缺口清单清零**；完整库化生长是 Stage 2 切换信号）｜ **所属 Stage**：Stage 0（最小集）→ Stage 1（r5 最小集补齐 / r6 hof 源码化）→ Stage 2（库化生长） ｜ **推迟项**：~~高阶函数用户面注入~~（**已解决 r15**——kerf-prelude 模块承载）、~~字符串全序比较~~（**已解决 r24**——TD-011 码点序，见 §2 表）、中缀运算符宏（Stage 2）、能力模型 I/O（Stage 2）
 
@@ -31,6 +31,8 @@ Stage 0 的 I/O 是**双层表面**：**语言层**仅有 `read-line` 与 `print
 > **r8 能力门控注记（2026-09-10，批次 D，v5.6）**：上段「Stage 0 不引入能力模型」描述的是 Stage 0 基线；r8 起 I/O 内置进入**能力门控形态**（[13-能力矩阵 §3.1.3](./13-capability-matrix.md) r8 注记——「基础传递」做实）：程序须声明 `(require io read|write)` 才能引用门控内置（`print`/`newline`/`write-string` 需 write；`read-line`/`read-int`/`read-num` 需 read）；未声明引用 → **E0006 编译期错误**（R9 保守验证，front 全路径）；`register_globals` 按授权面注册（未声明即不注册——fail-closed）。语言层/通道层双层表面不变，只是语言层入口加了权限门。门控不覆盖非 I/O 内置（算术/比较/序对/谓词/字符串——它们无副作用，无需授权）。
 **Stage 0/1/2 内置函数完整清单（57 项，v6.3：+5 类型谓词（r24/42-e 缺口补齐——Value 变体判别完备面）；v5.4：48 项用户面（v5.3）+ 4 项自举 Reader 原语（r6，B3）——逐项对齐 `kerf-driver/src/builtins.rs` 的 `register_globals`）**：
 
+> **r39 批次 M M1 限定名可见面注记（v6.8）**：上表之上叠加**七模块 47 限定名**（`core/is-nil`、`string/append`、`io/print`…——`STDLIB_MODULES` 单源转译 20 §5.2；`ns/本地名` = 底层共享分派体；io 族按授权分项 fail-closed 注册；未命中 export 面 → E0014「不导出」编译期[R-N3 不回落]；`kerf-` 模块名前缀保留域 E0015）。限定名签名按模块表派生（check/hm 对 `ns/name` 同判）。import 注入面/别名 = M2。
+>
 > **r38 批次 L 双注册注记（v6.7）**：上表 57 项为 **v0.4 遗留命名口径的规范事实**（δ 函数表事实源不变）；r38 起 `register_globals` 在其上叠加 **27 现代扁平名别名双注册**（注册面 57→84——`BUILTIN_ALIASES` 单源；同名共享分派体：新旧名同行为同诊断，27 parity case + 三方漂移守卫锄定——[20 §6.4/§8](./20-surface-conventions.md)）。旧名存量面继续工作（移除轮 Stage 3）；**新语料一律现代名书写**（§4 纪律——r32 已登记，r38 起生效）。
 
 | 类别 | 函数（个数） | 实现层 |

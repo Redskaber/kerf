@@ -23,9 +23,11 @@ use kerf_span::{render_diagnostic, Diagnostic, DiagnosticCode, FileId, Severity,
 use kerf_syntax::{Stx, Symbol, SymbolTable};
 use kerf_vm::{run_program, Value, VmError};
 
-use crate::builtins::{builtin_sigs, register_globals, resolve_hygiene_fallbacks};
+use crate::builtins::{builtin_sigs, register_globals, resolve_hygiene_fallbacks, STDLIB_MODULES};
 use crate::cache::{cache_enabled, cache_key, with_cache};
-use crate::capability::{verify_io_capabilities, IoGrant, IoRequirements};
+use crate::capability::{
+    collect_takeover, hygienic_base, verify_io_capabilities, IoGrant, IoRequirements,
+};
 
 /// 管线阶段标识。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -234,6 +236,168 @@ fn imports_prelude(f: &Stx, table: &SymbolTable) -> bool {
     false
 }
 
+// ---------------------------------------------------------------------------
+// 批次 M 首件 M1（v0.6 命名空间层，r39）——限定名编译期验证
+// （22 §3.3 R-N3 不回落 E0014 + §7 保留域 E0015；front 全路径同 R9）
+// ---------------------------------------------------------------------------
+
+/// E0014：限定名不导出（R-N3 不回落——仅查模块 export 面）。
+const QUALIFIED_NOT_EXPORTED_CODE: DiagnosticCode = DiagnosticCode(14);
+/// E0015：保留域违例（kerf- 前缀用户占用——22 §7）。
+const RESERVED_DOMAIN_CODE: DiagnosticCode = DiagnosticCode(15);
+/// 保留域前缀（模块标识形——`kerf-`；22 §7 保留域）。
+const RESERVED_PREFIX: &str = "kerf-";
+/// 保留域许可名单（preamble 注入件 + 七模块标识形——M2 import 直用）。
+const RESERVED_ALLOW: &[&str] = &[
+    "kerf-prelude",
+    "kerf-core",
+    "kerf-pair",
+    "kerf-list",
+    "kerf-string",
+    "kerf-symbol",
+    "kerf-io",
+    "kerf-char",
+];
+
+/// 限定名引用验证（R-N3 不回落——22 §8 表 R-N3 行）：含 `/` 的
+/// VarRef 名仅查 stdlib 七模块 export 面 + 程序接管豁免（define/set!
+/// 同名——零误报纪律与 R9 同口径）；未命中 → E0014「不导出」而非
+/// 「未绑定」（诊断增益：打错模块名精确指向模块面）。R-N8 豁免天然
+/// 成立（本验证只走 VarRef 引用位——quote 符号值是 Literal，不参与）。
+/// 保留域（E0015）：module 名 kerf- 前缀占用（用户模块去前缀）。
+/// M1 收窄如实注记：用户模块 export 限定名引用归 M2 import 面承载。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同入口约定
+fn verify_qualified_refs(
+    core: &[Rc<CoreExpr>],
+    table: &SymbolTable,
+    sm: &SourceMap,
+) -> Result<(), DriverError> {
+    let mut takeover: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for e in core {
+        collect_takeover(e, table, &mut takeover);
+    }
+    let shadowed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for e in core {
+        if let Some(diag) = qualified_ref_diag(e, &takeover, &shadowed, table) {
+            return Err(DriverError {
+                stage: Stage::Compile,
+                rendered: render_diagnostic(&diag, sm),
+                diagnostic: diag,
+            });
+        }
+    }
+    Ok(())
+}
+
+/// 限定名/保留域诊断遍历（首个违例即返——fail-closed 单条阻断，
+/// 多错误收集属 E0005 家族职责，同 R9 口径）。
+///
+/// R-N1 解析序（22 §3.1）：N3 局部绑定先于 N2——**Lambda 参数遮蔽
+/// 限定名检查**（`(lambda (foo/bar) foo/bar)` 是局部名非限定引用）；
+/// 遮蔽集随递归传入（Lambda 入并集——不可变传播，词法嵌套正确性）。
+fn qualified_ref_diag(
+    e: &CoreExpr,
+    takeover: &std::collections::HashSet<String>,
+    shadowed: &std::collections::HashSet<String>,
+    table: &SymbolTable,
+) -> Option<Diagnostic> {
+    match e {
+        CoreExpr::VarRef { name, span, .. } => {
+            let raw = table.name(*name);
+            let base = hygienic_base(raw);
+            if shadowed.contains(base) || shadowed.contains(raw) {
+                return None; // N3 局部绑定胜出（R-N1——参数遮蔽合法）
+            }
+            // 独立 `/`（除法运算符）与不含 `/` 的名字不参与（R-N4 词法
+            // 域限定：`/` 仅标识符内部分隔——裸名走既有未绑定路径）
+            if base.len() < 2 || !base.contains('/') {
+                return None;
+            }
+            if takeover.contains(raw) || takeover.contains(base) {
+                return None;
+            }
+            let (ns, local) = base.split_once('/')?;
+            // R-N3 不回落：仅查 N2 export 面（stdlib 七模块；用户接管
+            // 已豁免——用户模块 export 限定名 = M2 import 面）
+            let known = STDLIB_MODULES
+                .iter()
+                .any(|&(module, local_name, _)| module == ns && local_name == local);
+            if known {
+                return None;
+            }
+            Some(Diagnostic::error(
+                Some(QUALIFIED_NOT_EXPORTED_CODE),
+                format!(
+                    "「{}」不导出「{}」（限定名无回落——R-N3：仅查模块 export 面，不查全局/局部/其他模块）",
+                    ns, local
+                ),
+                *span,
+            ))
+        }
+        CoreExpr::Module {
+            name, span, body, ..
+        } => {
+            // E0015 保留域（22 §7）：用户模块名占用 kerf- 前缀
+            let module_name = table.name(*name);
+            if module_name.starts_with(RESERVED_PREFIX) && !RESERVED_ALLOW.contains(&module_name) {
+                return Some(Diagnostic::error(
+                    Some(RESERVED_DOMAIN_CODE),
+                    format!(
+                        "保留域违例：模块名「{}」占用 kerf- 前缀（标准库保留域——22 §7；用户模块名请去前缀）",
+                        module_name
+                    ),
+                    *span,
+                ));
+            }
+            body.iter()
+                .find_map(|item| qualified_ref_diag(item, takeover, shadowed, table))
+        }
+        CoreExpr::Lambda { params, body, .. } => {
+            // R-N1：参数是 N3 局部绑定——并入遮蔽集再递归体（let 系已
+            // 脱糖为 Lambda+App，CoreExpr 层 N3 绑定面 = Lambda 参数）
+            let mut inner = shadowed.clone();
+            for p in params {
+                inner.insert(table.name(*p).to_string());
+            }
+            qualified_ref_diag(body, takeover, &inner, table)
+        }
+        CoreExpr::App { fn_expr, args, .. } => {
+            qualified_ref_diag(fn_expr, takeover, shadowed, table).or_else(|| {
+                args.iter()
+                    .find_map(|a| qualified_ref_diag(a, takeover, shadowed, table))
+            })
+        }
+        CoreExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => qualified_ref_diag(cond, takeover, shadowed, table)
+            .or_else(|| qualified_ref_diag(then_branch, takeover, shadowed, table))
+            .or_else(|| qualified_ref_diag(else_branch, takeover, shadowed, table)),
+        CoreExpr::SetBang { value, .. } => qualified_ref_diag(value, takeover, shadowed, table),
+        CoreExpr::Define { value, .. } => qualified_ref_diag(value, takeover, shadowed, table),
+        CoreExpr::Begin { body, .. } => qualified_ref_seq(body, takeover, shadowed, table),
+        CoreExpr::Require { .. } | CoreExpr::Literal { .. } => None,
+        CoreExpr::Perform { effect, .. } => qualified_ref_diag(effect, takeover, shadowed, table),
+        CoreExpr::Handle {
+            handler_body, body, ..
+        } => qualified_ref_diag(handler_body, takeover, shadowed, table)
+            .or_else(|| qualified_ref_diag(body, takeover, shadowed, table)),
+    }
+}
+
+/// 序列臂助手（Begin/Module 体——同 verify_refs 形态；遮蔽集透传）。
+fn qualified_ref_seq(
+    body: &[Rc<CoreExpr>],
+    takeover: &std::collections::HashSet<String>,
+    shadowed: &std::collections::HashSet<String>,
+    table: &SymbolTable,
+) -> Option<Diagnostic> {
+    body.iter()
+        .find_map(|item| qualified_ref_diag(item, takeover, shadowed, table))
+}
+
 /// prelude 注入（TD-021）：声明 import 的程序 → 读入 preamble 形式并
 /// 前置合并（种子 Reader——固定库工件与 expander.krf 同口径；本文件
 /// 自身错误不可能（构造性正确），Span 归属 preamble.krf 独立 file）。
@@ -406,6 +570,10 @@ fn front_from_core(
     // front 管线全路径生效 run/check/compile；首个违规即阻断
     // fail-closed；E0006 家族与 E0005 静态检查分离）
     verify_io_capabilities(&core, &table, &sm)?;
+
+    // 2.6 批次 M 首件 M1（r39）限定名验证（22 §3.3 R-N3 不回落 +
+    // §7 保留域——E0014/E0015；front 管线全路径同 R9 生效）
+    verify_qualified_refs(&core, &table, &sm)?;
 
     // 3. 相位簿记：declare + visit（§8.9——TD-021 多模块：全部 module
     // 形式按出现序 declare（prelude 注入在前、用户模块在后），visit 主

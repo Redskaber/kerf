@@ -269,7 +269,7 @@ fn required_capability(builtin_name: &str) -> Option<Capability> {
 
 /// 卫生基名解析（`name$hyg$N` → `name`；与 driver 运行时回退同则——
 /// 保守判定：后缀须非空纯数字）。
-fn hygienic_base(name: &str) -> &str {
+pub(crate) fn hygienic_base(name: &str) -> &str {
     match name.rsplit_once("$hyg$") {
         Some((base, suffix))
             if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) =>
@@ -278,6 +278,14 @@ fn hygienic_base(name: &str) -> &str {
         }
         _ => name,
     }
+}
+
+/// io 限定名归一化（r39 / 批次 M M1）：`io/本地名` → `本地名`（22 §5.1
+/// 对齐点——限定名与门控名同表数据源：READ_GATED/WRITE_GATED 载本地名
+/// 形态）。非 `io/` 前缀原样返回。诊断消息仍用原始限定形态（权限诊断
+/// 报「io/print」而非裸名——双门分立的可观测面保持限定名可见性）。
+fn gated_name(base: &str) -> &str {
+    base.strip_prefix("io/").unwrap_or(base)
 }
 
 /// R9 权限验证：程序中所有门控内置引用都有对应声明（13 §3.1.3 条款 3
@@ -322,10 +330,15 @@ fn verify_refs(
         CoreExpr::VarRef { name, span, .. } => {
             let raw = table.name(*name).to_string();
             let base = hygienic_base(&raw).to_string();
-            if takeover.contains(&raw) || takeover.contains(&base) {
+            if takeover.contains(&raw)
+                || takeover.contains(&base)
+                // r39 M1：io 限定名归一后同查接管（用户 define 裸名/
+                // 限定名两形接管均豁免——零误报纪律维持）
+                || takeover.contains(gated_name(&base))
+            {
                 return None;
             }
-            match required_capability(&base) {
+            match required_capability(gated_name(&base)) {
                 Some(Capability::IoRead) if !declared.read => {
                     Some(permission_diag(&base, "read", "(require io read)", *span))
                 }
@@ -389,7 +402,7 @@ fn permission_diag(builtin: &str, cap: &str, declare_hint: &str, span: Span) -> 
 }
 
 /// 用户接管名收集（define/set! 的名字——含卫生基名两形）。
-fn collect_takeover(e: &CoreExpr, table: &SymbolTable, out: &mut HashSet<String>) {
+pub(crate) fn collect_takeover(e: &CoreExpr, table: &SymbolTable, out: &mut HashSet<String>) {
     match e {
         CoreExpr::Define { name, value, .. } => {
             out.insert(table.name(*name).to_string());

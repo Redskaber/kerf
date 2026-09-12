@@ -4735,3 +4735,53 @@ Work Log:
 
 Stage Summary:
 - **批次 L 本体交付**：27 现代扁平名双注册全落地（84 注册 + 83 签名 + 门控零变更实测 + 27 parity + 守卫 ×3）——**窗 L 出口条件三全过**（§3.2 788:0:0 零回归 + 27 parity 全绿[新旧名同行为同诊断] + 漂移守卫三方扩展）；零破坏（旧名存量面不动 + 引导语料继续旧名 + E0006 fail-closed 维持）；对账八面 + 六文档回写；59-z 打包 + 59-web web 面随后
+---
+Task ID: 59-z（r38 收尾——打包 + 包内自举 + rec 树）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r38 tar.gz + 包内自举 + rec 树 03 层首建 + worklog 双源
+
+Work Log:
+- r38 tar.gz（§19.3 commit-then-package 正序：git 183b1b6 先行 → §19.4 打包）：**kerf-stage3-v0.5.0-r38-batchL-aliasedlayer-788tests.tar.gz（2.08MB / 346 条目）**落 download/；排除 target/.git/download/tool-results 四目录
+- **包内自举**（/tmp 全新解包）：build --release **13.40s 零告警** + **test 788:0:0 复跑**（22 套件逐二进制汇总）+ 包内四审计集 EXIT 0 ×4（41+50+53+46=190）+ CLI 一致（fib ⇒ 144 / macros ⇒ 42 / check ok exit 0 / 负例 E0005 REAL_EXIT 1 / 别名 demo 2/true/true/nil）+ **qbe 在包**（tools/qbe/bin/qbe）
+- rec 树：**03_stage-3_入场序列/ 层首建**（01_r38_批次L_别名层实施.md 1:8 压缩 + l 路由[01 行]）+ root l 更新（03 行 + 未压实区间 r38 终态）
+- 遵循：§19.1（规则四条：时机/格式/内容/位置）/ §19.3（三检查：§3.2 全绿 ✅ + commit 先行 ✅ + RELEASE_NOTES ✅）/ §8.6（worklog 双源）
+- worklog 双源补账：59-z 本条 + root 镜像 + 二次 commit
+
+Stage Summary:
+- r38 打包门达成——批次 L 验收三门全过（§3.2 全绿 ✅[788:0:0] + 包内自举 ✅[788 复跑 + 审计 ×4 + CLI 一致 + qbe] + E2E[59-web 承载]）；59-web web 面随后
+---
+Task ID: 59-web（r38 web 面——批次 L 收尾）
+Agent: Super Z (main) — web 面交付（REC-A）
+Task: web 面完整同步（kerf-data r38 + footer v7.8 + download README r38 + PACKAGE_CONTENTS r38 + E2E 双端 + lint + git 双仓）
+
+Work Log:
+- kerf-data r38 节点：Status 行「✅ Stage 3 入场序列首件——批次 L 别名层 ✅（v0.5.0-r38：27 现代扁平名双注册 57→84 + 双名同步 56→83 + 门控零变更 + 27 parity 全绿 + 守卫三方——窗 L 出口条件三全过[23 §2.2]，788:0:0 零回归）」+ points 头部两条（59-a 批次 L 本体四件全录 + 59-z/59-web 打包与 web 面）+ HERO_FEATURES +1 徽章（批次 L 别名层 ✅——27 现代名双注册 + parity 全绿 · v0.5）+ PACKAGE_CONTENTS 三处 r38 口径（788 项测试[净 +30 详录] + 源码 r38 段 + rec 树四里程碑 38 条目/03 层 1 rec）
+- footer v7.7→v7.8（五处：版本注释 v7.8 前置 + 状态行「✅ 批次 L 别名层 · Stage 3 入场序列首件（27 现代名双注册 + 27 parity 全绿——788:0:0，r38）」+ r38 详录段[四件清单 + §3.2 + 别名端到端 + 对账八面 + 包 346 条目 + rec 03 层首建 + 里程碑批次 M 下一步] + r37 压缩段 + 文档索引行[24 篇六篇回写 + v0.5-roadmap v0.3.0 + RELEASE v0.5.0-r38 + TD-027 进展注记 + rec 树四里程碑 38 条目/03 层 1 rec] + 底部 mono 行「kerf v0.5.0 · ✅ 批次 L 别名层」）
+- download/README.md r38 节（头部——驱动源/窗 L 入口信号/交付一四件/交付二对账八面/交付三包内自举与 web/里程碑/下一步批次 M[22 §8 驱动 + 入口三信号待核对]）
+- **E2E 双端**（agent-browser）：r38 关键词 20/20 全命中（批次 L 别名层/r38/788/27 parity/Stage 3 入场序列/BUILTIN_ALIASES/窗 L/双注册/v0.5.0-r38/v0.3.0/批次 M/E0006/346 条目/03 层/1 rec/788:0:0/阶段·诊断码·消息体/59-a/59-z）+ 语义结构 main/footer/header 全在 + 桌面 1440 footer 贴底（scroll 至底 899.5 ≈ 视口 900，长页 18755 自然下推）+ **移动端 375 零横溢**（scrollW 375 = innerW）+ 移动端 footer 贴底（811.75 ≈ 812）+ 控制台零错误（仅 dev 模式 HMR/Fast Refresh 消息）+ stats API r38 包首位（1.98MB/788 tests/64 files）+ download API 200 application/gzip 2080037 bytes + lint EXIT 0 + 双截图存档（r38-web-desktop.png / r38-web-mobile.png）
+- git 双仓：kerf 三 commit（183b1b6 本体 + 890fe6a 收尾 + 本次 web 镜像）+ 主仓本轮 commit（web 三件 + 包 + worklog 镜像 + 截图）
+
+Stage Summary:
+- r38 web 面闭环（五件面齐 + E2E 双端全过 + lint 0）——**批次 L 全链交付闭环（59-a 本体 + 59-z 打包 + 59-web web 面）；下一步批次 M（v0.6 命名空间层，22 §8 实施对账表驱动——入口信号：窗 L 全绿 ✅ + 22 §8 就绪 ✅ + 18 §6 码位预留 ✅）**
+---
+Task ID: 60-a（r39 批次 M 首件 M1——命名空间层限定名可见面）
+Agent: Super Z (main) — M1 实施（DEV-A/QA-A/REC-A；PHASE 1 定位声明 v2 一次通过——窗 M 入口信号三满足[K3 r37 + 22 §8 r33 + 18 §6 r34]核对开窗）
+Task: 七模块 47 限定名注册 + E0014/E0015 编译期验证 + io 双门分立 + 签名派生 + 17 namespace case + §3.2 + 审计 + CLI
+
+Work Log:
+- **窗 M 入口三核对**（23 §2.2）：①窗 L 全绿 ✅ r38 ②22 §8 实施对账表就绪 ✅ r33 ③18 §6 码位预留 ✅ r34（E0013-E0019 预留段）——开窗合法；批次 M 分 M1/M2/M3（M1 = 限定名可见面核心；M2 = import 注入面/别名 + B1-B3 + W 弃用族；M3 = 收口门审——MUV 拆分声明于定位声明）
+- **R-N4 词法预检（实施前）**：实测发现 `/` 已在双路径 ID 域（seed `is_id_start` 运算符字符集 + reader.krf `ID-EXTRA`）——`str/append` 已单 token 流过全管线至 VM 未绑定（E2E 实证）；独立 `/` 除法维持 → **M1 零词法改动**（22 §8 R-N4 行天然满足——如实登记）
+- **①七模块 47 限定名注册**：`builtins.rs STDLIB_MODULES` 静态表（20 §5.2 转译：core 14/pair 3/list 9/string 11/symbol 2/io 6/char 2——R4 双向双家 `string/from-symbol`↔`symbol/from-string` 对偶）+ `register_globals` 注册段（`ns/本地名` → 底层共享 `Rc<BuiltinFn>`——同 r38 parity 形态）
+- **②io fail-closed 分项注册**（22 §5.1 对齐点）：READ_GATED/WRITE_GATED 判分项授权——未授权不注册（零授权面 119 实测[51+27+41]；全授权 131[84+47]）
+- **③E0014 限定名不导出**（R-N3 不回落）：`driver verify_qualified_refs` 编译期——VarRef 含 `/` 名仅查 stdlib 七面 + 接管豁免（define/set! 同口径）+ **Lambda 参数遮蔽集**（R-N1 N3 局部胜出——**开发实录：初版漏遮蔽集，takeover 测试实测发现 `(lambda (foo/bar) foo/bar)` 误报 E0014，当场修复**[遮蔽集随递归不可变传播]）；嵌套 module 体递归；诊断「不导出」非「未绑定」（R-N3 诊断增益兑现）
+- **④E0015 保留域违例**（22 §7）：module 名 `kerf-` 前缀 + 许可名单八名（preamble + 七模块标识形）——嵌套 module 同检
+- **⑤R9 `gated_name` 归一化**（capability.rs）：`io/*` 前缀剥离后查门控表——未授权 `io/print` → E0006 携「io/print」限定形态（红线 1 双门分立可观测）；接管双形豁免（裸名/限定名）维持零误报
+- **⑥签名派生**：`builtin_sigs` 按模块表派生限定名签名（底层同签；read-line 不列口径维持——静态面 E0005 对 ns/name 生效，正例零误报断言）
+- **测试校准三误（R1 实测纪律）**：io/print 返回 nil 非回显值（副作用经 stdout）；静态面须走 check_source（run 路径无 E0005——HM 旗标期 check 判定面）；io/read-line 正路阻塞 stdin（stdlib_tests 既有结论——读族正路仅 CLI 层可验，移除该断言）
+- **§3.2 六命令 clean 起步全绿**：clean 2443 files/618.2MiB → build 13.08s 零告警 → check 0/0 → fmt 0（应用后）→ clippy -D warnings 0（map_clone ×2 当场修正）→ **test 806:0:0**（集成 588 + 单元 218——22 套件逐二进制实测汇总；788→806 净 +18）
+- **四审计集 EXIT 0 ×4**（190 维持）+ **CLI 四路径**（fib 144/macros 42/effect_stress 120/check ok 0/负例 E0005 REAL_EXIT 1）+ **限定名端到端实证**（七模块正路 + E0014 双负例 + E0015 + E0006 限定形态 + 授权后 io 可调 + 除法/符号值锚）
+- **对账八面**：matrix v0.1.0-r39（r39 增量行 + 总量行 806=218+588）+ RELEASE_NOTES v0.6.0-r39 节 + pipeline v0.5.0-r39（Tier 2 头 571→588）+ **六文档回写**：18 v6.4（E0014/E0015 预登记→落位回填——「先查本表占位」纪律兑现）/20 v1.4（§5.2 M1 实施注记）/22 v1.2（§8 M1 落地状态七行）/12 v6.11（§2.10 批次 M 行 M1）/23 v1.2（§2.2 窗 M M1 进行中）/09 v6.8（§2 r39 限定名注记）+ v0.5-roadmap 批次 M M1 行 + TD 登记册零新事件
+- 遵循：§3.2（六命令）/ §8.4.5（R4——18 码位回填 + 23 窗状态）/ §8.6（worklog 双源）/ 22 §3.1/§3.3/§5.1/§5.2/§7（R-N1 遮蔽序/R-N3 不回落/对齐点/红线 1/保留域）/ 20 §5.2（模块树单源）/ R1（三校准 + 遮蔽 bug 实测发现）/ §9.4.3（正负比 17 case 内负向为主）
+
+Stage Summary:
+- **批次 M M1 本体交付**：N2 限定名可见面核心落地（47 限定名 + E0014/E0015 + io 双门 + 签名派生 + 遮蔽序局部面）——806:0:0 零回归（净 +18）；R-N4 词法零改动（天然满足如实登记）；M2 = import 注入面/别名 + B1-B3 + W 弃用族 + 冲突三类 + 组合闭包（22 §8 驱动）；60-z 打包 + 60-web web 面随后

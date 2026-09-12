@@ -332,6 +332,6 @@ Landin 借用这个概念：**函数加上其捕获的环境，形成了一个"�
 | **E0010** | **FFI 令牌失效后使用**（双释/用后传递/用后使用——消费全局生效后的吸收态） | **r30/48-d 落位** | ffi-ownership-model §5；messages.rs `err_ffi_token_invalid`（单源——VM free_external/call_external 令牌校验） |
 | **E0011** | **FFI 所有权/类型违规**（释放 Opaque 令牌/非令牌值/实参形状不匹配/零尺寸纵深防御） | **r30/48-d 落位** | 同上 §2/§6-case4；`err_ffi_ownership`（VM 编组与 free 判定序） |
 | **E0012** | **FFI 符号解析失败**（extern 符号表未登记——fail-closed；QBE AOT 链接期解析在 VM 路径的调用期对应物） | **r30/48-d 落位** | 同上 §4；`err_ffi_symbol_resolution`（VM CallExternal 符号解析 + 空表默认入口） |
-| **E0013-E0019** | **命名空间族（批次 M 预留段）**：import 冲突（两模块同名导出）/限定名不导出（`string/nonexist`）/保留域违例（`kerf-` 前缀用户占用）/重复定义（module 体内同名 define）/别名重复 + **W 弃用警告族**（旧名 27 件——编码位形态：W00xx 同段或独立段，批次 M 实施时按诊断渲染面定） | **预登记（r34 / 55-a F9——未落位）** | [22 §8 实施对账表](./22-namespace-design.md) 各 case 的码位需求面；本行 = 「先查本表占位」纪律的前置兑现——批次 M 实施时逐码落位回填（构造器单源 TD-018） |
+| **E0013-E0019** | **命名空间族（批次 M 预留段）**：import 冲突（两模块同名导出）/限定名不导出（`string/nonexist`）/保留域违例（`kerf-` 前缀用户占用）/重复定义（module 体内同名 define）/别名重复 + **W 弃用警告族**（旧名 27 件——编码位形态：W00xx 同段或独立段，批次 M 实施时按诊断渲染面定） | **部分落位（r39 / 60-a 批次 M M1——E0014 限定名不导出 + E0015 保留域违例已实施**：driver `verify_qualified_refs` 编译期承载[构造器内联 driver——compile 族与 messages.rs 运行族分工维持]；E0013/E0016/E0017/W 族 = M2[import 面] 承载，E0018/E0019 预留维持）** | [22 §8 实施对账表](./22-namespace-design.md) 各 case 的码位需求面；「先查本表占位」纪律兑现（r34 预登记 → r39 逐码落位回填） |
 
 **登记纪律**：新码位 = 先查本表占位 → 模型层单源构造（TD-018）→ 回填本表 + 对应族文档锚。禁止未登记静默占位。
