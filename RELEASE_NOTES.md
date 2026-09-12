@@ -1,3 +1,29 @@
+## v0.4.0-r28（2026-09-11）——批次 J 执行启动：J1 效应 typecheck 收敛（Perform/Handle 子表达式遍历 + 静态负例组双面检出，710 全绿）
+
+### 交付一：48-b J1 效应 typecheck 收敛（会话 Task 49-a——plan §5b 首 MUV）
+
+- **typecheck.rs 效应臂收敛**（补深审 D3/D8「Unknown 放宽面」覆盖缺口——r25 设计性放宽的收敛位）：Perform 臂——效应值表达式入 R1-R8 检查域（子表达式遍历）；Handle 臂——handler 体与被保护计算体均入检出域 + payload/resume 绑定器以 Unknown 装订（遮蔽纪律与 Lambda 臂 save/restore 同型镜像）；**结果类型维持 Unknown**（Perform 值 = resume 注入的任意值 / Handle 值 = 体汇合动态结果——行多态属 Stage 3 类型层，effect-language-design 静态面不收紧裁定维持）
+- **hm.rs 效应臂同口径收敛**（HM PoC 域内违例检出）：Perform 效应值进推断（约束集检查）；Handle 两体进推断 + 绑定器 Binding::Mono(Dynamic) 装订（infer_let save/restore 同型）；**结果类型维持 Dynamic**（effect-language-design 风险表「与 HM 推断的效应行交互 = P3/Stage 3」——不收紧、不误报）
+- **静态负例组 4 测试（6 违例 case，双面检出——超集纪律：tc 面报 → hm 面亦报）**：Perform 效应值违例（R2 算术混串 + R1 if 非真值）+ handler 体违例（R5 car/cdr 非 pair）+ handle 体违例（R1）+ 双体多错误收集（handler 体 R2 + handle 体 R1 → Span 序合并）；**零误报对照**：r25 六正例 + 绑定器动态用点（payload Unknown/Dynamic 算术与点对）+ effect_stress.krf M5 语料——双面 0 诊断（保守契约维持）
+- 生产入口实证：`kerf check` 对 `(handle log ((p k) (car 42)) 1)` → `error[E0005]: car 需要 pair，实际 int` 精确定位 handler 子句体 1:25；合法效应程序 → `ok`
+- 改动面：≤3 文件（typecheck.rs + hm.rs + effect_tests.rs——深审 D1 预估口径内）；编译面零改动（bootstrap_compiler_tests 效应 parity 维持 32/32 零回归）
+
+### 交付二：49-z 收尾（r28）
+
+- §3.2 六命令 clean 起步全绿（build 13.32s 零告警 / check 0/0 / fmt 0 diff（一处排版当场 apply）/ clippy --all-targets --workspace 超集 0 / test **710:0:0**（706 零回归 + 净 4）/ 三审计集 EXIT 0 + CLI 四路径（fib ⇒ 144 / macros ⇒ 42 / effect_stress ⇒ 120 / io ⇒ 42）+ check ok）
+- 对账六面：matrix r28 行（706 → 710 + 汇总链）/ pipeline-test-coverage v0.4.0-r28（**R4 修正：Tier 2 头 463→503——r26 补账声称「499」未落面，本轮回写实测值**+ effect_tests 行 17→21）/ plan Status r28 + §5b 执行注记 / RELEASE_NOTES r28 / TD 登记册零事件 / worklog 双层 + rec 树 12_r28
+- 深审 D3/D8 闭合注记（deep-review-round1.md——「批次 J 引入效应 typecheck 时补静态负例组（≥3）」建议兑现）
+- r28 tar.gz（§19.3 commit-then-package 正序）+ 包内自举验证 + web 同步 + E2E
+
+### 质量口径
+
+- cargo test --release --workspace：**710:0:0**（单元 207 + 集成 503 逐二进制实测；净 +4 集成；门审计集三件 144 case 另计全过）
+- cargo clippy --all-targets --workspace -- -D warnings：**0 警告**（超集口径）
+- cargo fmt --check：0 diff
+- 三审计集：stage0/stage1/stage2_gate_audit_r1 全 **EXIT 0**（复验）
+
+---
+
 ## v0.4.0-r27（2026-09-11）——批次 J 规划轮：Stage 2 收官批细化 + 余下面处置（§5b/§5c/§5d，零代码轮 706 全绿）
 
 ### 交付一：批次 J 细化（48-a——plan §5b/§5c/§5d 三节）

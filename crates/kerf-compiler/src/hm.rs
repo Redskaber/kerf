@@ -605,11 +605,44 @@ impl<'a> Gen<'a> {
                 Rc::new(Ty::Dynamic)
             }
             CoreExpr::Require { .. } => Rc::new(Ty::Dynamic),
-            // r25/42-f 效应面（HM PoC 域外——effect-language-design 风险
-            // 表「与 HM 推断的效应行交互 = P3/Stage 3」）：Perform 值 =
-            // resume 注入的任意值；Handle 值 = 体/handler 体汇合——均
-            // 降级 Dynamic（保守契约：不收紧、不误报）
-            CoreExpr::Perform { .. } | CoreExpr::Handle { .. } => Rc::new(Ty::Dynamic),
+            // r28/48-b 效应臂收敛（plan §5b——与 typecheck.rs 同口径的
+            // 子表达式遍历；PoC 域内违例检出）：Perform 效应值 / Handle
+            // 体与 handler 体进推断（R1-R8 消息面复用 + 约束集检查）；
+            // 结果类型维持 Dynamic（effect-language-design 风险表「与
+            // HM 推断的效应行交互 = P3/Stage 3」——不收紧、不误报）
+            CoreExpr::Perform { effect, .. } => {
+                self.infer_expr(effect, depth + 1);
+                Rc::new(Ty::Dynamic)
+            }
+            // Handle 绑定器装订（与 infer_let save/restore 同型——纪律
+            // 镜像）：payload = dispatch 注入的动态值 → Dynamic；resume =
+            // continuation 调用形态（D4 展开期脱糖为 App——App 头
+            // Dynamic 保守零诊断，A4 纪律同源）→ Dynamic
+            CoreExpr::Handle {
+                payload_var,
+                resume_var,
+                handler_body,
+                body,
+                ..
+            } => {
+                let mut saved: Vec<(Symbol, Option<Binding>)> = Vec::with_capacity(2);
+                for p in [payload_var, resume_var] {
+                    saved.push((*p, self.env.insert(*p, Binding::Mono(Rc::new(Ty::Dynamic)))));
+                }
+                self.infer_expr(handler_body, depth + 1);
+                self.infer_expr(body, depth + 1);
+                for (p, old) in saved {
+                    match old {
+                        Some(b) => {
+                            self.env.insert(p, b);
+                        }
+                        None => {
+                            self.env.remove(&p);
+                        }
+                    }
+                }
+                Rc::new(Ty::Dynamic)
+            }
         }
     }
 

@@ -254,3 +254,135 @@ fn gc_continuation_boxed_survives_alloc_pressure() {
         42,
     );
 }
+
+// ---------------------------------------------------------------------------
+// 48-b（r28/49-a）：效应静态收敛——typecheck.rs/hm.rs 子表达式遍历
+//
+// 深审 D3/D8「Unknown 放宽面」覆盖缺口闭环：Perform 效应值 / Handle
+// 体与 handler 体入 R1-R8 与约束集检出域（结果类型维持 Unknown/Dynamic
+// ——行多态属 Stage 3 边界如实）；绑定器 payload/resume 装订动态值
+// （零误报保守契约维持）。
+// ---------------------------------------------------------------------------
+
+use kerf_compiler::check_program;
+use kerf_compiler::hm::hm_check_program;
+use kerf_driver::builtins::builtin_sigs;
+use kerf_driver::compile_source;
+
+/// 保守检查面（R1-R8 生产面——typecheck.rs 经 check_program）。
+fn tc_msgs(src: &str) -> Vec<String> {
+    let out =
+        compile_source(src, "<effect-static>").unwrap_or_else(|e| panic!("前端编译失败：{}", e));
+    let mut table = out.table;
+    let sigs = builtin_sigs(&mut table);
+    check_program(&out.core, &sigs, &table)
+        .into_iter()
+        .map(|d| d.message)
+        .collect()
+}
+
+/// HM PoC 面（hm.rs——r18 离线入口同源）。
+fn hm_msgs(src: &str) -> Vec<String> {
+    let out =
+        compile_source(src, "<effect-static-hm>").unwrap_or_else(|e| panic!("前端编译失败：{}", e));
+    let mut table = out.table;
+    let sigs = builtin_sigs(&mut table);
+    hm_check_program(&out.core, &sigs, &table)
+        .diags
+        .into_iter()
+        .map(|d| d.message)
+        .collect()
+}
+
+/// 双面同检（超集纪律——r18 门 A 口径延续：tc 面报 → hm 面亦报）。
+fn both_detect(src: &str, needle: &str) {
+    let tc = tc_msgs(src);
+    assert!(
+        tc.iter().any(|m| m.contains(needle)),
+        "tc 面未检出「{}」；实际 {:?}\n程序：{}",
+        needle,
+        tc,
+        src
+    );
+    let hm = hm_msgs(src);
+    assert!(
+        hm.iter().any(|m| m.contains(needle)),
+        "hm 面未检出「{}」；实际 {:?}\n程序：{}",
+        needle,
+        hm,
+        src
+    );
+}
+
+/// Perform 效应值静态违例（R2/R1——效应值表达式入检出域）。
+#[test]
+fn static_perform_effect_value_violations() {
+    both_detect("(perform (+ 1 \"a\"))", "需要数值");
+    both_detect("(perform (if \"x\" 1 2))", "if 条件需要 bool");
+}
+
+/// Handle handler 体静态违例（R5——子句体入检出域）。
+#[test]
+fn static_handler_body_violations() {
+    both_detect("(handle t ((p k) (car 42)) 1)", "car 需要 pair");
+    both_detect("(handle t ((p k) (cdr \"s\")) 1)", "cdr 需要 pair");
+}
+
+/// Handle 体静态违例（R1——被保护计算入检出域）+ 双体多错误收集。
+#[test]
+fn static_handle_body_violations() {
+    both_detect("(handle t ((p k) k) (if 1 2 3))", "if 条件需要 bool");
+    // handler 体（R2）+ handle 体（R1）各一处 → 双面多错误收集
+    let src = "(handle t ((p k) (+ \"b\" 2)) (if 1 2 3))";
+    let tc = tc_msgs(src);
+    assert!(
+        tc.iter().any(|m| m.contains("需要数值"))
+            && tc.iter().any(|m| m.contains("if 条件需要 bool")),
+        "tc 面期望双违例收集，实际 {:?}",
+        tc
+    );
+    let hm = hm_msgs(src);
+    assert!(hm.len() >= 2, "hm 面期望 ≥2 诊断，实际 {:?}", hm);
+}
+
+/// 零误报对照（保守契约维持——r25 六正例 + 绑定器动态用点 + M5 语料）。
+#[test]
+fn static_effect_zero_false_positive() {
+    let corpus = [
+        // 设计 §5 六正例（r25 同源语料——静态面零诊断）
+        "(handle add ((p k) (resume k (+ p 10))) (+ 1 (perform (cons 'add 5))))",
+        "(handle outer ((p k) (resume k p)) (handle inner ((q j) 42) (perform (cons 'outer 7))))",
+        "(handle t ((p k) 0) (+ 40 2))",
+        "(define (f) (define x 1) (+ (handle t ((p k) (resume k 0)) (begin (set! x 100) (perform (cons 't 0)) x)) x)) (f)",
+        "(define n 0) (define (bump) (begin (set! n (+ n 1)) n)) (handle t ((p k) (resume k (+ p n))) (+ 0 (perform (cons 't (bump)))))",
+        "(define (spin n) (if (= n 0) (perform (cons 's 99)) (spin (- n 1)))) (handle s ((p k) (resume k (+ p 1))) (spin 100000))",
+        // 绑定器动态用点（payload Unknown/Dynamic 的算术与点对——零误报）
+        "(handle t ((p k) (resume k (cons (car p) (cdr p)))) (perform (cons 't 1)))",
+        "(handle t ((p k) (+ p 0)) (perform (cons 't 1)))",
+    ];
+    for (i, src) in corpus.iter().enumerate() {
+        let tc = tc_msgs(src);
+        assert!(
+            tc.is_empty(),
+            "tc 面误报（case {}）：{:?}\n程序：{}",
+            i,
+            tc,
+            src
+        );
+        let hm = hm_msgs(src);
+        assert!(
+            hm.is_empty(),
+            "hm 面误报（case {}）：{:?}\n程序：{}",
+            i,
+            hm,
+            src
+        );
+    }
+    // M5 效应语料（effect_stress.krf——深层递归 + 绑定器动态用点）
+    let stress = std::fs::read_to_string("examples/usage/effect_stress.krf")
+        .expect("读取 effect_stress.krf 失败");
+    let tc = tc_msgs(&stress);
+    assert!(tc.is_empty(), "tc 面对 effect_stress 误报：{:?}", tc);
+    let hm = hm_msgs(&stress);
+    assert!(hm.is_empty(), "hm 面对 effect_stress 误报：{:?}", hm);
+}

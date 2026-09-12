@@ -349,12 +349,38 @@ impl<'a> TypeCtxt<'a> {
             // r8 能力声明：权限验证归 driver R9（E0006 家族），静态类型
             // 检查（E0005 家族）不涉——零运行时语义无类型约束
             CoreExpr::Require { .. } => TcType::Unknown,
-            // r25/42-f 效应面（保守 R1-R8 纪律与 Require 同型入口）：
-            // Perform 值 = resume 注入的任意值（类型不可静态收窄）→
-            // Unknown；Handle 值 = 体与 handler 体汇合的动态结果 →
-            // Unknown（effect-language-design：效应行/行多态属 Stage 3
-            // 类型层——静态面不收紧）
-            CoreExpr::Perform { .. } | CoreExpr::Handle { .. } => TcType::Unknown,
+            // r28/48-b 效应臂收敛（plan §5b——补深审 D3/D8「Unknown 放宽
+            // 面」覆盖缺口）：Perform 效应值 / Handle 体与 handler 体受
+            // R1-R8 检查（子表达式遍历）；结果类型维持 Unknown——Perform
+            // 值 = resume 注入的任意值、Handle 值 = 体/handler 体汇合的
+            // 动态结果（effect-language-design：效应行/行多态属 Stage 3
+            // 类型层——静态面不收紧裁定维持）
+            CoreExpr::Perform { effect, .. } => {
+                self.check_expr(effect, depth + 1, diags);
+                TcType::Unknown
+            }
+            // Handle 绑定器装订（与 Lambda 臂 save/restore 同型——遮蔽
+            // 纪律镜像）：payload = dispatch 注入的动态值 → Unknown；
+            // resume = continuation 调用形态（D4 展开期脱糖为 App——
+            // 值位置调用保守零断言）→ Unknown
+            CoreExpr::Handle {
+                payload_var,
+                resume_var,
+                handler_body,
+                body,
+                ..
+            } => {
+                let saved: Vec<(Symbol, Option<TcType>)> = [payload_var, resume_var]
+                    .into_iter()
+                    .map(|p| (*p, self.env.insert(*p, TcType::Unknown)))
+                    .collect();
+                self.check_expr(handler_body, depth + 1, diags);
+                self.check_expr(body, depth + 1, diags);
+                for (sym, old) in saved {
+                    restore(&mut self.env, sym, old);
+                }
+                TcType::Unknown
+            }
         }
     }
 

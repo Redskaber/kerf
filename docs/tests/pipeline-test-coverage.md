@@ -1,8 +1,8 @@
 # 流水线路径覆盖（sop.md §9.5.1 三层覆盖记录 + §14.6.1.1 完整性审查）
 
 > **Author**: Super Z（QA-A 角色）
-> **Date**: 2026-09-11（r26 对账：706 基线（批次 I 收口——门审环零 cargo 计数增量 + 滞后两轮补账 r24 +14 / r25 +22 + 新审计集第 3 件 stage2_gate_audit_r1 53 case）；r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
-> **Version**: v0.4.0-r26
+> **Date**: 2026-09-11（**r28 对账：710 基线（批次 J 执行启动——48-b J1 效应 typecheck 收敛 +4：effect_tests 17→21 静态收敛组双面检出；含 R4 修正：Tier 2 头计数 463→503——r23-r25 累计增量（+2/+14/+20）与 r26 补账声称的 499 口径均未落面，本轮回写实测值并注记）**；r26 对账：706 基线（批次 I 收口——门审环零 cargo 计数增量 + 滞后两轮补账 r24 +14 / r25 +22 + 新审计集第 3 件 stage2_gate_audit_r1 53 case）；r18 对账：634 基线（批次 H +29——TCO 12 + HM PoC 15 + Probe 拆分 2）+ Stage 2 两套件行 + 双门注记；r16 全量重写——批次 F 深审 D8 载体更新：Stage 0 r3 版停在 294 口径，本轮对账至 553 + Stage 1 套件 + parity 印证节 + 性能基线同步节；r3 版：负测扩张后全文重写）
+> **Version**: v0.4.0-r28
 > **Status**: Active（**r26 对账（滞后两轮补账——深审 D7/W1 项）：706 基线**——①r24 增量（+14 集成：stdlib_tests 17→24（字符串全序 12/负 3 + 装箱往返正 10/负 2 + 谓词 17/环安全 2/负 3）+ gc_tests 6→9（TD-023 GcCell 写路径）+ prelude_tests 7→10（foldr）+ scope_set_tests 9→10（TD-018 双路径同文对拍））；②r25 增量（+20 集成：**effect_tests 17 新建**（设计锚正 6 + M3 双路径 8 + eval 域 3 + 负例 7 + GC 存活 2）+ bootstrap_compiler_tests 29→32（门 A 效应组 3）+ 单元 +2（capability M2 两锚））；③**r26 门审环（零 cargo 计数增量）**：stage2_gate_audit_r1 新审计集 53 case（examples/audit/ 可重运行口径）EXIT 0 + hm.rs 2 处 catch-all 注释补齐（§4 小节同步）+ 深审报告 deep-review-round1.md（D1-D8 + 偏差清单 + 五角色全票 GO）；r23 对账：670 基线（批次 I 执行 42-d +5——bootstrap_compiler_tests 27→29：门 B fixpoint（B₁/B₂ 四程序 bytecode_equal + SHA-256——§21.3 条件 2 终验）+ B₁ 产物可执行面；单元 +3：driver 64→67 生产编译守护 + 缓存 CompilerKind 分桶 ×2（B11/P4）；T1 双路径面全量迁移（eval → 种子链对拍——十测试文件 + common + 双审计集；表体 driver 单元行 58→67 实测修正）；r22 对账：665 基线（批次 I 执行 42-c +8）；r21 对账：657 基线（42-b +19）；r20 对账：638 零增量（设计轮）；r19 对账：638（+4 Probe））
 
 ## 1. 测试目标
@@ -27,7 +27,7 @@
 | T1-vm | kerf-vm 单测 | 执行 | 帧协议/错误形状/**Value 十变体** | ✅ 18/18 |
 | T1-driver | kerf-driver 单测 | 管线编排/能力/效应/缓存/自举桥 | 全管线/**52 内置注册**/预留冻结（Probe——**r19 增 capability_model 骨架 + 族归属证明**）/effects 12/capability 13/**生产切换守护（活性探针 + 代次双信号）** | ✅ **64/64**（r8 +25 / r12 +8 Probe / r15 +1 切换守护 / r18 +2 拆分 / r19 +4 模型骨架） |
 
-### Tier 2 —— 阶段间（集成测试，463 函数，tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16；r18 +27：tco_tests 12 + hm_inference_tests 15；r19 零变更（骨架冻结零集成接触）；r21 +19：bootstrap_compiler_tests 门 A 基础组 parity（I1 前段自举 Compiler——三件套第三实例：bytecode_equal 全结构判据 + 行为面端到端）；**r22 +8：42-c 扩展组（module/require 两臂 + 糖九件全管线 + 宏 + prelude 注入序 + examples 六件双路径——边界负例改写正例）**）
+### Tier 2 —— 阶段间（集成测试，503 函数（**r28 R4 修正**：r26 补账声称「463→499」未落面——本行实际停在 r22 末 463；本轮回写实测 503 = 463 + r23 +2 + r24 +14 + r25 +20 + r28 +4，深审 D8 路径行同步补齐），tests/runner.rs 单一总入口 mod 树——r17 +40：qbe_backend_tests 24 + multi_error_recovery_tests 16；r18 +27：tco_tests 12 + hm_inference_tests 15；r19 零变更（骨架冻结零集成接触）；r21 +19：bootstrap_compiler_tests 门 A 基础组 parity（I1 前段自举 Compiler——三件套第三实例：bytecode_equal 全结构判据 + 行为面端到端）；**r22 +8：42-c 扩展组（module/require 两臂 + 糖九件全管线 + 宏 + prelude 注入序 + examples 六件双路径——边界负例改写正例）**；r23 +2 / r24 +14 / r25 +20（效应面新建 + 门 A 效应组）；**r28 +4：48-b 效应静态收敛组（typecheck.rs/hm.rs Perform/Handle 子表达式遍历——双面检出 + 零误报对照）**）
 
 | ID | 名称 | 覆盖阶段 | 预期输出 | 状态 |
 |----|------|---------|---------|------|
@@ -62,7 +62,7 @@
 | Stage 2 批次 I（r22 扩展组） | bootstrap_compiler_tests 同文件 | **门 A 扩展组 46 case**：module/require 两臂正例（多项 Pop + 空体 + 尾位非继承 + 确定性双跑）/ 糖九件全管线（let 家族 8 + cond/when/unless 9 + and/or/while 10）/ 宏 3（swap!/my-or/def-twice）/ prelude 注入序 2（preamble.krf 真实语料）/ **examples 全六件双路径 bytecode_equal** + 行为面 2（糖九件 + module 臂——VM 执行 = 生产管线） | r22 | ✅ 27/27（19→27 合计） |
 | Stage 2 批次 I（r23 收口组） | bootstrap_compiler_tests 同文件 | **门 B fixpoint（§21.3 条件 2 终验）**：B₁/B₂ 四程序 bytecode_equal + SHA-256 摘要 + B₁ 产物可执行面（install 后自举链运转 = 种子链结果） | r23 | ✅ 29/29（27→29 合计） |
 | Stage 2 批次 I（r25 效应组） | bootstrap_compiler_tests 同文件 | **门 A 效应组 3 case**：perform/handle 基础 parity + trampoline 共享/捕获面 parity + resume 往返行为面 | r25 | ✅ 32/32（29→32 合计） |
-| Stage 2 批次 I（r25 效应面） | **effect_tests（tests/v0/stage2/plan/，新建）** | **效应语言面验收 17 函数**：设计锚正 6（单 handler 单恢复/嵌套逃逸/纯体零效应/恢复后环境一致性/效应值先求值序/TCO 10 万深穿透 handler 帧）+ M3 双路径 8 + eval 域 dispatch 一致 3 + 负例 7（E0007/E0008 含首恢位置/E0009/非 continuation 值/handler 形态×2/perform 非点对/非符号 tag）+ GC 存活 2（M5 第六来源——5 万分配压力 + 装箱解箱） | r25 | ✅ 17/17 |
+| Stage 2 批次 I（r25 效应面）+ 批次 J（r28 静态收敛） | **effect_tests（tests/v0/stage2/plan/，新建）** | **效应语言面验收 21 函数（r25 17 + r28 +4）**：设计锚正 6（单 handler 单恢复/嵌套逃逸/纯体零效应/恢复后环境一致性/效应值先求值序/TCO 10 万深穿透 handler 帧）+ M3 双路径 8 + eval 域 dispatch 一致 3 + 负例 7（E0007/E0008 含首恢位置/E0009/非 continuation 值/handler 形态×2/perform 非点对/非符号 tag）+ GC 存活 2（M5 第六来源——5 万分配压力 + 装箱解箱）+ **r28 静态收敛组 4（48-b——typecheck.rs/hm.rs Perform/Handle 臂子表达式遍历）：Perform 效应值违例 2（R2 算术混串 + R1 if 非真值）+ handler 体违例 2（R5 car/cdr 非 pair）+ handle 体违例与双体多错误收集 1（R1 + Span 序合并）+ 零误报对照 1（六正例 + 绑定器动态用点 2 + effect_stress.krf 语料——双面（check_program + hm_check_program）超集纪律）** | r25 / r28 | ✅ 21/21 |
 
 ### Tier 3 —— 全流程（阶段门审计 + parity 双实现印证）
 
