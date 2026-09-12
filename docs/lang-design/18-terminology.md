@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-14（**v6.4：r34 / 55-a 设计缺陷深度审计收敛轮——§5c 增补术语 13 条**（三轴坐标系/双轴归属/授权组合闭包/编译期权威三判据/诊断终止域/横切泛函域/演进六窗/时间治理四红线/变更通道矩阵/受控债务四步/生命周期四阶段/十二审计轴/判据先于先例）+ **§6 批次 M 码位预登记**（E0013-E0019 预留段——F9 前置兑现）；2026-09-13（**v6.3：r33 / 54-a 能力架构深度设计轮——§5b 增补术语 14 条**（「能力」三义/能力四要素/L0-L3 四层/正交判据 J1-J4/授权三态/六类迁移性质/新原语准入两判据/五层命名层级 N0-N4/解析优先序/遮蔽许可表/import 不传播授权/kerf 保留域/原则 34）+ §5a 对齐术语精确化（v1.1 口径）；v6.2：r32——§6 增补术语 6 条（is- 前缀谓词/方向词转换/命名空间限定名/别名层/能力-命名空间对齐/表面债）；v6.0：next3 讨论六术语增补；v5.5：next2 讨论八术语增补；v5.0：源自 stage0.md v5.0 拆分）
-> **Version**: v6.5
+> **Version**: v6.6（**r41 / 62-a E0020 码位落位登记**——§6 增保留字绑定禁令行；v6.5：r40）
 > **Status**: Active
 
 > 本文件收录 stage0.md 附录 A（关键术语表，42 条术语——与源文档逐条一致）与附录 D（术语源流考详细版：五大核心能力的命名起源、理论根基与历史演化路径）。附录 D 是对正文 [14-替代设计 §2（术语起源与历史脉络）](./14-design-alternatives.md) 的深化补充；参考文献与外部链接见 [19-参考文献](./19-references.md)。术语表中括注的文档引用已改写为指向本目录对应设计文件。
@@ -332,6 +332,7 @@ Landin 借用这个概念：**函数加上其捕获的环境，形成了一个"�
 | **E0010** | **FFI 令牌失效后使用**（双释/用后传递/用后使用——消费全局生效后的吸收态） | **r30/48-d 落位** | ffi-ownership-model §5；messages.rs `err_ffi_token_invalid`（单源——VM free_external/call_external 令牌校验） |
 | **E0011** | **FFI 所有权/类型违规**（释放 Opaque 令牌/非令牌值/实参形状不匹配/零尺寸纵深防御） | **r30/48-d 落位** | 同上 §2/§6-case4；`err_ffi_ownership`（VM 编组与 free 判定序） |
 | **E0012** | **FFI 符号解析失败**（extern 符号表未登记——fail-closed；QBE AOT 链接期解析在 VM 路径的调用期对应物） | **r30/48-d 落位** | 同上 §4；`err_ffi_symbol_resolution`（VM CallExternal 符号解析 + 空表默认入口） |
+| **E0020** | **保留字绑定禁令（r41 / 62-a 语言形式深审轮——D10 裁定）**：N4 关键字 25 名全域禁作绑定名（define/set!/lambda 参数/let 系/define-syntax 宏名/module 名/import as 别名/handle 双绑定器）——22 §2.1 N4 不变量「不是值、不可引用、不可遮蔽」的编译期执行；Stx 源码面 + CoreExpr 展开产物面双层；syntax-rules 模板数据域跳过；quote 位数据符号豁免 | **已落地（r41——Compile 族，driver front 管线验证**：`verify_reserved_bindings_stx`[expand 前拦截] + `verify_reserved_bindings_core`[展开产物防御纵深]；12 case 锚定 namespace_tests d10 组；837:0:0 净 +12 | [22 §11 D10](./22-namespace-design.md) 深审轮二裁定 + [22 §2.1](./22-namespace-design.md) N4 行三件套执行注记 |
 | **E0013-E0019** | **命名空间族（批次 M 预留段）**：import 冲突（两模块同名导出）/限定名不导出（`string/nonexist`）/保留域违例（`kerf-` 前缀用户占用）/重复定义（module 体内同名 define）/别名重复/require 位置违例/未知导入模块 + **W 弃用警告族**（独立值域 1000+——M2 D6 裁定） | **全段落位（r39 M1 + r40 M2——七码全实施**：E0013 import 冲突/E0014 不导出/E0015 保留域/E0016 module 内重复 define/E0017 别名重复/E0018 require 位置[深审 D3]/E0019 未知导入[深审 D2]——driver front 管线验证族，stage 统一 Compile；W1001 弃用族 27 件 + W1002 遮蔽族——`[W1001]` 渲染前缀[severity=Warning 联合判定] + stderr 非阻断通道 + preamble 结构性豁免） | [22 §8 实施对账表](./22-namespace-design.md) 各 case 的码位需求面 + [22 §10 D1-D9](./22-namespace-design.md) 深审裁定；「先查本表占位」纪律兑现（r34 预登记 → r39/r40 逐码落位回填） |
 
 **登记纪律**：新码位 = 先查本表占位 → 模型层单源构造（TD-018）→ 回填本表 + 对应族文档锚。禁止未登记静默占位。

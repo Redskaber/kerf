@@ -251,6 +251,8 @@ Esterel 的"代码即数据"：
 
 **最诚实的建议**：如果你追求"工程上最短路径"，S 表达式仍然是首选；如果你追求"理论上的探索"，以上替代方案都值得研究；如果你追求"传统语法 + 强元编程"，Rust 的 proc-macro 模式是最成熟的参考。
 
+**r41 前沿更新（Rhombus v1.0——2026-06-22 正式发布）**：「传统语法 + 宏可扩展」的 Lisp 家族正式答案已落地——shrubbery 缩进记法（Python 型）+ enforestation（解析与宏展开交错——Honu 溯源）+ **bicameral syntax 两院制**（S 表达式层与 conventional 层并存——rhombus-expression 形态可包装 shrubbery 组）。对 kerf 的三重启示：①「conventional + 宏」可行已实证，但代价 = 解析器复杂度 ×10（[02 §8](./02-syntax-model.md)：Reader 300 行 vs 3000 行）；②**两院制与 kerf 多语法窗同构**（表面/内部分离——原则 31：S 表达式主表面 + 未来 conventional 皮肤共存，双 Reader 同核验证承载）；③Rhombus 关键字保留字严格化（conventional 语言无关键字遮蔽双轨）与 kerf E0020 严格保留字（[22 §11 D10](./22-namespace-design.md)）跨家族同向——「关键字不是值、不可遮蔽」是 2026 跨范式共识。
+
 ### 1.5 相关链接与拓展阅读（原 §4.5）
 
 - **同像性定义讨论**：http://joelkuiper.eu/homoiconicity （Joel Kuiper 对同像性的系统分析）

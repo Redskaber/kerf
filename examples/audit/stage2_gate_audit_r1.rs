@@ -709,8 +709,7 @@ fn run_negative(c: &Case, stage: Stage, msg: &str, code: Option<u32>) -> CaseRes
     // M2（r40）命名空间族专码（E0013-E0019）合法于 Compile stage
     // （基码 E0003 的族成员——门审机械校验扩展）
     let code_ok = err.diagnostic.code == Some(want_code)
-        || (stage == Stage::Compile
-            && matches!(err.diagnostic.code.map(|k| k.0), Some(13..=19)));
+        || (stage == Stage::Compile && matches!(err.diagnostic.code.map(|k| k.0), Some(13..=19)));
     if !code_ok {
         return fail(format!(
             "E 码不匹配：期望 E{:04} 实际 {:?}",

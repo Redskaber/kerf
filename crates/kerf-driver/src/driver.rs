@@ -20,7 +20,7 @@ use kerf_expander::{expand_program, phase::ModuleRegistry, ExpandCtxt, ExpandErr
 use kerf_reader::{read_source, ReadError, TokenKind};
 use kerf_runtime::Heap;
 use kerf_span::{render_diagnostic, Diagnostic, DiagnosticCode, FileId, Severity, SourceMap, Span};
-use kerf_syntax::{Stx, Symbol, SymbolTable};
+use kerf_syntax::{Keyword, Stx, Symbol, SymbolTable};
 use kerf_vm::{run_program, Value, VmError};
 
 use crate::builtins::{builtin_sigs, register_globals, resolve_hygiene_fallbacks, STDLIB_MODULES};
@@ -288,6 +288,269 @@ const DEPRECATED_NAME_CODE: DiagnosticCode = DiagnosticCode(1001);
 /// W1002：N3 遮蔽 N2 注入名警告（22 §3.2 R-N2 第二行——可恢复但
 /// 值得提示）。
 const SHADOW_IMPORT_CODE: DiagnosticCode = DiagnosticCode(1002);
+
+// ---------------------------------------------------------------------------
+// r41 / 62-a 语言形式深审轮——D10 裁定落地：E0020 保留字绑定禁令
+//（22 §2.1 N4 层不变量「不是值、不可引用、不可遮蔽」的编译期执行）
+// ---------------------------------------------------------------------------
+
+/// E0020：N4 保留字不可绑定（25 关键字全域禁作绑定名——深审 D10：
+/// 修复前 `(define if 5)` 合法且值位可读（N4 不变量被违反），操作位
+/// 恒关键字形式——**用户绑定静默失效** = 「显式失败优于静默遮蔽」的
+/// 反面形态（kerf-prelude/E0014/E0006 同族先例全反）。裁定 = 严格
+/// 保留字（2026 跨范式共识：Rust/Swift 关键字全域禁作标识符 +
+/// Rhombus v1.0 conventional syntax 同型）——绑定面（define/set!/
+/// lambda 参数/let 系/define-syntax 宏名/module 名/import as 别名/
+/// handle 双绑定器）编译期显式拒绝；quote 位 `'if` 数据符号不受
+/// 影响（同像性维持——N0 符号宇宙层非 N4 语法层）。
+const RESERVED_BINDING_CODE: DiagnosticCode = DiagnosticCode(20);
+
+/// 保留字判定（单源 = kerf-syntax `Keyword::from_name` 25 名查表——
+/// 与 Reader/expander 消费同一表，零名单漂移面）。
+fn is_reserved_word(name: &str) -> bool {
+    Keyword::from_name(name).is_some()
+}
+
+/// E0020 诊断构造（Stx/CoreExpr 两层共用文案——D10 裁定依据随诊断
+/// 携带：22 §2.1 不变量 + 静默失效陷阱说明）。
+fn reserved_binding_diag(name: &str, span: Span, kind: &str) -> Diagnostic {
+    Diagnostic::error(
+        Some(RESERVED_BINDING_CODE),
+        format!(
+            "保留字不可绑定：「{}」是 N4 关键字（{}）——关键字不是值、不可引用、不可遮蔽（22 §2.1）；\
+             同名绑定在操作位将被关键字形式静默覆盖，故编译期显式拒绝（E0020，深审 D10）",
+            name, kind
+        ),
+        span,
+    )
+}
+
+/// Stx 层保留字绑定检查（**源码面**——expand 前拦截，覆盖全部绑定
+/// 形式 + define-syntax 宏名[展开后无 CoreExpr 承载] + import as
+/// 别名[别名归一在 rewrite 消费]；递归穿透 begin/module 体/嵌套
+/// lambda/let 等全部子树）。
+#[allow(clippy::result_large_err)]
+fn verify_reserved_bindings_stx(
+    forms: &[Stx],
+    table: &SymbolTable,
+    sm: &SourceMap,
+) -> Result<(), DriverError> {
+    for f in forms {
+        if let Some(diag) = reserved_stx_diag(f, table) {
+            return Err(face_err(diag, sm));
+        }
+    }
+    Ok(())
+}
+
+/// Stx 单节点绑定面检查（列表头分派 + 子树递归；非列表原子无绑定面）。
+fn reserved_stx_diag(f: &Stx, table: &SymbolTable) -> Option<Diagnostic> {
+    let items = match f.datum.as_list() {
+        Some(l) if !l.is_empty() => l,
+        // _ 臂理由：原子/空列表无绑定形式
+        _ => return None,
+    };
+    let head = match items[0].datum.as_symbol() {
+        Some(s) => table.name(s),
+        None => "",
+    };
+    // 单名绑定族：define / set! / define-syntax / module
+    match head {
+        "define" | "set!" | "module" => {
+            if items.len() >= 2 {
+                if let Some(n) = items[1].datum.as_symbol() {
+                    let name = table.name(n);
+                    if is_reserved_word(name) {
+                        let kind = match head {
+                            "module" => "模块名",
+                            "set!" => "赋值目标",
+                            _ => "绑定名",
+                        };
+                        return Some(reserved_binding_diag(name, items[1].span, kind));
+                    }
+                }
+            }
+        }
+        // define-syntax：只查宏名（items[1]）——**模板子树是数据域**
+        //（syntax-rules 的模式/模板是宏的字面量数据非程序绑定——Stx
+        // 结构游走不区分模板/代码，递归进入会误报[模板里合法出现
+        // `(define quote …)` 形态字面量]；真正实例化的展开产物由
+        // CoreExpr 层 E0020 拦截——防御纵深两层各管其域）
+        "define-syntax" => {
+            if items.len() >= 2 {
+                if let Some(n) = items[1].datum.as_symbol() {
+                    let name = table.name(n);
+                    if is_reserved_word(name) {
+                        return Some(reserved_binding_diag(name, items[1].span, "宏名"));
+                    }
+                }
+            }
+            return None;
+        }
+        // lambda 参数表（各参数名均为绑定器）
+        "lambda" => {
+            if items.len() >= 2 {
+                if let Some(params) = items[1].datum.as_list() {
+                    for p in params {
+                        if let Some(n) = p.datum.as_symbol() {
+                            let name = table.name(n);
+                            if is_reserved_word(name) {
+                                return Some(reserved_binding_diag(name, p.span, "lambda 参数"));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // let 系绑定对（对首为绑定名）
+        "let" | "letrec" | "let*" => {
+            if items.len() >= 2 {
+                if let Some(bindings) = items[1].datum.as_list() {
+                    for b in bindings {
+                        if let Some(pair) = b.datum.as_list() {
+                            if !pair.is_empty() {
+                                if let Some(n) = pair[0].datum.as_symbol() {
+                                    let name = table.name(n);
+                                    if is_reserved_word(name) {
+                                        return Some(reserved_binding_diag(
+                                            name,
+                                            pair[0].span,
+                                            "let 绑定名",
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // import as 别名（contextual 标记后的符号是局部绑定——
+        // 22 §3.5 R-N5；别名归一在 rewrite_alias_refs 消费，无 CoreExpr
+        // 承载，故 Stx 层拦截）
+        "import" => {
+            let mut i = 1;
+            while i < items.len() {
+                if let Some(s) = items[i].datum.as_symbol() {
+                    if table.name(s) == "as" && i + 1 < items.len() {
+                        if let Some(a) = items[i + 1].datum.as_symbol() {
+                            let name = table.name(a);
+                            if is_reserved_word(name) {
+                                return Some(reserved_binding_diag(
+                                    name,
+                                    items[i + 1].span,
+                                    "import 别名",
+                                ));
+                            }
+                        }
+                    }
+                }
+                i += 1;
+            }
+        }
+        _ => {}
+    }
+    // 子树递归（begin 体 / module 体 / lambda 体 / let 体 / if 分支 /
+    // 被绑值子树等——全部穿透）
+    for item in items {
+        if let Some(d) = reserved_stx_diag(item, table) {
+            return Some(d);
+        }
+    }
+    None
+}
+
+/// CoreExpr 层保留字绑定检查（**宏展开产物面**——源码层 Stx 检查的
+/// 防御纵深：宏模板生成的绑定名同样过 E0020；let 系脱糖为 Lambda+
+/// App 后绑定名收敛于 Lambda.params；handle 双绑定器在展开产物
+/// 结构化承载）。
+#[allow(clippy::result_large_err)]
+fn verify_reserved_bindings_core(
+    core: &[Rc<CoreExpr>],
+    table: &SymbolTable,
+    sm: &SourceMap,
+) -> Result<(), DriverError> {
+    for e in core {
+        if let Some(diag) = reserved_core_diag(e, table) {
+            return Err(face_err(diag, sm));
+        }
+    }
+    Ok(())
+}
+
+/// CoreExpr 单节点绑定面检查（Define/Lambda/SetBang/Module/Handle
+/// 五绑定器变体 + 全子树递归）。
+fn reserved_core_diag(e: &CoreExpr, table: &SymbolTable) -> Option<Diagnostic> {
+    match e {
+        CoreExpr::Define { name, span, .. } => {
+            let n = table.name(*name);
+            if is_reserved_word(n) {
+                return Some(reserved_binding_diag(n, *span, "绑定名（展开产物）"));
+            }
+            None
+        }
+        CoreExpr::Lambda {
+            params, body, span, ..
+        } => {
+            for p in params {
+                let n = table.name(*p);
+                if is_reserved_word(n) {
+                    return Some(reserved_binding_diag(n, *span, "lambda 参数（展开产物）"));
+                }
+            }
+            reserved_core_diag(body, table)
+        }
+        CoreExpr::SetBang { name, span, .. } => {
+            let n = table.name(*name);
+            if is_reserved_word(n) {
+                return Some(reserved_binding_diag(n, *span, "赋值目标（展开产物）"));
+            }
+            None
+        }
+        CoreExpr::Module {
+            name, body, span, ..
+        } => {
+            let n = table.name(*name);
+            if is_reserved_word(n) {
+                return Some(reserved_binding_diag(n, *span, "模块名（展开产物）"));
+            }
+            body.iter().find_map(|i| reserved_core_diag(i, table))
+        }
+        CoreExpr::Handle {
+            payload_var,
+            resume_var,
+            handler_body,
+            body,
+            span,
+            ..
+        } => {
+            for (n, kind) in [
+                (table.name(*payload_var), "handle 载荷绑定"),
+                (table.name(*resume_var), "handle 恢复绑定"),
+            ] {
+                if is_reserved_word(n) {
+                    return Some(reserved_binding_diag(n, *span, kind));
+                }
+            }
+            reserved_core_diag(handler_body, table).or_else(|| reserved_core_diag(body, table))
+        }
+        CoreExpr::Begin { body, .. } => body.iter().find_map(|i| reserved_core_diag(i, table)),
+        CoreExpr::App { fn_expr, args, .. } => reserved_core_diag(fn_expr, table)
+            .or_else(|| args.iter().find_map(|a| reserved_core_diag(a, table))),
+        CoreExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => reserved_core_diag(cond, table)
+            .or_else(|| reserved_core_diag(then_branch, table))
+            .or_else(|| reserved_core_diag(else_branch, table)),
+        CoreExpr::Perform { effect, .. } => reserved_core_diag(effect, table),
+        // VarRef/Literal/Require 无绑定面（引用与声明非绑定——值位引用
+        // 保留字在绑定禁令生效后恒走未绑定路径，fail-closed 天然维持）
+        _ => None,
+    }
+}
 
 /// import 面收集结果（Stx 层——与 imports_prelude 同型头部区游走；
 /// 22 §3.5 R-N5 三形态：非限定导入/限定别名/隐式门控注入）。
@@ -1271,6 +1534,10 @@ fn front_from_forms(
     let face = collect_import_face(&forms, &table);
     let import_targets = collect_import_targets(&forms, &table);
 
+    // 1.65 r41 / 62-a 深审 D10：E0020 保留字绑定禁令（Stx 源码面——
+    // expand 前拦截；宏名/别名唯一承载层；run/check/compile 全路径）
+    verify_reserved_bindings_stx(&forms, &table, &sm)?;
+
     // 2. Expander：Stx → CoreExpr（visit = 变换器注册完成）
     let core = match expander {
         ExpanderKind::Bootstrap => {
@@ -1317,6 +1584,10 @@ fn front_from_core(
     file_id: FileId,
     compiler: CompilerKind,
 ) -> Result<FrontOutput, DriverError> {
+    // 2.45 r41 / 62-a 深审 D10：E0020 保留字绑定禁令（CoreExpr 展开
+    // 产物面——防御纵深：宏模板生成的绑定名同样过禁令；front 全路径）
+    verify_reserved_bindings_core(&core, &table, &sm)?;
+
     // 2.5 批次 M 次件 M2（r40）——组合闭包**先行**（21 §4.4：需求 ⊆
     // 授权——E0006 增强形态先于 R9 基础形态：模块需求违规先报[携带
     // 模块归属与上移指引]，纯程序级缺声明才走基础形态）+
@@ -1583,6 +1854,9 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
     // 1.6 M2 import 面收集（与 front_from_forms 同序）
     let face = collect_import_face(&forms, &table);
     let import_targets = collect_import_targets(&forms, &table);
+    // 1.65 r41 / 62-a 深审 D10：E0020 保留字绑定禁令（Stx 源码面——
+    // 与 front_from_forms 同序；恢复路径同样 fail-closed 拦截）
+    verify_reserved_bindings_stx(&forms, &table, &sm)?;
     // 2. 恢复展开（自举桥——逐形式；with_expander 加载失败仍致命 Err）
     let recovered = crate::bootstrap_expander::expand_program_recover(&forms, file_id, &mut table)
         .map_err(|e| DriverError::from_expand(&e, &sm))?;

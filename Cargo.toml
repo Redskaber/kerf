@@ -64,3 +64,9 @@ path = "examples/audit/stage2_gate_audit_r1.rs"
 [[example]]
 name = "stage2_gate_audit_r2"
 path = "examples/audit/stage2_gate_audit_r2.rs"
+
+# 批次 M 收口门审（r41 / 62-b M3——窗 M 出口条件审计：R-N1~N8 + B1-B3
+# + 组合闭包 + E2E 全导入路径三通道 + 深审 D10 修复边界）
+[[example]]
+name = "stage3_gate_audit_m3"
+path = "examples/audit/stage3_gate_audit_m3.rs"

@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-12（v6.1：K2/r36 大阶段末深审回写——§14.8 B2-3：Keyword 22 → 25 变体（r25 增 perform/handle/resume 三关键字）/ 叶级 45 → 48 种，实锚 symbol.rs:24-54；§8.1 B1-1：两语法同核验证改判（重规划至批次 L/M——20 §5 模块树，12 §2.10 表面现代化窗口承载）；2026-09-10（v6.0：新增 §8 表面语法决策与表面/内部语法分离——next3.md 第六/七轮吸收；v5.5：next2 讨论 S 表达式量化背书指针）
-> **Version**: v6.2（**r38 / 59-a 批次 L 面注记**：§8.1 B1-1 行 v0.5 面澄清——别名层无新 Reader 语法[全为既有词法形态的扁平符号]，v0.5 验证件 = 27 parity case[新旧名同行为同诊断]，双 Reader 同核验证全量面维持批次 M[v0.6 引入 `/` 限定名词法]承载；v6.1：K2/r36 深审回写）
+> **Version**: v6.3（**r41 / 62-a 语言形式深审注记**：§8 前缀形式通解性与括号布局的 2026 前沿对表完成——Rhombus v1.0[2026-06 发布]实证 conventional syntax + 宏可扩展可行[enforestation]但解析复杂度 ×10，kerf 维持 S 表达式主表面 + 多语法窗皮肤路线[原则 31——与 Rhombus bicameral 两院制同向]；词法语法语义二义性面全清[22 §11 D10-D18——六组潜在歧义源逐一显式裁定：/ 双语义/负数字面量/关键字双轨 E0020 修复/as contextual/else 字面匹配/宏遮蔽 W1003 排期]；v6.2：**r38 / 59-a 批次 L 面注记**：§8.1 B1-1 行 v0.5 面澄清——别名层无新 Reader 语法[全为既有词法形态的扁平符号]，v0.5 验证件 = 27 parity case[新旧名同行为同诊断]，双 Reader 同核验证全量面维持批次 M[v0.6 引入 `/` 限定名词法]承载；v6.1：K2/r36 深审回写）
 > **Status**: Active
 > **处理程度**：P0（必须实现——Stage 0 已落地，kerf-reader + kerf-span + kerf-syntax）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：查询式增量编译按 Span 细粒度失效（Stage 2，[15-架构分层 §3.1](./15-architecture-layers.md)）、编译缓存键与 Span 失效关系（接口预留，[13-能力矩阵 §3.1.4](./13-capability-matrix.md)）
 

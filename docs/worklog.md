@@ -4812,3 +4812,75 @@ Work Log:
 
 Stage Summary:
 - r39 web 面闭环（五件面齐 + E2E 双端全过 + lint 0）——**批次 M M1 全链交付闭环（60-a/60-z/60-web）：限定名可见面核心落地；下一步批次 M M2（import 注入面/别名 + B1-B3 契约 + W 弃用族 + 冲突三类 + 组合闭包——22 §8 驱动）→ M3 收口门审 → 移除轮（与 E5 同窗）**
+---
+Task ID: 61-a（r40 批次 M 次件 M2 深审轮——语言设计缺陷面六维度扫描 + 知识搜索；详录 flat 61-a）
+Agent: Super Z (main) — 深审（ARCH-A/REC-A；PHASE 1 定位声明 v2 一次通过——指针修正：用户摘要 42-c/43-a 为第 10-12 轮过期基线[r22 已交付]，R4 磁盘实况 = r39 闭环 @ 2e329a5/0a14c3e，真实指针批次 M M2）
+Task: docs/lang-design 六维度缺陷面（定位/权限/能力边界/职责边界/层级管理/演进时机）网状检索 + 四查询知识搜索实证 + D1-D9 裁定 + 修正回写
+
+Work Log:
+- 四查询实证（tool-results/r40-search/）：q1 langdev 导入语义类型学 + Goodwin「模块不只是命名空间」/ q2 HN「纯警告弃用在库生态失效」+ Kevin Cox 滚动弃用 + semver 弃用争议 / q3 WASI「无环境权威」+ Austral 能力安全 + 2026-01 ocap 令牌 / q4 Clojure refer 冲突抑制与 :exclude 逃逸阀
+- 六维度扫描：定位/层级/演进三面收敛良好（22 §2/§3/§7 体系完整）；**权限面 P1 实现缺口（D4）**：capability.rs `IoRequirements::from_core` 递归入 Module body——模块内 require 直接计入程序级授权 = 环境继承模式（恰是 21 §4.4 引 WASI 实证批判的反面形态）→ 依据 §8.4.5/R1 当场修复（顶层口径 + module_requirements + verify_capability_closure）；能力/职责/边界六处实施前未裁定细节缺位（D1/D2/D3/D5/D6/D8）+ 一处维持裁定（D9 零配置——q2 实证 + 原则 26）
+- 修正回写：22 v1.3（§10 深审裁定节 D1-D9 逐项依据列 + §8 M2 落地状态 + 头部 v1.3 增补 + 遵循条款 +R4/原则4）+ 20 §4 B3 行 R4 修正（底层 FS-4 已对齐——历史实测注记过期）+ 21 §4.4 组合闭包行落地与 D4 修复登记
+- 产出：tool-results/r40-search/ 四查询 JSON + 22 §10 节 + 修正三文档
+
+Stage Summary:
+- 深审轮闭环：六维度各 ≥1 实证检索；D4（P1）当场修复归零；D1-D3/D5-D8（P2 裁定缺位）随 61-b 落地；D9 有据维持——设计面无未清 P0/P1 缺位（22 §9 对账 owner 维持）
+---
+Task ID: 61-b（r40 批次 M 次件 M2 本体；详录 flat 61-b）
+Agent: Super Z (main) — M2 实施（DEV-A/QA-A/REC-A）
+Task: R-N5 import 注入面/别名 + R-N1/R-N2 全序 + 冲突三类 + 组合闭包 + B1-B3 契约 + W 弃用族 + E0013/E0016/E0017/E0018/E0019 + §3.2 + 审计 + CLI
+
+Work Log:
+- ①R-N5 import 三形态：`collect_import_face`（Stx 层前瞻 as 解析——**开发实录：初版 as 后回溯取 unqualified.last 导致别名形态误注入非限定名 → E0013 误报，前瞻解析从源头分立两形态**）+ `rewrite_alias_refs` 编译期归一（12 臂重建——`str/append`→`string/append`，HM 签名/编译/运行全链一致；共享 front_from_core 段 T1 parity 天然）+ registry stdlib 预 declare（七模块 visit 叶子；**开发实录：kerf-prelude 需排除——preamble 自带 declare 重复冲突**）+ expander 双镜像（core_forms.rs + expander.krf module-names as 跳过——**开发实录：自举语料无 cddr，`(cdr (cdr …))` 展开**）
+- ②组合闭包（21 §4.4）：`verify_capability_closure` E0006 增强形态（**开发实录：初版置于 R9 之后导致增强形态被基础形态先报——对调至 R9 前**）+ `module_requirements` 需求元数据 + D4 修复接线
+- ③B1/B2：限定名独立分派体（`string/index-of`/`list/member`/`list/assoc` miss→nil——BuiltinFn::call 包装；旧名/扁平名 parity 不动[r38 锚]）；B3 纯测试锚（R4：底层已严格 0 参）
+- ④W1001/W1002：**开发实录三则**——⑴BUILTIN_ALIASES 谓词反置（表 = (现代名,旧名)，初版 find 匹配第一元素）⑵preamble span file_id 豁免失效（自举桥展开后 Span 传递不可依赖 → 改 Module name == kerf-prelude 结构性豁免）⑶W1002 define 遮蔽被 E0004 内置接管检查先行（可观测主形态 = lambda 参数遮蔽）；三产物面 warnings（RunOutcome/CheckReport/CompileOutput）+ CLI stderr + main.rs 渲染
+- ⑤五码 E0013/E0016/E0017/E0018/E0019（stage 统一 Compile——front 管线验证族与 M1 先例对齐；**开发实录：初挂 Expand 与 expect_compile_err 断言冲突**）
+- ⑥存量语义演进修正七处（D4 行为锚反转：capability 单测断言反转 + architecture_audit require 上移；E0019 接管：negative_expander + prelude 断言；B1 断言 -1→nil；multi_error_recovery rendered 行数含 W；审计集 4 case E0019 语义演进 + stage_e_code 族扩展[E0013-E0019 合法于 Compile 基码 E0003 族]）
+- §3.2 六命令 clean 起步全绿（clean 2821 files/650.8MiB → build 14.08s 零告警 → check 0/0 → fmt 0 → clippy -D warnings 0 → **test 825:0:0**：集成 607 + 单元 218——806→825 净 +19）+ 四审计集 EXIT 0 ×4（41+50+53+46=190）+ CLI 四路径（fib 144/macros 42/check ok/负例 REAL_EXIT 1）+ import/别名/组合闭包/W 端到端实证；对账八面（matrix v0.1.0-r40 + RELEASE v0.7.0-r40 节 + pipeline r40[Tier 2 头 588→607] + 22 v1.3/18 v6.5/20 v1.5/21 §4.4/12 v6.12/v0.5-roadmap v0.4.0/23 v1.3/09 v6.9 + TD 零事件）+ kerf 主 commit 85e0924
+
+Stage Summary:
+- 批次 M M2 ✅——窗 M 出口条件推进（825:0:0 + 五码 + import 面 + 组合闭包 + W 族）；破坏面零残留（七处存量修正全按新契约）；M3 = 全表对账收口 + 门审（§7.3 ≥30 case）
+---
+Task ID: 61-z（r40 收尾——打包 + 包内自举；详录 flat 61-z）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r40 tar.gz + 包内自举 + rec 树 03_r40
+
+Work Log:
+- r40 tar.gz（§19.3 正序 git 85e0924 先行）：kerf-stage3-v0.7.0-r40-batchM-m2importface-825tests.tar.gz（**2.12MB / 349 条目**）落 download/
+- 包内自举（全新解包 /tmp/r40boot）：build 15.01s 零告警 + **825:0:0 复跑**（22 套件）+ 四审计集 APPROVED ×4（190）+ CLI 一致（fib 144 / 别名 ab / check ok / 负例 REAL_EXIT 1 / 组合闭包 E0006 增强）+ qbe 在包
+- rec 树：03_stage-3_入场序列/03_r40（深审交付零 + M2 本体交付一 + 打包交付二 + 里程碑）+ 03 层 l 03 行 + root l（未压实区间 r40 终态 + by-topic 三新行[组合闭包 P1 修复/import 注入面/W 族]）
+
+Stage Summary:
+- M2 验收合同三门全过（§3.2 全绿 ✅ + 包内自举 ✅ + E2E[61-web 承载]）；r40 打包门达成
+---
+Task ID: 62-a（r41 语言形式深审轮——六焦点审查 + 知识搜索 + D10-D18 裁定；详录 flat 62-a）
+Agent: Super Z (main) — 深审（ARCH-A/REC-A；PHASE 1 定位声明 v2 一次通过——用户三指令：深审语言形式[语法设计/通解特解/词法语法语义无二义性/层级组织 / vs ::/(a b c) 通解性/多模型组织 + 2026 前沿 + 内循环迭代收敛] + 按 sop.md 推进 + 打包与 web 同步）
+Task: docs/lang-design 语言形式六焦点网状审查 + 六查询知识搜索实证 + D10-D18 裁定 + P1 当场修复
+
+Work Log:
+- 六查询实证（tool-results/r41-search/）：q1 Rhombus v1.0（**2026-06-22 正式发布**——S 表达式替代的完成形态：shrubbery 缩进 + enforestation + bicameral 两院制）+ state-of-rhombus 深读（conventional 四约束/分组三选项/Honu 溯源）/ q2 分隔符设计（Rust :: rationale + D . + Goodwin「模块不只是命名空间」+ pelary「:: 命名空间 . 值域」）/ q3 OCaml functor（borretti「Two Years」+ functor-trouble 蔓延痛点 + 模块一等对象）/ q4 UFCS（D/Nim x.f() ≡ f(x) + langdev 分野 + 2026-02 Rust internals UMCS 活跃）/ q5 缩进 vs 括号（yinwang0 re-indent 批判 + Scala braceless + Adams 论文）/ q6 语法二义性（歧义检测研究 + lexer-hack）
+- **D10（P1 文档-代码冲突当场修复）**：实测 `(define if 5)` 合法 + `(print if)`=5 + 操作位恒关键字（amb5 系列三态实测）——22 §2.1 N4 不变量「不是值、不可引用、不可遮蔽」被违反 + 用户绑定操作位**静默失效**（「显式失败」反面）→ **E0020 严格保留字绑定禁令**（25 关键字全域禁作绑定名——单源 Keyword::from_name；Stx 源码面[expand 前拦截，宏名/别名唯一承载层] + CoreExpr 展开产物面[防御纵深]双层 + 三处接线[front_from_forms/front_from_core/check_source_recover]）；**开发实录三则**：⑴syntax-rules 模板数据域跳过（初版误报模板字面量——模板是宏数据非程序绑定，实测发现当场修正；实例化产物走 CoreExpr 层）⑵handle 双绑定器（payload_var/resume_var）CoreExpr 层覆盖 ⑶值位引用保留字在禁令后恒走未绑定 fail-closed（不单独报 E0020——诊断增益取舍记裁定）
+- D11-D18 七项裁定（22 §11 全录）：D11 W1003 宏遮蔽警告排期移除轮 / D12 `/` vs `::` 维持（三重依据：模块不嵌套→无路径感需求 + 域成员语义读法 + 除法二义性 M1 已分立——`.`/`::` 符号期权保留）/ D13 `(a b c)` 前缀 = 当前工程最优解（UFCS 更强形态[操作位统一] + Rhombus enforestation 代价 ×10 对照 + 终态多语法窗维持——「kerf 不被家族限制」三件兑现[多语法窗 + 原语表面正交 + 两层表面现代化]）/ D14 负数字面量显式无二义 / D15 N4 三件套全编译期执行（R4 冲突清偿）/ D16 functor 不引入（OCaml 蔓延痛点反向印证 + 模块一等值 Stage 3 维持）/ D17 括号维持（re-indent 批判 + 结构显式性 + 缩进皮肤归多语法窗）/ D18 **二义性面全清**（六组歧义源逐一显式裁定：/ 双语义/负数字面量/关键字双轨/as contextual/else 字面匹配/宏遮蔽）
+- 12 case 测试组（namespace_tests d10 组：正例 3 + 负例 8 + 值位 1——正负比 1:3 达标）；**825 → 837 零回归**（碰撞预检零命中——引导语料/测试/示例三面 grep 实证）
+- 文档回写：22 v1.4（§11 D10-D18 + §2.1 N4 三件套执行注记）+ 18 v6.6（E0020 码位落位）+ 02 v6.3（§8 Rhombus v1.0 对表注记）+ 14 r41 前沿更新（Rhombus v1.0 三重启示段）
+- 遵循：§2.2 原则 4/9/26/31/33/35（E0020 依据链）/ R4（文档-代码冲突——代码回归文档承诺）/ R1（实测发现当场修复 ×3）/ §14.5 深审纪律（P1 清零）
+
+Stage Summary:
+- 深审轮闭环：六焦点（二义性/分隔符/调用模式/组织模型/布局/前沿对表）全裁定 + 六查询实证；D10（P1）当场修复归零（E0020 + 12 case + 837:0:0）；D11-D18 有据维持/登记——**语言形式面无未清 P0/P1**
+---
+Task ID: 62-b（r41 批次 M M3 收口——门审 + 全表对账 + E2E 全导入路径）
+Agent: Super Z (main) — M3 实施（DEV-A/QA-A/REC-A）
+Task: stage3_gate_audit_m3 门审审计集（≥30 case 七类覆盖）+ 22 §8 全表对账收口 + E2E 全导入路径三通道 + §3.2 + 对账八面
+
+Work Log:
+- **stage3_gate_audit_m3 43 case**（examples/audit/ 第 5 件 + Cargo.toml 注册）：A11（单语句——E0013-E0020 八码全覆盖）/ B9（多语句——红线 1 + 组合闭包 + 静态面 E0005 + W 族 + 宏名/别名）/ C6（复杂——嵌套 module + 深位 begin + 联合缺失 + 效应交集 + 元数深链）/ D5（恢复——E0020 后 VM 健康 + E0015 后管线健康 + E0014 双路径一致 + E0006 后授权链）/ E5（修复边界——D10 数据域[模板字面量合法半面] + D4 联合缺失精确提示 + M1 参数遮蔽零误报 + B1/B2 parity + D10 深位）/ P7（正向——E2E 全导入路径三通道[限定直引 5 + 注入 3 + 别名 3 + io 第四通道] + 运算符永驻 + quote 豁免 + 别名限定 + 计数锚 + prelude 混用）——**43:0 APPROVED + EXIT 0**
+- **开发实录四则**（测试设计如实修正）：⑴D01 恢复合并——Compile 族 fail-closed 不进收集面（恢复收集 = Expand + HM 静态——M2 既有口径，改 E0002+E0005 两收集面）⑵C03/E02 require 形态（(require io read write) 非 io read io write——实测 E0002 未知能力项纠正）⑶P06 通道二——D7 过渡期语义如实审计（裸名同形全局胜出：nth 走全局扁平名；to-upper 短名过渡期未绑定是**知悉项非 defect**——注入重写归 Stage 3 移除轮；通道二断言改「全局胜出 + 限定引用精确消歧」）⑷C04 HM 旗标期不传播用户高阶实参（r2 A09 同判——Stage 3 HM 演进项）；C05 handle 恢复位 resume 保留字 = E0020 正确拦截正面证据（B09 载荷位 + C05 恢复位 = 双绑定器全覆盖）
+- 五审计集 EXIT 0 ×5（190 + 43 = **233 case**）；CLI 四路径（fib 144 / macros 42 / effect_stress 120 / check ok + E0005 REAL_EXIT 1）+ E0020 CLI 端到端 REAL_EXIT 1
+- **§3.2 六命令 clean 起步全绿**：clean 1925/474.3MiB → build 14.41s 零告警 → check 0/0 → fmt 0（clippy 修正 3 处后）→ clippy -D warnings 0 → **test 837:0:0**（集成 619 + 单元 218——22 套件逐二进制实测）
+- **窗 M 出口条件达成**（23 §2.2）：R-N1~N8 全 case + B1-B3 契约 + 组合闭包 + E2E 全导入路径——M3 审计集 main() 出口条件对账段逐行打勾
+- 对账八面：matrix v0.1.0-r41（r41 增量行 + 总量行 837=218+619 + 五审计集 233）+ RELEASE v0.8.0-r41 节 + pipeline v0.6.0-r41（Tier 2 头 607→619）+ 22 v1.4/18 v6.6/02 v6.3/14（深审四件）+ 12 v6.13（§2.10 批次 M 行 M3 ✅）+ 23 v1.4（窗 M 出口条件达成）+ 09 v6.10 + v0.5-roadmap v0.5.0（M3 行 + Status + Date）
+- 遵循：§7.3.1 规则 2/3/4（配比 + ≥30 case + 修复边界 ≥5）/ §7.1.1 七类覆盖 / §3.2（六命令）/ 23 §2.2（窗 M 出口条件）/ 22 §8（全表对账）/ R1（四则实测修正）
+
+Stage Summary:
+- **批次 M 全链闭环**（M1 r39 + M2 r40 + 深审 D10 r41 + M3 门审 r41）：837:0:0（净 +12）+ 五审计集 233 case APPROVED + 窗 M 出口条件达成；**下一步移除轮（与 E5 同窗——23 §2.2 触发表驱动）**；62-z 打包 + 62-web web 面随后

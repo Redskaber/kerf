@@ -655,3 +655,157 @@ fn m2_alias_dual_path_agrees() {
         "(module m (import kerf-list as l) (l/member 2 (list 1 2 3)))"
     ));
 }
+
+// ---------------------------------------------------------------------------
+// r41 / 62-a 语言形式深审轮——D10 裁定测试组：E0020 保留字绑定禁令
+//（22 §2.1 N4 层不变量「不是值、不可引用、不可遮蔽」的编译期执行；
+// 修复前形态 = 值位可绑定 + 操作位静默失效的 Lisp 双轨陷阱）
+// ---------------------------------------------------------------------------
+
+/// 正例：非保留字绑定全绿（E0020 零误报——绑定面白名单形态）。
+#[test]
+fn d10_non_reserved_bindings_all_legal() {
+    // define/lambda/let 系正常名（含现代名/限定名符号/下划线风格）
+    assert_eq!(
+        common::run_rendered(
+            "(define my-x 5) (define (lambda-pair a b) (pair/cons a b)) \
+             (let ((lo 1) (hi 2)) (+ lo hi)) \
+             ((lambda (first-arg second-arg) (* first-arg second-arg)) 3 4)"
+        ),
+        "12"
+    );
+    // letrec/let* 正常名
+    assert_eq!(
+        common::run_rendered("(letrec ((f (lambda (n) (if (= n 0) 1 n)))) (f 3))"),
+        "3"
+    );
+    // handle 绑定器正常名（CoreExpr 层零误报——payload/resume 位合法名）
+    assert_eq!(
+        common::run_rendered(
+            "(handle state ((payload resume-k) (resume-k 99)) (perform (cons 'state 1)))"
+        ),
+        "99"
+    );
+}
+
+/// 正例：quote 保留字数据符号合法（N0 符号宇宙层——同像性维持；
+/// 存在性 ≠ 可见性，E0020 只禁绑定与值位引用，不禁数据符号）。
+#[test]
+fn d10_quote_reserved_word_data_symbols_legal() {
+    assert_eq!(common::run_rendered("(is-symbol 'if)"), "true");
+    assert_eq!(common::run_rendered("(is-symbol (quote lambda))"), "true");
+    assert_eq!(common::run_rendered("(core/eq 'else 'else)"), "true");
+}
+
+/// 正例：宏展开产物正常绑定（CoreExpr 层防御纵深零误报——宏模板
+/// 展开生成 define/lambda 绑定不触发 E0020）。
+#[test]
+fn d10_macro_expansion_bindings_legal() {
+    assert_eq!(
+        common::run_rendered(
+            "(define-syntax swap-pair (syntax-rules () ((_ a b) (pair/cons b a)))) \
+             (swap-pair 1 2)"
+        ),
+        "(2 . 1)"
+    );
+}
+
+/// 负例：define 绑定保留字（深审 D10 修复前实测形态——`(define if 5)`
+/// 合法且值位可读 = N4 不变量违反 + 操作位静默失效）。
+#[test]
+fn d10_define_reserved_word_e0020() {
+    expect_compile_err("(define if 5)", 20, "保留字不可绑定");
+    expect_compile_err("(define lambda 5)", 20, "「lambda」");
+    expect_compile_err("(define set! 7)", 20, "「set!」");
+}
+
+/// 负例：lambda 参数表保留字（修复前 `(lambda (lambda) lambda)` = 42）。
+#[test]
+fn d10_lambda_param_reserved_word_e0020() {
+    expect_compile_err("((lambda (if) if) 1)", 20, "lambda 参数");
+    expect_compile_err("((lambda (x else) x) 1 2)", 20, "「else」");
+    expect_compile_err("((lambda (begin) begin) 1)", 20, "「begin」");
+}
+
+/// 负例：let 系绑定名保留字（三变体同判）。
+#[test]
+fn d10_let_bindings_reserved_word_e0020() {
+    expect_compile_err("(let ((if 5)) if)", 20, "let 绑定名");
+    expect_compile_err("(let* ((begin 1)) begin)", 20, "「begin」");
+    expect_compile_err("(letrec ((module 1)) module)", 20, "「module」");
+}
+
+/// 负例：set! 赋值目标保留字。
+#[test]
+fn d10_setbang_target_reserved_word_e0020() {
+    expect_compile_err("(define x 1) (set! begin 2)", 20, "赋值目标");
+}
+
+/// 负例：module 名 / import as 别名 / define-syntax 宏名保留字。
+#[test]
+fn d10_module_alias_macro_name_reserved_word_e0020() {
+    expect_compile_err("(module if (export a) (define a 1))", 20, "模块名");
+    expect_compile_err(
+        "(module m (import kerf-string as if) (if/length \"a\"))",
+        20,
+        "import 别名",
+    );
+    expect_compile_err(
+        "(define-syntax if (syntax-rules () ((_ c t) t)))",
+        20,
+        "宏名",
+    );
+}
+
+/// 负例：begin/嵌套子树递归穿透（深位置绑定同样拦截）。
+#[test]
+fn d10_nested_begin_reserved_word_e0020() {
+    expect_compile_err(
+        "(begin (define ok 1) (begin (define perform 2)))",
+        20,
+        "「perform」",
+    );
+    // lambda 体深嵌套
+    expect_compile_err(
+        "((lambda (n) (let ((handle n)) handle)) 1)",
+        20,
+        "「handle」",
+    );
+}
+
+/// 负例：宏展开产物绑定保留字（CoreExpr 层防御纵深——宏模板生成
+/// E0020 违例同样编译期拦截）。
+#[test]
+fn d10_macro_expansion_reserved_binding_e0020() {
+    expect_compile_err(
+        "(define-syntax m-kw (syntax-rules () ((_) (define quote 1)))) (m-kw)",
+        20,
+        "绑定名（展开产物）",
+    );
+}
+
+/// 负例：handle 双绑定器保留字（payload/resume 绑定位——CoreExpr 层
+/// 结构化承载）。
+#[test]
+fn d10_handle_binders_reserved_word_e0020() {
+    expect_compile_err(
+        "(handle state ((perform k) (resume k 42)) (perform (cons 'state 1)))",
+        20,
+        "handle 载荷绑定",
+    );
+}
+
+/// 值位引用保留字 → 既有未绑定路径（fail-closed 维持——绑定禁令后
+/// 值位恒无绑定，天然走 E0002 未绑定；诊断面按既有口径）。
+#[test]
+fn d10_value_position_reserved_word_unbound() {
+    let e = match run_source("(print if)", FNAME) {
+        Ok(_) => panic!("值位引用保留字应报错（未绑定路径）"),
+        Err(e) => e,
+    };
+    assert!(
+        e.rendered.contains("if"),
+        "诊断应含保留字名：\n{}",
+        e.rendered
+    );
+}
