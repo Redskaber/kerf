@@ -548,9 +548,16 @@ pub struct CheckReport {
     pub instruction_count: usize,
 }
 
-/// 静态检查源文本：read → expand → compile（缓存路径）→ 保守类型
-/// 检查（[kerf_compiler::check_program]——R1-R8 规则集；多错误全量
+/// 静态检查源文本：read → expand → compile（缓存路径）→ HM 推断
+/// 判定（[kerf_compiler::hm::hm_check_program]——约束三段式；多错误全量
 /// 收集，非短路）。
+///
+/// **旗标期（D8 阶段 2——r29/50-a 切换）**：`kerf check` 判定面 =
+/// HM 推断（hm-inference-design §3.7 演进轨道阶段 2）；R1-R8
+/// （[kerf_compiler::check_program]）退为**回归基线断言**（测试面
+/// 保留——超集门参照侧，非生产判定面）。保守性契约随旗标期重定义：
+/// 「零类型不一致误报」口径 + occurs/自应用面豁免为接受行为
+/// （hm-inference-design §2.3 契约变更显式登记——P0-2 兑现）。
 ///
 /// 编译期错误（Read/Expand/Compile 阶段）仍以 `DriverError` 返回——
 /// 静态检查只对编译通过的程序进行（诊断链前后不交叉）。
@@ -560,7 +567,7 @@ pub fn check_source(source: &str, filename: &str) -> Result<CheckReport, DriverE
     let io_req = IoRequirements::from_core(&front.core);
     let mut table = front.table;
     let sigs = builtin_sigs(&mut table);
-    let diagnostics = kerf_compiler::check_program(&front.core, &sigs, &table);
+    let diagnostics = kerf_compiler::hm::hm_check_program(&front.core, &sigs, &table).diags;
     let rendered = diagnostics
         .iter()
         .map(|d| render_diagnostic(d, &front.source_map))
@@ -584,7 +591,11 @@ pub fn check_source(source: &str, filename: &str) -> Result<CheckReport, DriverE
 /// 单形式展开失败 → 诊断收集 + 跳过 + 继续后续形式（r7 设计 §2）；
 /// 部分产物照常走 R9 验证 / 相位簿记 / 字节码 / 类型检查。诊断合并
 /// 面 = 展开诊断（E0002）+ 类型诊断（E0005），按 `(file_id, start,
-/// end)` 排序——输出次序与源码位置对齐（与 `check_program` 同口径）。
+/// end)` 排序——输出次序与源码位置对齐（与 hm_inference 同口径）。
+///
+/// **旗标期（D8 阶段 2——r29/50-a 切换）**：判定面 = HM 推断
+/// （[kerf_compiler::hm::hm_check_program]——与 [`check_source`] 同判定面；
+/// R1-R8 退为回归基线断言，契约重定义同 §2.3）。
 ///
 /// **短路边界**：read 错误（词法级）与 R9 能力违规（E0006 fail-closed，
 /// r8 裁定「首个违规即阻断」）仍以 `DriverError` 返回——恢复面仅覆盖
@@ -623,7 +634,7 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
         .into_iter()
         .map(|e| Diagnostic::error(Some(DiagnosticCode(2)), e.message, e.span))
         .collect();
-    let mut type_diags = kerf_compiler::check_program(&front.core, &sigs, &table);
+    let mut type_diags = kerf_compiler::hm::hm_check_program(&front.core, &sigs, &table).diags;
     diagnostics.append(&mut type_diags);
     diagnostics.sort_by(|a, b| {
         a.primary_span

@@ -258,7 +258,12 @@ pub struct HmReport {
     pub globals: HashMap<Symbol, Rc<Ty>>,
 }
 
-/// HM 推断 PoC 入口（离线——D8：不接入 driver；测试面并行验证）。
+/// HM 检查入口（**旗标期判定面——D8 阶段 2，r29/50-a 接入 driver**
+/// `check_source` / `check_source_recover` 两入口；PoC 阶段（r18）
+/// 为离线并行验证，旗标期起为 `kerf check` 生产判定面——R1-R8
+/// （typecheck.rs `check_program`）退为测试面回归基线断言）。
+/// 契约口径（旗标期）：**零类型不一致误报**；occurs/自应用面为
+/// 政策接受行为（hm-inference-design §2.3 显式登记——P0-2 兑现）。
 pub fn hm_check_program(
     core: &[Rc<CoreExpr>],
     builtins: &HashMap<Symbol, BuiltinSig>,
@@ -867,12 +872,14 @@ impl<'a> Gen<'a> {
                 let ra = self.st.resolve(&arg);
                 match ra.as_ref() {
                     Ty::Pair(x, _) => return x.clone(),
-                    Ty::Dynamic | Ty::Var(_) | Ty::Nil => {
+                    Ty::Dynamic | Ty::Var(_) => {
                         if matches!(ra.as_ref(), Ty::Var(_)) {
                             self.constraint(arg, Rc::new(Ty::Pair(a.clone(), b)), args[0].span());
                         }
-                        // Nil：car nil = 运行期错误——保守不诊断（R5 口径
-                        // 之外的动态边界），结果 Dynamic
+                        // Dynamic：真未知——保守不诊断；Var：经约束传代
+                        // 求解（旗标期 r29/50-a：Nil 从此臂移出一一超集门
+                        // 缺口修复，(car nil) 静态确定运行期 E5，与 R1-R8
+                        // R5 负例矩阵对齐）
                         return Rc::new(Ty::Dynamic);
                     }
                     other => {
@@ -890,11 +897,13 @@ impl<'a> Gen<'a> {
                 let ra = self.st.resolve(&arg);
                 match ra.as_ref() {
                     Ty::Pair(_, y) => return y.clone(),
-                    Ty::Dynamic | Ty::Var(_) | Ty::Nil => {
+                    Ty::Dynamic | Ty::Var(_) => {
                         if matches!(ra.as_ref(), Ty::Var(_)) {
                             let a = self.fresh();
                             self.constraint(arg, Rc::new(Ty::Pair(a, b)), args[0].span());
                         }
+                        // 同 car 臂：Dynamic 真未知保守；Nil 经 other 臂
+                        // 诊断（旗标期 r29/50-a 超集门缺口修复同型）
                         return Rc::new(Ty::Dynamic);
                     }
                     other => {
@@ -962,19 +971,15 @@ impl<'a> Gen<'a> {
                 }
             }
             TcParams::Ordering => {
-                // R3 排序族：全字符串 → TD-011 边界消息；混串 → 需要数值；
-                // 变元参数经数值锚点约束（~Num——运行时排序域全数值）。
+                // R3 排序族：全字符串 → 合法（TD-011 r24 字符串全序参与
+                // 全族——码点序；旗标期 r29/50-a 同步：PoC 口径「字符串仅
+                // 支持 =」已过时，typecheck.rs L452-503 同步在前）；混串
+                // → 需要数值（TD-016 全操作数口径）；变元参数经数值锚点
+                // 约束（~Num——运行时排序域全数值）。
                 let resolved: Vec<Rc<Ty>> = arg_tys.iter().map(|t| self.st.resolve(t)).collect();
                 let all_str =
                     !resolved.is_empty() && resolved.iter().all(|t| matches!(t.as_ref(), Ty::Str));
                 if all_str {
-                    self.diag(
-                        format!(
-                            "字符串仅支持 = 比较（Stage 0 边界，TD-011）（静态检查）——{}",
-                            op
-                        ),
-                        app.span(),
-                    );
                     return Rc::new(Ty::Bool);
                 }
                 let has_num = resolved.iter().any(|t| t.is_num_atom());

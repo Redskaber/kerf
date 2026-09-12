@@ -1,3 +1,31 @@
+## v0.4.0-r29（2026-09-11）——批次 J 执行：J2 HM 旗标期切换（`kerf check` 判定面 = HM 推断 + 契约重定义 + 双缺口修复，713 全绿）
+
+### 交付一：48-c J2 HM 旗标期切换（会话 Task 50-a——plan §5b 第二 MUV，D8 阶段 2）
+
+- **判定面切换**：driver.rs `check_source` / `check_source_recover` 两入口判定面 = `hm_check_program`（hm.rs 约束三段式——生成/求解/收集；D8 演进轨道阶段 2；**run 路径不触静态面，爆炸半径有界维持**）；R1-R8（typecheck.rs `check_program`）**退为回归基线断言**（测试面超集门参照侧——hm_inference_tests / effect_tests 双面检出纪律保留）；typecheck.rs / hm.rs / builtins.rs / driver.rs 四处头注旗标期角色注记同步（R4 文档随代码）
+- **契约重定义显式登记（P0-2 兑现——hm-inference-design §2.3 旗标期节 + §3.7 阶段 2 实锚，文档 v0.1.0 → v0.2.0）**：保守性断言更新为「零类型不一致误报」口径（类型不一致即报——含运行期可存活的类型不一致）；**occurs/自应用误报面文档化为政策接受行为**（无限类型静态报错——运行期行为不承诺双向锚）；双向锚 `static_error_is_runtime_error` 范围重锚（超集门内维持 / occurs 面豁免——typecheck_tests 头注 + 函数 doc 同步）
+- **断言重锚（5 处子串——语义/检出/定位不变，渲染措辞随判定面）**：`(int . int)` / `(int . nil)` / `(α0 → α0)`（HM 结构化类型渲染——R1-R8 域名 pair/procedure 的精确化）+ 元数区间格式（「过程参数数量不匹配：期望 1..1 实际 2」——内置元数 5 case）
+- **切换实测双缺口当场修复（超集门/零误报门经生产入口实测纪律的兑现——PoC 离线语料未覆盖生产入口负例矩阵全貌）**：① hm.rs Ordering 臂未同步 TD-011 r24 字符串全序（`(< "a" "b")` 曾误报「字符串仅支持 =」——PoC r18 遗留旧口径，typecheck.rs 已在前）→ all_str → 合法返回 Bool；② hm.rs car/cdr 臂 `Ty::Nil` 误入保守跳过（`(car nil)` 曾漏检——注释声称「R5 口径之外的动态边界」为错误归因：Nil 是静态确定类型，运行期必然 E5）→ Nil 归入诊断臂（与 R1-R8 R5 负例矩阵对齐）
+- **新增旗标期判定面测试组 3 件（typecheck_tests 25 → 28）**：增值面生产证据（`(f "s")` 约束传播检出「类型不一致」——R1-R8 静默面，判定面切换直接证据）+ occurs 豁免政策锚（`(cons x (f x))` 无限类型报出但不断言双向锚——契约政策行为）+ 双面修复锚（TD-011 零误报 ×2 + car nil 检出 + 双向锚维持）
+- **12-roadmap §2.5.1 类型检查器行「迁移评估」结论 ✅（v6.4）**：HM 旗标期切换落地 + **自举内迁裁定 = 留 Rust**（INC8 三段口径——读+展开+编译 100% kerf 即「kerf ~80%」；类型检查器属静态分析面不在自举关键路径（INC3 实证 front_from_core 无 check），归 07 §3.4 Rust 保留面；默认期（R1-R8 语义内化）= Stage 2 末评估）
+- 生产实证：`kerf check` 负例（`(define (f x) (+ x 1)) (f "s")`）→ `error[E0005]: 类型不一致：num 与 str` 精确定位 1:24（R1-R8 时代此程序静默——HM 增值面 CLI 可见）
+
+### 交付二：50-z 收尾（r29）
+
+- §3.2 六命令全绿（build 零告警 / check 0/0 / fmt 0 diff / clippy --all-targets --workspace 超集 0 / test **713:0:0**（710 零回归 + 净 3）/ 三审计集 EXIT 0 ×3 + CLI 四路径（fib ⇒ 144 / macros ⇒ 42 / check ok / check 负例 E0005 HM 面））
+- 对账六面：matrix r29 行（710 → 713 + 汇总链 + 表体两行实测修正 24→28）/ pipeline-test-coverage v0.4.0-r29（Tier 2 头 503→506）/ plan §5b J 执行注记 r29 / RELEASE_NOTES r29 / 12-roadmap v6.4 / hm-inference-design v0.2.0；TD 登记册零事件（双缺口为当场修复非登记债）
+- 环境注记：沙箱重置后测试线程默认栈不足（深嵌套 case 爆栈——基线 stash 复跑同型归因环境而非代码）→ RUST_MIN_STACK=16777216 环境级修复（同 r21 工具链重装同型环境恢复操作，worklog 登记）
+- r29 tar.gz（§19.3 commit-then-package 正序）+ 包内自举验证 + web 同步 + E2E
+
+### 质量口径
+
+- cargo test --workspace：**713:0:0**（单元 207 + 集成 506；净 +3 集成；门审计集三件 144 case 另计全过）
+- cargo clippy --all-targets --workspace：**0 警告**（超集口径）
+- cargo fmt --check：0 diff
+- 三审计集：stage0/stage1/stage2_gate_audit_r1 全 **EXIT 0**（复验）
+
+---
+
 ## v0.4.0-r28（2026-09-11）——批次 J 执行启动：J1 效应 typecheck 收敛（Perform/Handle 子表达式遍历 + 静态负例组双面检出，710 全绿）
 
 ### 交付一：48-b J1 效应 typecheck 收敛（会话 Task 49-a——plan §5b 首 MUV）

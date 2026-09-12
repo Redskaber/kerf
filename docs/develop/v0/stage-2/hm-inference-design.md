@@ -1,9 +1,9 @@
 # G2 设计轮：HM 类型推断升级评估（保守 R1-R8 → 推断演进裁定）
 
 > **Author**: kerf-doc-agent（ALG-A 类型系统理论 / ARCH-A 架构联合——Task 38-d）
-> **Date**: 2026-09-12
-> **Version**: v0.1.0（G2 设计轮唯一交付物——评估 + 设计，不含实现）
-> **Status**: Proposed（裁定供批次 G 收口采纳；实现排期建议见 §7）
+> **Date**: 2026-09-12（v0.2.0：**旗标期兑现注记（r29 / 50-a / MUV 48-c）**——§2.3 契约变更显式登记 + §3.7 阶段 2 落地实锚（driver 两入口判定面切换 + 断言重锚 + 双缺口修复：TD-011 Ordering 同步 + car/cdr Nil 检出））
+> **Version**: v0.2.0（G2 设计轮交付物 + 旗标期兑现已录——PoC（r18 H4）→ **旗标期（r29 ✅）** → 默认期（待））
+> **Status**: Active（PoC/旗标期两阶段已落地；默认期 = Stage 2 末评估——R1-R8 语义内化进约束集）
 > **输入**: kerf-compiler/src/typecheck.rs（669 行实况全文）、tests/v0/stage1/plan/typecheck_tests.rs、kerf-driver/src/builtins.rs（BUILTIN_SIGS L1143 起）、kerf-driver/src/driver.rs（check_source L477-488）；[16-参照分析 §2.2](../../lang-design/16-reference-analysis.md)、[06-操作语义](../../lang-design/06-operational-semantics.md)、[01-核心形式](../../lang-design/01-core-forms.md)、[13-能力矩阵（类型检查器行）](../../lang-design/13-capability-matrix.md)、[stage-2/plan §1/§5 批次 G 行](./plan.md)、[TD 登记册](../../tech-debt-register.md)（TD-002/004/011/013/016/017/022）、[stage-1/multi-error-recovery-design](../stage-1/multi-error-recovery-design.md)（同批协同 + 风格基准）
 > **上游**: Stage 1 r15（553:0:0 全绿）+ r16 批次 F 深审环（TD-013 改判绑定 G2）
 
@@ -70,6 +70,26 @@ typecheck.rs 头注（L8-12）：**误报 = P1 缺陷**——只报「运行期*
 「零误报（误报 = P1）」收窄为「类型不一致即报（含运行期可存活的类型不一致）」。
 **此政策变更必须显式登记并重锚测试断言语义**（§6 P0-2）——否则 553 套件的
 保守性验收口径静默漂移。
+
+**旗标期显式登记（P0-2 兑现——r29 / 50-a / MUV 48-c，依据 §3.7 阶段 2）**：
+
+- **保守性断言更新为「零类型不一致误报」口径**：`kerf check` 判定面 =
+  `hm_check_program`（driver.rs `check_source` / `check_source_recover`
+  两入口）后，验收语义 = 「类型不一致即报（含运行期可存活的类型不一致）」；
+  「误报 = P1」语义漂移面已重锚（typecheck_tests 头注 + 断言子串重锚
+  ——渲染措辞 5 处：`(int . int)` / `(int . nil)` / `(α0 → α0)` /
+  元数区间格式；语义/检出/定位不变）。
+- **occurs/自应用误报面 = 接受行为（政策豁免，显式文档化）**：HM
+  occurs check 拒绝的无限类型程序（含运行期可存活的 `(x x)` 自应用）
+  静态报「无限类型」——运行期行为**不承诺**双向锚（豁免面）。
+- **双向锚 `static_error_is_runtime_error` 范围重锚**：超集门内维持
+  （R1-R8 负例矩阵静态报错程序实跑必报 Run 阶段错——旗标期实测全过）；
+  occurs 面豁免（政策行为——测试面不停留在旧契约的断言口径）。
+- **实测对账**：旗标期切换实测暴露并修复两处双面漂移（超集门/零误报门
+  实测纪律的兑现）：① hm.rs Ordering 臂未同步 TD-011 r24 字符串全序
+  （`(< "a" "b")` 误报——修复：all_str → 合法）；② hm.rs car/cdr 臂
+  `Ty::Nil` 误入保守跳过（`(car nil)` 漏检——修复：Nil 归入诊断臂，
+  与 R1-R8 R5 负例矩阵对齐）。710:0:0 零回归。
 
 ## 3. 核心问题逐项裁定
 
@@ -184,7 +204,13 @@ Num → ⊑Num 格约束；List → Pair(α,β) ∪ Nil 联合域约束（length
   1. **PoC（离线）**：新推断器与 R1-R8 并行跑测试面；门 = **超集门**
      （R1-R8 全部负例矩阵仍检出）+ **零误报门**（examples 六件套 +
      动态边界 case 全维持零诊断）；
-  2. **旗标期**：`kerf check` 切换 HM 判定面；R1-R8 退为回归基线断言；
+  2. **旗标期（✅ r29 / 50-a 兑现——MUV 48-c）**：`kerf check` 切换
+     HM 判定面（driver.rs `check_source` / `check_source_recover` 两
+     入口——run 路径不触静态面，爆炸半径有界）；R1-R8 退为回归基线
+     断言（测试面超集门参照侧保留——hm_inference_tests / effect_tests
+     双面检出纪律）；契约重定义随切换显式登记（§2.3 旗标期节）；切换
+     实测修复双面漂移两处（§2.3 实测对账）+ 断言重锚 5 处；
+     **710:0:0 零回归**；
   3. **默认期**：R1-R8 语义**内化**进约束集——R1 = cond 约束 Bool；R2/R3/
      R4/R8 = 内置 scheme 约束；R5 = Pair(α,β) 约束；R6 = fn_expr 约束
      Arrow；R7 = 元数结构化。规则不被删除而是被结构约束**蕴含**。

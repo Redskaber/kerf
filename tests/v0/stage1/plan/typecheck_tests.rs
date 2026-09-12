@@ -4,13 +4,23 @@
 //! 批次 C（25-a/25-c）：保守静态类型检查 R1-R8 规则集 + 多错误收集
 //! （TD-013 消费面）+ check_source 管线集成。
 //!
-//! 验收锚（§9.4.3）：
-//! - **保守性零误报**：examples/ 全部程序 + 全部既有语义边界程序 →
-//!   0 诊断（静态检查只报告「运行期必然失败」的程序——动态信息不足
-//!   一律 Unknown 跳过）；
+//! **旗标期口径（D8 阶段 2——r29 / 50-a / MUV 48-c，hm-inference-design
+//! §3.7 演进轨道阶段 2）**：`check_source` 判定面已切换为 HM 推断
+//! （`hm_check_program`）——本套件经生产入口实测即为旗标期的**超集门**
+//! （R1-R8 负例矩阵全检出）+ **零误报门**（examples/动态边界零诊断）；
+//! R1-R8（check_program）退为回归基线断言（hm_inference_tests /
+//! effect_tests 双面检出纪律保留）。保守性契约随旗标期重定义：**零
+//! 类型不一致误报**口径 + occurs/自应用面豁免为接受行为（hm-inference-
+//! design §2.3 旗标期显式登记——P0-2 兑现）。断言子串已重锚为 HM
+//! 渲染措辞（结构化类型 + 元数区间——语义/检出/定位不变）。
+//!
+//! 验收锚（§9.4.3，旗标期口径重锚后）：
+//! - **零类型不一致误报**：examples/ 全部程序 + 全部既有语义边界程序 →
+//!   0 诊断（动态信息不足一律 Dynamic 跳过；occurs/自应用面为政策
+//!   豁免——见尾部旗标期测试组）；
 //! - 每规则负例 ≥3（表驱动矩阵）；
-//! - 静态诊断与运行时行为**一致性**抽样：静态报错程序实跑确实报
-//!   Run 阶段错（双向锚定——防「静态误报」与「静态漏报失真」）；
+//! - 静态诊断与运行时行为**一致性**抽样：超集门内维持（静态报错
+//!   程序实跑必报 Run 阶段错）；occurs 面豁免（政策行为，不承诺双向锚）；
 //! - 多错误收集：单程序 N 错全量按 Span 次序返回。
 
 use crate::common;
@@ -61,7 +71,11 @@ fn expect_diag_count(src: &str, n: usize) {
     );
 }
 
-/// 断言静态报错程序在运行期同样失败（保守性反向锚——静态确定性验证）。
+/// 断言静态报错程序在运行期同样失败（保守性反向锚——静态确定性验证；
+/// 旗标期 r29/50-a 范围重锚：**超集门内维持**（R1-R8 负例矩阵静态确定
+/// 错误——运行期必报 Run 阶段错）；**occurs/自应用面豁免**——无限类型
+/// 静态报错程序的运行期行为不承诺双向锚（政策接受行为，hm-inference-
+/// design §2.3 旗标期显式登记））。
 fn static_error_is_runtime_error(src: &str) {
     match run_source(src, "typecheck-rt.krf") {
         Ok(_) => panic!("静态报错程序运行期通过（静态误报嫌疑）：{}", src),
@@ -145,11 +159,11 @@ fn r1_if_condition_non_bool() {
     expect_diag("(if \"s\" 2 3)", "if 条件需要 bool，实际 str");
     expect_diag("(if nil 2 3)", "if 条件需要 bool，实际 nil");
     expect_diag("(if 'sym 2 3)", "if 条件需要 bool，实际 symbol");
-    expect_diag("(if (cons 1 2) 2 3)", "if 条件需要 bool，实际 pair");
-    expect_diag("(if '(1) 2 3)", "if 条件需要 bool，实际 pair");
+    expect_diag("(if (cons 1 2) 2 3)", "if 条件需要 bool，实际 (int . int)");
+    expect_diag("(if '(1) 2 3)", "if 条件需要 bool，实际 (int . nil)");
     expect_diag(
         "(if (lambda (x) x) 2 3)",
-        "if 条件需要 bool，实际 procedure",
+        "if 条件需要 bool，实际 (α0 → α0)",
     );
     // 静态确定性反向锚：运行期确实失败
     static_error_is_runtime_error("(if 1 2 3)");
@@ -181,7 +195,7 @@ fn r2_arithmetic_non_numeric() {
     expect_diag("(* 'sym 2)", "* 需要数值，实际 symbol");
     expect_diag("(/ nil 2)", "/ 需要数值，实际 nil");
     expect_diag("(mod true 2)", "mod 需要数值，实际 bool");
-    expect_diag("(+ (cons 1 2) 5)", "+ 需要数值，实际 pair");
+    expect_diag("(+ (cons 1 2) 5)", "+ 需要数值，实际 (int . int)");
     // 深位（链中段）
     expect_diag("(+ 1 2 \"a\" 4)", "+ 需要数值，实际 str");
     // 静态确定性反向锚
@@ -264,7 +278,7 @@ fn r5_car_cdr_non_pair() {
 fn r6_not_callable() {
     expect_diag("(1 2)", "不可调用的值：int");
     expect_diag("(\"s\" 1)", "不可调用的值：str");
-    expect_diag("((cons 1 2) 3)", "不可调用的值：pair");
+    expect_diag("((cons 1 2) 3)", "不可调用的值：(int . int)");
     expect_diag("(true 1)", "不可调用的值：bool");
     // 静态确定性反向锚
     static_error_is_runtime_error("(1 2)");
@@ -283,14 +297,16 @@ fn r7_lambda_arity() {
     static_error_is_runtime_error("((lambda (x) x) 1 2)");
 }
 
-/// R7 内置元数（5 case——与运行时元数守卫口径一致）。
+/// R7 内置元数（5 case——与运行时元数守卫口径一致；旗标期 r29/50-a
+/// 断言重锚：HM 统一元数消息「过程参数数量不匹配：期望 min..max
+/// 实际 n」——语义/定位与 R1-R8 专用措辞一致）。
 #[test]
 fn r7_builtin_arity() {
-    expect_diag("(car 1 2)", "car 需要 1 个参数，实际 2");
-    expect_diag("(cons 1)", "cons 需要 2 个参数，实际 1");
-    expect_diag("(not 1 2)", "not 需要 1 个参数，实际 2");
-    expect_diag("(str-append \"a\")", "str-append 需要 2 个参数，实际 1");
-    expect_diag("(< 1)", "< 至少需要 2 个参数，实际 1");
+    expect_diag("(car 1 2)", "过程参数数量不匹配：期望 1..1 实际 2");
+    expect_diag("(cons 1)", "过程参数数量不匹配：期望 2..2 实际 1");
+    expect_diag("(not 1 2)", "过程参数数量不匹配：期望 1..1 实际 2");
+    expect_diag("(str-append \"a\")", "过程参数数量不匹配：期望 2..2 实际 1");
+    expect_diag("(< 1)", "过程参数数量不匹配：期望 ≥2 实际 1");
     static_error_is_runtime_error("(car 1 2)");
 }
 
@@ -422,4 +438,46 @@ fn deep_nesting_stack_safe() {
     }
     // 不崩溃不诊断
     let _ = check_source(&src, "typecheck-deep.krf");
+}
+
+// ---------------------------------------------------------------------------
+// 旗标期判定面（D8 阶段 2——r29 / 50-a / MUV 48-c）
+//
+// 判定面 = HM 推断（hm_check_program 经 check_source 生产入口）的
+// 直接生产证据 + 契约重定义的测试锚（hm-inference-design §2.3）。
+// R1-R8 超集门/零误报门经生产入口已由本文件既有矩阵覆盖（切换后
+// 自动成为旗标期门）。
+// ---------------------------------------------------------------------------
+
+/// HM 增值面经生产入口检出（R1-R8 静默放过的约束传播检出——判定面
+/// 切换的直接证据；缺口四类之一①：用户 lambda 实参类型错）。
+#[test]
+fn flag_period_hm_value_added_via_production() {
+    // R1-R8 面：f 的参数 Unknown → (+ x 1) 与 (f "s") 均静默；
+    // HM 面：α ~ str 与 α ~ Num 约束冲突 → 检出
+    expect_diag("(define (f x) (+ x 1)) (f \"s\")", "类型不一致");
+}
+
+/// occurs 面豁免为政策接受行为（旗标期契约——hm-inference-design §2.3：
+/// 无限类型静态报错；运行期行为不承诺双向锚）。
+#[test]
+fn flag_period_occurs_exempt_policy() {
+    // (cons x (f x))：f : α → (α . β) 无限类型——HM occurs check 报出
+    // （判定面证据）；**不**调用 static_error_is_runtime_error（豁免面
+    // ——严格求值下运行期不终结，非「运行期必报同类错」的旧契约对象）
+    expect_diag("(define (f x) (cons x (f x))) 1", "无限类型");
+}
+
+/// 双面修复回归锚（旗标期切换实测暴露的两处双面漂移——hm-inference-
+/// design §2.3 实测对账：TD-011 Ordering 同步 + car/cdr Nil 检出）。
+#[test]
+fn flag_period_dual_face_fix_anchors() {
+    // ① TD-011 r24 字符串全序：`(< "a" "b")` 零诊断（hm.rs Ordering
+    //    臂 PoC 旧口径曾误报——修复锚）
+    expect_clean("(< \"a\" \"b\")");
+    expect_clean("(>= \"b\" \"a\")");
+    // ② (car nil) 检出（hm.rs car 臂 Nil 曾误入保守跳过——漏检修复锚；
+    //    运行期确定性 E5 → 双向锚维持）
+    expect_diag("(car nil)", "car 需要 pair，实际 nil");
+    static_error_is_runtime_error("(car nil)");
 }

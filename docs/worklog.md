@@ -4383,3 +4383,40 @@ Stage Summary:
 - 下一步：48-c J2 HM 旗标期切换（D8 阶段 2——check_source L563 +
   check_source_recover L626 两入口判定面 = hm_check_program + 契约
   重定义 P0-2 兑现 + 断言重锚 + occurs/自应用误报面文档化）
+
+---
+Task ID: 50-a（批次 J 执行 / MUV 48-c——J2 HM 旗标期切换）
+Agent: Super Z (main) — 编译执行（CR-A）
+Task: r29 批次 J 执行交付（48-c J2：driver check 两入口判定面 = hm_check_program（D8 阶段 2）+ 契约重定义显式登记（P0-2）+ 断言重锚 + 双缺口修复 + 旗标期判定面测试组）
+
+Work Log:
+- 会话恢复纪律（PHASE 4——同型第三次处置）：续接摘要基线严重过期（声称 r21/657 + 42-c 为下一 MUV——42-c 实为 r22 已交付）→ 磁盘实况复核（git 1d2323a = r28 49-z 终态 + working tree clean + worklog 49-z「下一步」= 48-c J2）→ 按 plan §5b 48-c 验收合同执行（check_source/check_source_recover 两入口 + 契约重定义 P0-2 + 断言重锚 + occurs/自应用误报面文档化 + 类型检查器行迁移评估结论）
+- 环境归因（R1 纪律）：沙箱重置后测试线程默认栈不足——深嵌套 case（deep_nesting_within_budget_clean / deep_nesting_stack_safe）爆栈，**基线 stash 复跑同型归因环境而非代码**（1d2323a 干净态同样爆）→ RUST_MIN_STACK=16777216 环境级修复全绿（同 r21 工具链重装同型的环境恢复操作，非代码缺陷）
+- 判定面切换：driver.rs check_source / check_source_recover 两入口 kerf_compiler::check_program → kerf_compiler::hm::hm_check_program().diags（接口同构零适配——HmReport.diags 与 Vec<Diagnostic> 同构）；run 路径零接触维持（爆炸半径有界——plan 排程注 ①）；hm.rs hm_check_program doc 更新（「离线——D8：不接入 driver」→ 旗标期判定面）；typecheck.rs / builtins.rs 头注旗标期角色注记（R4 文档随代码）
+- **切换实测双缺口当场修复**（GATE 1 实测纪律暴露——超集门/零误报门经生产入口首跑 6+1 失败归因）：
+  - 缺口①（零误报门破裂——误报）：hm.rs Ordering 臂停留 PoC r18 旧口径「字符串仅支持 =」（TD-011 r24 字符串全序已在 typecheck.rs 同步、hm.rs 遗漏）→ all_str → 合法返回 Bool（依据：TD-011 r24 交付语义 + R4 双面漂移以 typecheck.rs 为准）
+  - 缺口②（超集门破裂——漏检）：hm.rs car/cdr 臂 Ty::Nil 误入保守跳过（原注释声称「R5 口径之外的动态边界」为错误归因——Nil 是静态确定类型，(car nil) 运行期必然 E5，R1-R8 R5 负例矩阵含此 case）→ Nil 归入 other 诊断臂（与 R1-R8 对齐）
+- 断言重锚 5 处（typecheck_tests）：r1/r2/r6 类型渲染 pair → (int . int) / (int . nil) / (α0 → α0)（HM 结构化渲染——精确化非语义变化）+ r7 内置元数 5 case → 「过程参数数量不匹配：期望 min..max 实际 n」区间格式；语义/检出/定位全不变
+- 新增旗标期判定面测试组 3 件（typecheck_tests 25→28）：flag_period_hm_value_added_via_production（(f "s") 约束传播检出「类型不一致」——R1-R8 静默面，判定面切换直接生产证据）+ flag_period_occurs_exempt_policy（(cons x (f x)) 无限类型报出但不断言双向锚——契约政策行为）+ flag_period_dual_face_fix_anchors（TD-011 零误报 ×2 + car nil 检出 + 双向锚维持——双缺口修复锚）
+- 契约重定义显式登记（P0-2 兑现）：hm-inference-design.md v0.1.0 → v0.2.0——§2.3 旗标期节（「零类型不一致误报」口径 + occurs/自应用面豁免为接受行为 + 双向锚 static_error_is_runtime_error 范围重锚：超集门内维持/occurs 面豁免 + 实测对账双缺口修复）+ §3.7 阶段 2 落地实锚 + 头部版本/Status（Proposed → Active）；typecheck_tests 头注旗标期口径 + static_error_is_runtime_error doc 重锚；hm_inference_tests 头注旗标期口径（离线入口与生产入口同源同判定 + r18 基线保留）
+- 12-roadmap §2.5.1 类型检查器行迁移评估结论 ✅（v6.4）：HM 旗标期切换落地 + 自举内迁裁定 = **留 Rust**（INC8 三段口径——「kerf ~80%」= 读+展开+编译 100% kerf；类型检查器属静态分析面不在自举关键路径（INC3 实证 front_from_core 无 check），归 07 §3.4 Rust 保留面（VM/运行时/GC/桥/组合根/FFI/测试基建 + 静态分析面）；默认期（R1-R8 语义内化）= Stage 2 末评估）
+- GATE 1 §3.2 全量实测：build 零告警 / check --all-targets 0/0 / fmt 0 diff / clippy --all-targets --workspace 0 警告（超集口径）/ **test --workspace 713:0:0**（单元 207 + 集成 506——710 零回归 + 净 3）/ 三审计集 EXIT 0 ×3 + CLI 四路径（run fib ⇒ 144 / check fib ok / check 负例 E0005「类型不一致：num 与 str」定位 1:24——旗标期 HM 增值面生产实证（R1-R8 时代静默）/ run macros ⇒ (2 1) ⇒ 42）
+- 对账六面：matrix r29 行（710 → 713 + 汇总链 + 表体两行实测修正 24→28——r7 版口径漂移）/ pipeline-test-coverage v0.4.0-r29（Date r29 对账 + Tier 2 头 503 → 506 + r29 增量注记）/ plan §5b J 执行注记（r29 / 50-a 全交付）+ Status 行 / RELEASE_NOTES v0.4.0-r29 / 12-roadmap v6.4 / hm-inference-design v0.2.0；TD 登记册零事件（双缺口为当场修复——不入债）
+- git 入账（kerf 仓库）
+
+Stage Summary:
+- **48-c J2 HM 旗标期切换全交付**：kerf check 判定面 = HM 推断（D8 阶段 2 落地——PoC（r18）→ 旗标期（r29）→ 默认期（Stage 2 末评估）演进轨道第二段完成）；R1-R8 退为回归基线断言（双面检出纪律保留）；契约重定义显式登记（P0-2 兑现——零类型不一致误报口径 + occurs/自应用政策豁免 + 双向锚范围重锚）；切换实测双缺口当场修复（TD-011 同步 + car nil 检出）；**713:0:0 零回归 + 净 3**
+- 遵循：GATE 1（六命令全量实测 + 三审计集 EXIT 0 + CLI 四路径含负例生产实证）、§8.4.5/R4（文档随代码四处头注 + 双缺口以代码为准修正 + 对账六面逐面）、§6.2/R1（环境归因实测——基线 stash 对照）、§19.3（commit-then-package 正序）
+- 下一步：48-d J3 FFI VM 面做实（write_stdout char* 窗口规程步 2-4 + Alloc/FreeExternal + E0010-E0012 + §6 边界 13 case + 回写四处）→ 48-e J4 批次 J 收尾 → 批次 K 终批
+
+---
+Task ID: 50-z（r29 收尾——批次 J 执行轮）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r29 tar.gz（§19.3 commit-then-package 正序）+ 包内自举验证 + web 同步（kerf-data r29 + footer v6.9 + download README r29 节）+ root worklog 索引 + rec 树 13_r29 + l 两层
+
+Work Log:
+- 见 root worklog 50-web 条目（r25/r26/r27/r28 惯例——数字详录集中避免条目自引用漂移）
+- 打包正序：git commit 先行（含 worklog 两条目 + rec 树 13_r29 + l 两层）→ tar.gz → 包内自举验证（全新解包构建 + 713 复跑 + CLI 一致 + 包内三审计集）→ web 面
+
+Stage Summary:
+- r29 收尾交付闭环：v0.4.0-r29 包 + 包内自举 + web E2E + git 双仓库 + 树压实
