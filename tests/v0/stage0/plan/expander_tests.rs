@@ -19,21 +19,21 @@ fn expand(src: &str) -> Result<String, String> {
         .join("\n"))
 }
 
-/// 核心形式快照：let → lambda 推导（§3.2 表第 1 行）。
+/// 核心形式快照：let → fn 推导（§3.2 表第 1 行）。
 #[test]
 fn let_derives_to_lambda_app() {
     assert_eq!(
         expand("(let ((x 1) (y 2)) (+ x y))").unwrap(),
-        "((lambda (x y) (+ x y)) 1 2)"
+        "((fn (x y) (+ x y)) 1 2)"
     );
 }
 
 /// letrec 推导（§3.2 表第 2 行）。
 #[test]
 fn letrec_derives_with_setbang() {
-    let out = expand("(letrec ((f (lambda () 1))) (f))").unwrap();
-    assert!(out.starts_with("((lambda (f)"));
-    assert!(out.contains("set! f (lambda () 1)"));
+    let out = expand("(letrec ((f (fn () 1))) (f))").unwrap();
+    assert!(out.starts_with("((fn (f)"));
+    assert!(out.contains("assign f (fn () 1)"));
 }
 
 /// cond 推导（§3.2 表第 3 行）。
@@ -63,31 +63,28 @@ fn and_or_derive() {
 fn while_derives_with_fresh_loop() {
     let out = expand("(while c body)").unwrap();
     assert!(out.contains("loop$hyg$"), "loop 必须唯一化：{}", out);
-    assert!(out.contains("letrec") || out.starts_with("((lambda"));
-    assert!(out.contains("(set! loop$hyg$"));
+    assert!(out.contains("letrec") || out.starts_with("((fn"));
+    assert!(out.contains("(assign loop$hyg$"));
 }
 
-/// 函数糖：(define (f x) body) → (define f (lambda (x) body))。
+/// 函数糖：(define (f x) body) → (define f (fn (x) body))。
 #[test]
 fn define_function_sugar() {
-    assert_eq!(
-        expand("(define (f x) x)").unwrap(),
-        "(define f (lambda (x) x))"
-    );
+    assert_eq!(expand("(define (f x) x)").unwrap(), "(define f (fn (x) x))");
 }
 
 /// 内部 define 提升（§19.2 陷阱 3）。
 #[test]
 fn inner_define_hoisted_to_letrec() {
-    let out = expand("(lambda (x) (define y 2) (+ x y))").unwrap();
-    assert!(out.contains("set! y 2"), "提升结果：{}", out);
-    assert!(out.starts_with("(lambda (x) ((lambda (y)"));
+    let out = expand("(fn (x) (define y 2) (+ x y))").unwrap();
+    assert!(out.contains("assign y 2"), "提升结果：{}", out);
+    assert!(out.starts_with("(fn (x) ((fn (y)"));
 }
 
 /// 内部 define 非头部 → 显式错误。
 #[test]
 fn inner_define_after_expression_is_error() {
-    let err = expand("(lambda (x) (+ x 1) (define y 2))").unwrap_err();
+    let err = expand("(fn (x) (+ x 1) (define y 2))").unwrap_err();
     assert!(err.contains("define 必须位于函数体头部"));
 }
 
@@ -193,18 +190,18 @@ fn module_form_snapshot() {
 /// let*/when/unless 是核心形式之上的纯语法糖，推导目标可静态断言。
 #[test]
 fn derived_forms_sugar_expansion_anchors() {
-    // let* → 嵌套 lambda 应用（let 本身是 lambda 糖——01 §2 推导）
+    // let* → 嵌套 fn 应用（let 本身是 fn 糖——01 §2 推导）
     let out = expand("(let* ((a 1) (b 2)) (+ a b))").unwrap();
     assert!(
-        out.contains("(lambda (a)"),
-        "let* 外层应展开为 lambda 应用：{}",
+        out.contains("(fn (a)"),
+        "let* 外层应展开为 fn 应用：{}",
         out
     );
-    assert!(out.contains("(lambda (b)"), "let* 内层嵌套：{}", out);
-    // when → (if x (begin body…) nil)
+    assert!(out.contains("(fn (b)"), "let* 内层嵌套：{}", out);
+    // when → (if x (do body…) nil)
     let when_out = expand("(when x 1 2)").unwrap();
-    assert_eq!(when_out, "(if x (begin 1 2) nil)");
-    // unless → (if x nil (begin body…))
+    assert_eq!(when_out, "(if x (do 1 2) nil)");
+    // unless → (if x nil (do body…))
     let unless_out = expand("(unless x 1)").unwrap();
-    assert_eq!(unless_out, "(if x nil (begin 1))");
+    assert_eq!(unless_out, "(if x nil (do 1))");
 }

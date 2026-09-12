@@ -199,8 +199,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Syntax),
-        src: "(define lambda 5)",
-        expect: Expect::Err { stage: Stage::Compile, msg: "「lambda」", code: Some(20) },
+        src: "(define fn 5)",
+        expect: Expect::Err { stage: Stage::Compile, msg: "「fn」", code: Some(20) },
     },
     Case {
         id: "A05",
@@ -249,7 +249,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Syntax),
         // require 表达式子树内 → E0018 位置纪律（D3 裁定）
-        src: "(define f (lambda () (require io write)))",
+        src: "(define f (fn () (require io write)))",
         expect: Expect::Err { stage: Stage::Compile, msg: "位置", code: Some(18) },
     },
     Case {
@@ -276,7 +276,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Unbound),
         // 组合闭包：module 内 require = 需求元数据，程序头缺声明 → 增强 E0006
-        src: "(module m (require io write) (define p (lambda () (print 42)))) 42",
+        src: "(module m (require io write) (define p (fn () (print 42)))) 42",
         expect: Expect::Err { stage: Stage::Compile, msg: "io", code: Some(6) },
     },
     Case {
@@ -355,8 +355,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Syntax),
-        // 深位 begin 嵌套保留字绑定（子树递归穿透）
-        src: "(begin (define ok 1) (begin (define perform 2)))",
+        // 深位 do 嵌套保留字绑定（子树递归穿透）
+        src: "(do (define ok 1) (do (define perform 2)))",
         expect: Expect::Err { stage: Stage::Compile, msg: "「perform」", code: Some(20) },
     },
     Case {
@@ -476,7 +476,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Positive,
         class: None,
         // B1/B2 契约边界：限定名 miss→nil vs 旧名 -1 parity 并存
-        src: "(begin (print* nil))",
+        src: "(do (print* nil))",
         expect: Expect::Custom(probe_b1_b2_contract_parity),
     },
     Case {
@@ -484,8 +484,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Boundary,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Syntax),
-        // D10 深位：lambda 体 let 绑定保留字（嵌套两层）
-        src: "((lambda (n) (let ((handle n)) handle)) 1)",
+        // D10 深位：fn 体 let 绑定保留字（嵌套两层）
+        src: "((fn (n) (let ((handle n)) handle)) 1)",
         expect: Expect::Err { stage: Stage::Compile, msg: "「handle」", code: Some(20) },
     },
     // ---- P 桶：正向 sanity + E2E 全导入路径（7）----
@@ -512,7 +512,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Positive,
         class: None,
         // prelude 再导出（map/foldl 高频名非限定）+ 限定名混用
-        src: "(foldl + 0 (list/map (lambda (x) (* x x)) (list 1 2 3)))",
+        src: "(foldl + 0 (list/map (fn (x) (* x x)) (list 1 2 3)))",
         expect: Expect::Custom(probe_prelude_and_qualified_mix),
     },
     Case {
@@ -874,8 +874,7 @@ fn probe_b1_b2_contract_parity() -> CaseResult {
 
 /// P03：prelude 再导出与限定名混用（高频名非限定 + ns/name 同程序）。
 fn probe_prelude_and_qualified_mix() -> CaseResult {
-    let src =
-        "(module m (import kerf-prelude) (foldl + 0 (map (lambda (x) (* x x)) (list 1 2 3))))";
+    let src = "(module m (import kerf-prelude) (foldl + 0 (map (fn (x) (* x x)) (list 1 2 3))))";
     let a = run_source(src, FNAME);
     let b = run_source_seed(src, FNAME);
     match (a, b) {

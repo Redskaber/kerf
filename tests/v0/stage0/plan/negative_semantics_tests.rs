@@ -18,7 +18,7 @@
 //!   内部不变式防御）——文档说明，不计 case；
 //! - 嵌套 define 重复在**展开期**被体内部提升机制拒绝（TD-014 r24
 //!   修正归因：专门消息「嵌套 define 重复绑定」+ Span 指向第二次出现
-//!   处——原「lambda 参数重名」归因失真已消除），语义上等价 E6 的
+//!   处——原「fn 参数重名」归因失真已消除），语义上等价 E6 的
 //!   提前防御（§2.3-4 报错>静默）；
 //! - `(define head 5)` 影子化内置全局 → E6（内置名占据全局层，
 //!   同层重复定义约束对用户/内置统一生效）。
@@ -76,7 +76,7 @@ fn e1_truthy_requires_bool_all_types() {
         "\"s\"",
         "nil",
         "(cons 1 2)",
-        "(lambda (x) x)",
+        "(fn (x) x)",
         "(quote (1))",
     ];
     for b in bad {
@@ -85,12 +85,12 @@ fn e1_truthy_requires_bool_all_types() {
 }
 
 /// E1：truthy 严格性在嵌套位置同样生效（3 case：then/else 分支内的
-/// if 条件、begin 内 if、lambda 体内 if）。
+/// if 条件、do 内 if、fn 体内 if）。
 #[test]
 fn e1_truthy_nested_positions() {
     expect_run_err("(if true (if 1 2 3) 4)", "需要 bool");
-    expect_run_err("(begin 1 (if \"s\" 2 3))", "需要 bool");
-    expect_run_err("((lambda () (if nil 1 2)))", "需要 bool");
+    expect_run_err("(do 1 (if \"s\" 2 3))", "需要 bool");
+    expect_run_err("((fn () (if nil 1 2)))", "需要 bool");
 }
 
 // ---------------------------------------------------------------------------
@@ -100,19 +100,19 @@ fn e1_truthy_nested_positions() {
 /// E2：lambda/define 糖/闭包捕获调用元数错误（6 case）。
 #[test]
 fn e2_arity_mismatch_matrix() {
-    expect_run_err("((lambda (x) x) 1 2)", "过程参数数量不匹配：期望 1 实际 2");
-    expect_run_err("((lambda (x y) x) 1)", "过程参数数量不匹配：期望 2 实际 1");
-    expect_run_err("((lambda () 1) 9)", "过程参数数量不匹配：期望 0 实际 1");
+    expect_run_err("((fn (x) x) 1 2)", "过程参数数量不匹配：期望 1 实际 2");
+    expect_run_err("((fn (x y) x) 1)", "过程参数数量不匹配：期望 2 实际 1");
+    expect_run_err("((fn () 1) 9)", "过程参数数量不匹配：期望 0 实际 1");
     expect_run_err(
         "(define (f a b) a) (f 1)",
         "过程参数数量不匹配：期望 2 实际 1",
     );
     expect_run_err(
-        "(define (make) (lambda (x) x)) ((make) 1 2 3)",
+        "(define (make) (fn (x) x)) ((make) 1 2 3)",
         "过程参数数量不匹配：期望 1 实际 3",
     );
     expect_run_err(
-        "(define (outer x) (lambda (y) x)) ((outer 1) 2 3)",
+        "(define (outer x) (fn (y) x)) ((outer 1) 2 3)",
         "过程参数数量不匹配：期望 1 实际 2",
     );
 }
@@ -120,8 +120,8 @@ fn e2_arity_mismatch_matrix() {
 /// E2 双路径：元数错误双路径一致报错（Err 事实，4 case）。
 #[test]
 fn e2_arity_dual_path_errors() {
-    expect_dual_err("((lambda (x) x) 1 2)");
-    expect_dual_err("((lambda (x y) x) 1)");
+    expect_dual_err("((fn (x) x) 1 2)");
+    expect_dual_err("((fn (x y) x) 1)");
     expect_dual_err("(define (f) 1) (f 2)");
     expect_dual_err("(define (f a b) (+ a b)) (f 1)");
 }
@@ -137,12 +137,15 @@ fn e3_unbound_all_contexts() {
     expect_run_err("(define (f) undefined_x) (f)", "未绑定");
     expect_run_err("(define x undefined_y)", "未绑定");
     expect_run_err("(if undefined_c 1 2)", "未绑定");
-    expect_run_err("(begin undefined_b 2)", "未绑定");
-    expect_run_err("(set! undefined_s 1)", "set! 未绑定变量");
-    expect_run_err("(define (g) (set! undefined_h 1)) (g)", "set! 未绑定变量");
+    expect_run_err("(do undefined_b 2)", "未绑定");
+    expect_run_err("(assign undefined_s 1)", "assign 未绑定变量");
+    expect_run_err(
+        "(define (g) (assign undefined_h 1)) (g)",
+        "assign 未绑定变量",
+    );
     expect_run_err("(+ 1 undefined_n)", "未绑定");
     expect_run_err("(head undefined_p)", "未绑定");
-    expect_run_err("((lambda (x) undefined_q) 1)", "未绑定");
+    expect_run_err("((fn (x) undefined_q) 1)", "未绑定");
 }
 
 /// E3：宏引入标识符引用未定义全局——卫生回退只覆盖内置基名，
@@ -215,7 +218,7 @@ fn e5_builtin_error_matrix() {
 // ---------------------------------------------------------------------------
 
 /// E6：重复定义矩阵（9 case：顶层/糖形式/内置影子/nested 提前防御/
-/// begin 内/set! 后重复/不同值形态重复/define 后再糖定义）。
+/// do 内/assign 后重复/不同值形态重复/define 后再糖定义）。
 #[test]
 fn e6_duplicate_define_matrix() {
     expect_run_err("(define x 1) (define x 2)", "重复定义变量");
@@ -223,11 +226,11 @@ fn e6_duplicate_define_matrix() {
     expect_run_err("(define (f) 1) (define f 2)", "重复定义变量");
     expect_run_err("(define head 5)", "重复定义变量"); // 内置名占全局层
     expect_run_err("(define tail 5)", "重复定义变量");
-    expect_run_err("(define n 1) (set! n 5) (define n 2)", "重复定义变量");
-    expect_run_err("(begin (define b 1) (define b 2))", "重复定义变量");
+    expect_run_err("(define n 1) (assign n 5) (define n 2)", "重复定义变量");
+    expect_run_err("(do (define b 1) (define b 2))", "重复定义变量");
     // 嵌套重复：直接体 define 提升后展开期拒绝（TD-014 r24：专门消息
-    // 归因到「嵌套 define 重复绑定」——原「lambda 参数重名」失真已消除）；
-    // begin 包裹的 define：D1 修复后编译期结构化拒绝（修复前 VM 全局
+    // 归因到「嵌套 define 重复绑定」——原「fn 参数重名」失真已消除）；
+    // do 包裹的 define：D1 修复后编译期结构化拒绝（修复前 VM 全局
     // 泄漏 vs eval 词法定义——T1 反例；两路径共享 compile_source 同报 E0003）
     let lifted =
         run_source("(define (f) (define x 1) (define x 2) x) (f)", "neg.krf").expect_err("应报错");
@@ -237,11 +240,8 @@ fn e6_duplicate_define_matrix() {
         "直接体 define 重复在展开期拒绝"
     );
     assert!(lifted.rendered.contains("嵌套 define 重复绑定"));
-    let begin_wrapped = run_source(
-        "(define (f) (begin (define y 1) (define y 2))) (f)",
-        "neg.krf",
-    )
-    .expect_err("begin 包裹 define 应被编译期拒绝（D1）");
+    let begin_wrapped = run_source("(define (f) (do (define y 1) (define y 2))) (f)", "neg.krf")
+        .expect_err("do 包裹 define 应被编译期拒绝（D1）");
     assert_eq!(begin_wrapped.stage, Stage::Compile, "D1：编译期拒绝");
     assert!(
         begin_wrapped
@@ -272,14 +272,14 @@ fn e6_duplicate_define_dual_path() {
 #[test]
 fn message_shape_stage_codes_and_span() {
     let cases = [
-        ("\"unclosed", Stage::Read, "E0001"), // 词法：未闭合字符串
-        ("(define", Stage::Read, "E0001"),    // 语法：括号未闭合（Reader）
-        ("(set! )", Stage::Expand, "E0002"),  // 展开：set! 空形式
-        ("(lambda (x x) x)", Stage::Expand, "E0002"), // 形参重名（A3）
-        ("(undefined_x)", Stage::Run, "E0004"), // 运行：未绑定
+        ("\"unclosed", Stage::Read, "E0001"),     // 词法：未闭合字符串
+        ("(define", Stage::Read, "E0001"),        // 语法：括号未闭合（Reader）
+        ("(assign )", Stage::Expand, "E0002"),    // 展开：assign 空形式
+        ("(fn (x x) x)", Stage::Expand, "E0002"), // 形参重名（A3）
+        ("(undefined_x)", Stage::Run, "E0004"),   // 运行：未绑定
         ("(define x 1) (define x 2)", Stage::Run, "E0004"), // E6
-        ("(+ 1 \"s\")", Stage::Run, "E0004"), // E5/E1 载体
-        ("(1 2)", Stage::Run, "E0004"),       // E4
+        ("(+ 1 \"s\")", Stage::Run, "E0004"),     // E5/E1 载体
+        ("(1 2)", Stage::Run, "E0004"),           // E4
     ];
     for (src, stage, code) in cases {
         let err = run_source(src, "shape.krf")
@@ -354,8 +354,8 @@ fn message_shape_call_site_trace() {
         deep_notes
     );
     assert!(deep_notes > 0, "帧上限错误应至少含 1 个调用点");
-    // set! 未绑定 + 调用点
-    let setb = run_source("(define (g) (set! y 1)) (g)", "t.krf")
+    // assign 未绑定 + 调用点
+    let setb = run_source("(define (g) (assign y 1)) (g)", "t.krf")
         .err()
         .unwrap();
     assert!(setb.rendered.contains("note: 调用点"));
@@ -381,8 +381,8 @@ fn t1_regression_global_storage_semantics() {
     assert!(dual_path_agrees("(define x (+ 2 3)) x"));
     // 重复定义 E6（修复前双路径均静默覆盖）
     assert!(dual_path_agrees("(define x 1) (define x 2)"));
-    // set! 未绑定 E3（修复前 VM 静默创建全局）
-    assert!(dual_path_agrees("(set! y 1)"));
+    // assign 未绑定 E3（修复前 VM 静默创建全局）
+    assert!(dual_path_agrees("(assign y 1)"));
 }
 
 /// T1 回归：App 求值顺序（06 §2 A1 函数先——Task 16 修复面，5 case）。
@@ -422,7 +422,7 @@ fn t1_regression_hygiene_fallback_dual_path() {
     // 卫生宏主体：宏内外同名不串扰（swap 语义正例——负例文件中的
     // 唯一正向锚，保证卫生回退未破坏正常宏语义）
     assert!(dual_path_agrees(
-        "(define-syntax swap! (syntax-rules () ((swap! x y) (let ((tmp x)) (set! x y) (set! y tmp)))))
+        "(define-syntax swap! (syntax-rules () ((swap! x y) (let ((tmp x)) (assign x y) (assign y tmp)))))
          (define p 1) (define q 2) (swap! p q) (- p q)"
     ));
 }
@@ -434,14 +434,14 @@ fn t1_regression_hygiene_fallback_dual_path() {
 /// 作用域负例：词法作用域/闭包捕获错误形态（5 case）。
 #[test]
 fn scope_closure_negatives() {
-    // lambda 内 set! 未捕获的外层未定义变量
-    expect_run_err("(define (g) (set! outer 1)) (g)", "set! 未绑定变量");
+    // fn 内 assign 未捕获的外层未定义变量
+    expect_run_err("(define (g) (assign outer 1)) (g)", "assign 未绑定变量");
     // 闭包体内引用未绑定（捕获链查不到）
-    expect_run_err("((lambda () nope))", "未绑定");
+    expect_run_err("((fn () nope))", "未绑定");
     // 形参遮蔽后引用外层同名的未绑定（词法作用域边界）
     expect_run_err("(define (f x) (+ x y)) (f 1)", "未绑定");
-    // begin 内局部定义后引用另一未定义
-    expect_run_err("(begin (define a 1) b)", "未绑定");
+    // do 内局部定义后引用另一未定义
+    expect_run_err("(do (define a 1) b)", "未绑定");
     // TD-002 解除后符号 datum 为合法符号值——负向锚点转为值消费端：
     // 符号值参与算术在两路径均报 E0004（双路径一致负例）
     let vm_err = run_source("(+ 'x 1)", "q.krf").expect_err("符号算术应报错（VM）");
@@ -460,8 +460,8 @@ fn scope_closure_negatives() {
 /// §8.7 的 Stage 1 演进项，TD-013）。
 #[test]
 fn error_recovery_single_error_semantics() {
-    // begin 中段错误：后续形式不求值（错误即吸收——E0）
-    let err = run_source("(begin 1 (head 5) 2)", "r.krf").err().unwrap();
+    // do 中段错误：后续形式不求值（错误即吸收——E0）
+    let err = run_source("(do 1 (head 5) 2)", "r.krf").err().unwrap();
     assert_eq!(err.stage, Stage::Run);
     assert!(err.rendered.contains("head 需要 pair"));
     // 首个错误优先（前错遮蔽后错）
@@ -472,7 +472,7 @@ fn error_recovery_single_error_semantics() {
         first.rendered
     );
     // 展开期错误阻断编译（后续好形式不出现在诊断）
-    let exp = run_source("(lambda (x x) x) (define good 1)", "r.krf")
+    let exp = run_source("(fn (x x) x) (define good 1)", "r.krf")
         .err()
         .unwrap();
     assert_eq!(exp.stage, Stage::Expand);
@@ -488,7 +488,7 @@ fn error_recovery_no_panics_structured() {
         "(head nil)",
         "(/ 1 0)",
         "(define x 1) (define x 1)",
-        "((lambda (x) x) 1 2 3 4 5)",
+        "((fn (x) x) 1 2 3 4 5)",
     ] {
         // 返回 Err（而非 panic/abort）即为结构化恢复
         let r = run_source(src, "s.krf");
@@ -569,8 +569,8 @@ fn d7_eval_error_fidelity() {
 /// 修复前：`inc$hyg$N` 两路径均未绑定报错（变换器表查不到重命名符号）。
 #[test]
 fn d6_macro_calls_macro_hygiene_fallback() {
-    let src = "(define-syntax inc (syntax-rules () ((inc v) (set! v (+ v 1)))))
-         (define-syntax twice! (syntax-rules () ((twice! e) (begin (inc e) (inc e)))))
+    let src = "(define-syntax inc (syntax-rules () ((inc v) (assign v (+ v 1)))))
+         (define-syntax twice! (syntax-rules () ((twice! e) (do (inc e) (inc e)))))
          (define x 40) (twice! x) x";
     // 两路径一致 ⇒ 42
     let vm = common::run(src).expect("VM 路径应 Ok");

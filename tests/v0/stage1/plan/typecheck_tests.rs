@@ -122,7 +122,7 @@ fn dynamic_programs_clean() {
     expect_clean("(define (head x) 42) (head 5)");
     // set!/begin/if 分支混合
     expect_clean(
-        "(require io write) (define x 1) (set! x (+ x 1)) (begin (print x) (if (is-nil nil) x 2))",
+        "(require io write) (define x 1) (assign x (+ x 1)) (do (print x) (if (is-nil nil) x 2))",
     );
     // 谓词结果作 if 条件（结果类型 Bool 推断）
     expect_clean("(if (is-nil nil) 1 2)");
@@ -161,10 +161,7 @@ fn r1_if_condition_non_bool() {
     expect_diag("(if 'sym 2 3)", "if 条件需要 bool，实际 symbol");
     expect_diag("(if (cons 1 2) 2 3)", "if 条件需要 bool，实际 (int . int)");
     expect_diag("(if '(1) 2 3)", "if 条件需要 bool，实际 (int . nil)");
-    expect_diag(
-        "(if (lambda (x) x) 2 3)",
-        "if 条件需要 bool，实际 (α0 → α0)",
-    );
+    expect_diag("(if (fn (x) x) 2 3)", "if 条件需要 bool，实际 (α0 → α0)");
     // 静态确定性反向锚：运行期确实失败
     static_error_is_runtime_error("(if 1 2 3)");
     static_error_is_runtime_error("(if \"s\" 2 3)");
@@ -285,16 +282,16 @@ fn r6_not_callable() {
 }
 
 // ---------------------------------------------------------------------------
-// R7：元数不匹配（字面量 lambda / 内置签名）
+// R7：元数不匹配（字面量 fn / 内置签名）
 // ---------------------------------------------------------------------------
 
-/// R7 字面量 lambda 元数（3 case）。
+/// R7 字面量 fn 元数（3 case）。
 #[test]
 fn r7_lambda_arity() {
-    expect_diag("((lambda (x) x) 1 2)", "过程参数数量不匹配：期望 1 实际 2");
-    expect_diag("((lambda (x y) x) 1)", "过程参数数量不匹配：期望 2 实际 1");
-    expect_diag("((lambda () 1) 5)", "过程参数数量不匹配：期望 0 实际 1");
-    static_error_is_runtime_error("((lambda (x) x) 1 2)");
+    expect_diag("((fn (x) x) 1 2)", "过程参数数量不匹配：期望 1 实际 2");
+    expect_diag("((fn (x y) x) 1)", "过程参数数量不匹配：期望 2 实际 1");
+    expect_diag("((fn () 1) 5)", "过程参数数量不匹配：期望 0 实际 1");
+    static_error_is_runtime_error("((fn (x) x) 1 2)");
 }
 
 /// R7 内置元数（5 case——与运行时元数守卫口径一致；旗标期 r29/50-a
@@ -459,7 +456,7 @@ fn deep_nesting_stack_safe() {
 // ---------------------------------------------------------------------------
 
 /// HM 增值面经生产入口检出（R1-R8 静默放过的约束传播检出——判定面
-/// 切换的直接证据；缺口四类之一①：用户 lambda 实参类型错）。
+/// 切换的直接证据；缺口四类之一①：用户 fn 实参类型错）。
 #[test]
 fn flag_period_hm_value_added_via_production() {
     // R1-R8 面：f 的参数 Unknown → (+ x 1) 与 (f "s") 均静默；

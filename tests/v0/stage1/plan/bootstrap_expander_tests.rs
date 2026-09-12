@@ -173,11 +173,15 @@ fn core_equiv(
             },
         ) => {
             if ta.name(*x) != tb.name(*y) {
-                return Err(format!("set! 名不一致：{} vs {}", ta.name(*x), tb.name(*y)));
+                return Err(format!(
+                    "assign 名不一致：{} vs {}",
+                    ta.name(*x),
+                    tb.name(*y)
+                ));
             }
             if sx != sy {
                 return Err(format!(
-                    "set!「{}」作用域集不一致：{:?} vs {:?}",
+                    "assign「{}」作用域集不一致：{:?} vs {:?}",
                     ta.name(*x),
                     sx.iter().collect::<Vec<_>>(),
                     sy.iter().collect::<Vec<_>>()
@@ -203,7 +207,7 @@ fn core_equiv(
             core_equiv(vx, ta, vy, tb).map_err(|e| format!("[value]: {}", e))
         }
         (CoreExpr::Begin { body: x, .. }, CoreExpr::Begin { body: y, .. }) => {
-            seq_equiv(x, ta, y, tb, "begin")
+            seq_equiv(x, ta, y, tb, "do")
         }
         (
             CoreExpr::Module {
@@ -367,22 +371,22 @@ fn parity_symbol_ref_empty_scopes() {
 
 #[test]
 fn parity_lambda_nested_scopes() {
-    // r13 fresh-scope 注入 parity：嵌套 lambda 的 param_scopes 与体内
+    // r13 fresh-scope 注入 parity：嵌套 fn 的 param_scopes 与体内
     // VarRef 作用域集逐集一致
-    parity("((lambda (x) (+ x 1)) 41)");
-    parity("(lambda (x) (lambda (y) (+ x y)))");
-    parity("(lambda (x) (lambda (x) x))");
+    parity("((fn (x) (+ x 1)) 41)");
+    parity("(fn (x) (fn (y) (+ x y)))");
+    parity("(fn (x) (fn (x) x))");
 }
 
 #[test]
 fn parity_if_setbang_define_begin() {
     parity("(if x 1 2)");
     parity("(if x 1)");
-    parity("(set! x 5)");
+    parity("(assign x 5)");
     parity("(define x 5)");
     parity("(define (f x) (* x x))");
-    parity("(begin 1 2 3)");
-    parity("(begin)");
+    parity("(do 1 2 3)");
+    parity("(do)");
 }
 
 #[test]
@@ -399,7 +403,7 @@ fn parity_quote() {
 #[test]
 fn parity_sugar_let_family() {
     parity("(let ((x 1) (y 2)) (+ x y))");
-    parity("(letrec ((f (lambda () 1))) (f))");
+    parity("(letrec ((f (fn () 1))) (f))");
     parity("(let* ((x 1) (y (+ x 1))) (+ x y))");
     parity("(let* () 7)");
 }
@@ -421,7 +425,7 @@ fn parity_sugar_when_unless_while() {
     parity("(when c 1 2)");
     parity("(unless c 1)");
     // while：loop$hyg$1 唯一化名（HygieneCtx 每次实例化计数重置的镜像）
-    parity("(while (< i 10) (set! i (+ i 1)))");
+    parity("(while (< i 10) (assign i (+ i 1)))");
 }
 
 // ---- 正例 parity：module/require/内部 define 提升 ----
@@ -437,8 +441,8 @@ fn parity_module_require() {
 #[test]
 fn parity_inner_define_hoisting() {
     // 提升路径：构造节点 ∅ 作用域 + hoisted fresh scope（r13 语义）
-    parity("(lambda (x) (define y 2) (+ x y))");
-    parity("(lambda (x) (define y 2) (define z 3) (+ x (+ y z)))");
+    parity("(fn (x) (define y 2) (+ x y))");
+    parity("(fn (x) (define y 2) (define z 3) (+ x (+ y z)))");
     parity("(define (f x) (define (g y) (+ x y)) (g 1))");
 }
 
@@ -449,26 +453,26 @@ fn parity_err_core_forms() {
     parity_err("()");
     parity_err("(if)");
     parity_err("(if 1 2 3 4)");
-    parity_err("(set! 1 2)");
-    parity_err("(set! x)");
-    parity_err("(lambda x 1)");
-    parity_err("(lambda (1) 1)");
-    parity_err("(lambda (x x) 1)");
+    parity_err("(assign 1 2)");
+    parity_err("(assign x)");
+    parity_err("(fn x 1)");
+    parity_err("(fn (1) 1)");
+    parity_err("(fn (x x) 1)");
     parity_err("(define)");
     parity_err("(define (1 x) 1)");
     parity_err("(define x 1 2)");
-    parity_err("(lambda (x) (+ x 1) (define y 2))");
+    parity_err("(fn (x) (+ x 1) (define y 2))");
     // TD-014（r24）：嵌套 define 重名——专门消息 + 第二次出现处 Span 双路径一致
-    parity_err("(lambda () (define x 1) (define x 2))");
-    parity_err("(lambda (a) (define b 1) (define c 2) (define b 3))");
+    parity_err("(fn () (define x 1) (define x 2))");
+    parity_err("(fn (a) (define b 1) (define c 2) (define b 3))");
 }
 
 #[test]
 fn parity_err_hoisting_paths() {
     // 提升路径错误（切分期名校验 / 值校验——提升路径短消息口径）
-    parity_err("(lambda (x) (define) 1)");
-    parity_err("(lambda (x) (define x 1 2) x)");
-    parity_err("(lambda (x) (define 1 2) x)");
+    parity_err("(fn (x) (define) 1)");
+    parity_err("(fn (x) (define x 1 2) x)");
+    parity_err("(fn (x) (define 1 2) x)");
 }
 
 #[test]
@@ -525,7 +529,7 @@ fn parity_macro_hygiene_renames_introduced() {
         r"(define-syntax swap!
                  (syntax-rules ()
                    ((swap! a b)
-                    (begin (set! tmp a) (set! a b) (set! b tmp)))))
+                    (do (assign tmp a) (assign a b) (assign b tmp)))))
                (let ((tmp 1) (x 2)) (swap! tmp x))",
     );
     // 同一模板多个引入标识符 → 计数器单调（tmp$hyg$1 / other$hyg$2）
@@ -645,23 +649,23 @@ fn parity_err_macro_pattern_shape_mismatch() {
 
 #[test]
 fn behavior_arith_and_closures() {
-    behavior("((lambda (x) (+ x 1)) 41)");
+    behavior("((fn (x) (+ x 1)) 41)");
     behavior("(let ((x 1) (y 2)) (+ x y))");
-    behavior("(letrec ((f (lambda () 1))) (f))");
+    behavior("(letrec ((f (fn () 1))) (f))");
     behavior("(let* ((x 1) (y (+ x 1))) (+ x y))");
 }
 
 #[test]
 fn behavior_cond_while_fib() {
     behavior("(cond (false 1) (true 2) (else 3))");
-    behavior("(define i 0) (while (< i 10) (set! i (+ i 1))) i");
+    behavior("(define i 0) (while (< i 10) (assign i (+ i 1))) i");
     behavior("(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 10)");
 }
 
 #[test]
 fn behavior_inner_define_and_shadowing() {
     behavior("(define (f x) (define (g y) (+ x y)) (g 1)) (f 5)");
-    behavior("(define x 10) ((lambda (x) x) 20)");
+    behavior("(define x 10) ((fn (x) x) 20)");
 }
 
 #[test]
@@ -673,9 +677,9 @@ fn behavior_macro_swap_runtime() {
                   (syntax-rules ()
                     ((swap! a b)
                      (let ((tmp a))
-                       (begin (set! a b) (set! b tmp))))))
+                       (do (assign a b) (assign b tmp))))))
                 (define x 1) (define y 2)
-                (begin (swap! x y) (- x y))",
+                (do (swap! x y) (- x y))",
     );
 }
 

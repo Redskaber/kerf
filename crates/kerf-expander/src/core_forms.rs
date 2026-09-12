@@ -2,7 +2,7 @@
 //!
 //! 职责边界（sop.md §11 接口隔离）：
 //! - **本模块**：关键字查表后的纯结构分派与 9 核心形式实现
-//!   （lambda/if/set!/define/begin/module/quote/define-syntax + import/export
+//!   （fn/if/assign/define/do/module/quote/define-syntax + import/export
 //!   位置校验）+ 函数体 define 提升路径；
 //! - `expander`（主控）：入口分派（宏 → 糖 → 核心形式 → 函数应用）与
 //!   公共类型（`ExpandCtxt`/`ExpandError`）；
@@ -82,10 +82,7 @@ fn expand_lambda(
     ctx: &mut ExpandCtxt,
 ) -> Result<Rc<CoreExpr>, ExpandError> {
     if items.len() < 3 {
-        return Err(ExpandError::new(
-            "lambda 形式：(lambda (参数...) 体...)",
-            stx.span,
-        ));
+        return Err(ExpandError::new("fn 形式：(fn (参数...) 体...)", stx.span));
     }
     // TD-004/r13（Racket 集合作用域）：绑定形式分配 fresh scope 并深注入
     // 绑定器与全体体形式——体内引用因此携带绑定作用域，供编译器/eval
@@ -114,7 +111,7 @@ fn parse_params(param_stx: &Stx) -> Result<Vec<(kerf_syntax::Symbol, ScopeSet)>,
     let list = param_stx
         .datum
         .as_list()
-        .ok_or_else(|| ExpandError::new("lambda 参数必须是符号列表", param_stx.span))?;
+        .ok_or_else(|| ExpandError::new("fn 参数必须是符号列表", param_stx.span))?;
     let mut params = Vec::with_capacity(list.len());
     for p in list {
         match p.datum.as_symbol() {
@@ -126,7 +123,7 @@ fn parse_params(param_stx: &Stx) -> Result<Vec<(kerf_syntax::Symbol, ScopeSet)>,
                     .any(|(n, _): &(kerf_syntax::Symbol, ScopeSet)| *n == s)
                 {
                     return Err(ExpandError::new(
-                        "lambda 参数重名（同名形参只允许出现一次）",
+                        "fn 参数重名（同名形参只允许出现一次）",
                         p.span,
                     ));
                 }
@@ -135,7 +132,7 @@ fn parse_params(param_stx: &Stx) -> Result<Vec<(kerf_syntax::Symbol, ScopeSet)>,
             }
             None => {
                 return Err(ExpandError::new(
-                    "lambda 参数必须是符号（不支持解构参数）",
+                    "fn 参数必须是符号（不支持解构参数）",
                     p.span,
                 ))
             }
@@ -260,12 +257,12 @@ fn expand_setbang(
     ctx: &mut ExpandCtxt,
 ) -> Result<Rc<CoreExpr>, ExpandError> {
     if items.len() != 3 {
-        return Err(ExpandError::new("set! 形式：(set! 名 值)", stx.span));
+        return Err(ExpandError::new("assign 形式：(assign 名 值)", stx.span));
     }
     let name = items[1]
         .datum
         .as_symbol()
-        .ok_or_else(|| ExpandError::new("set! 目标必须是符号", items[1].span))?;
+        .ok_or_else(|| ExpandError::new("assign 目标必须是符号", items[1].span))?;
     let value = expand_form(&items[2], ctx)?;
     Ok(Rc::new(CoreExpr::SetBang {
         name,

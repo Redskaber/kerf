@@ -75,7 +75,7 @@
 (define ID-EXTRA
   (list "_" "!" "$" "%" "&" "?" "+" "-" "*" "/" "<" ">" "="))
 (define KEYWORDS
-  (list "lambda" "if" "set!" "define" "begin" "module" "import" "export"
+  (list "fn" "if" "assign" "define" "do" "module" "import" "export"
         "quote" "let" "letrec" "let*" "cond" "else" "and" "or" "when"
         "while" "unless" "define-syntax" "syntax-rules" "require"))
 (define OPERATORS

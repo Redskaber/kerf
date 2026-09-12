@@ -235,7 +235,7 @@ const EFFECT_GOLDEN: &str =
 
 /// E0008 变体（r1 DOUBLE_RESUME 形态变体——算术恢复 + 外部二次恢复）。
 const RESUME_THEN_OUTER_DOUBLE: &str =
-    "(define kk nil) (handle tag2 ((p k) (begin (set! kk k) (resume k (* p 2)))) (perform (cons 'tag2 21))) (kk 1)";
+    "(define kk nil) (handle tag2 ((p k) (do (assign kk k) (resume k (* p 2)))) (perform (cons 'tag2 21))) (kk 1)";
 
 /// E0007 深递归 + 分配压力（tag 不匹配逃逸——GC 压力 × 效应链）。
 const DEEP_EFFECT_ESCAPE: &str =
@@ -316,8 +316,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        // 用户 lambda 实参类型错（hm 缺口 ①——r18 面的旗标期复验）
-        src: "((lambda (x) (+ x 1)) \"foo\")",
+        // 用户 fn 实参类型错（hm 缺口 ①——r18 面的旗标期复验）
+        src: "((fn (x) (+ x 1)) \"foo\")",
         expect: Expect::StaticErr { msg: "需要数值，实际 str", min_diags: 1 },
     },
     Case {
@@ -456,7 +456,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Unbound),
-        // 函数体内未绑定（调用期归因——r1 C08 为宏展开面 set!）
+        // 函数体内未绑定（调用期归因——r1 C08 为宏展开面 assign）
         src: "(define (f) (+ ghost 1)) (f)",
         expect: Expect::Err { stage: Stage::Run, msg: "未绑定", code: None },
     },
@@ -602,7 +602,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Positive,
         class: None,
         // prelude 管道金路径（foldr 形态——r1 P 桶为 foldl 形态）
-        src: "(module user (import kerf-prelude) (define lst (list 2 3 4)) (foldr + 0 (map (lambda (x) (* x x)) (filter (lambda (x) (> x 2)) lst))))",
+        src: "(module user (import kerf-prelude) (define lst (list 2 3 4)) (foldr + 0 (map (fn (x) (* x x)) (filter (fn (x) (> x 2)) lst))))",
         expect: Expect::OkDual("25"),
     },
     Case {

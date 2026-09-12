@@ -17,7 +17,7 @@ fn million_temp_objects_heap_stays_bounded() {
         (define (spin n)
           (if (= n 0)
               0
-              (begin
+              (do
                 (cons 1 2) (cons 3 4) (cons 5 6) (cons 7 8) (cons 9 10)
                 (cons 11 12) (cons 13 14) (cons 15 16) (cons 17 18) (cons 19 20)
                 (cons 21 22) (cons 23 24) (cons 25 26) (cons 27 28) (cons 29 30)
@@ -43,7 +43,7 @@ fn live_data_survives_collections() {
     let src = r#"
         (define keep (quote (1 2 3 4 5)))
         (define (spin n)
-          (if (= n 0) 0 (begin (cons 9 9) (cons 9 9) (cons 9 9) (cons 9 9) (cons 9 9) (spin (- n 1)))))
+          (if (= n 0) 0 (do (cons 9 9) (cons 9 9) (cons 9 9) (cons 9 9) (cons 9 9) (spin (- n 1)))))
         (spin 50000)
         (head (tail (tail (tail (tail keep)))))
     "#;
@@ -54,10 +54,10 @@ fn live_data_survives_collections() {
 #[test]
 fn closure_captured_data_survives_gc() {
     let src = r#"
-        (define (make-holder v) (lambda () v))
+        (define (make-holder v) (fn () v))
         (define h (make-holder (quote (7 8))))
         (define (spin n)
-          (if (= n 0) 0 (begin (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (spin (- n 1)))))
+          (if (= n 0) 0 (do (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (spin (- n 1)))))
         (spin 50000)
         (head (h))
     "#;
@@ -113,10 +113,10 @@ fn gc_stats_observable() {
 #[test]
 fn boxed_closure_captures_survive_gc() {
     let src = r#"
-        (define (make-box) (let ((cell (cons 42 nil))) (lambda () (head cell))))
+        (define (make-box) (let ((cell (cons 42 nil))) (fn () (head cell))))
         (define holder (cons (make-box) nil))
         (define (spin n)
-          (if (= n 0) 0 (begin (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (spin (- n 1)))))
+          (if (= n 0) 0 (do (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (spin (- n 1)))))
         (spin 50000)
         ((head holder))
     "#;
@@ -131,17 +131,17 @@ fn boxed_closure_captures_survive_gc() {
 #[test]
 fn boxed_closure_trace_transitive_pairs() {
     let src = r#"
-        (define (make-get) (let ((p (cons 40 (cons 2 nil)))) (lambda (x) (+ x (head p)))))
+        (define (make-get) (let ((p (cons 40 (cons 2 nil)))) (fn (x) (+ x (head p)))))
         (define holder (list (make-get)))
         (define (spin n)
-          (if (= n 0) 0 (begin (cons 2 2) (cons 2 2) (cons 2 2) (cons 2 2) (cons 2 2) (spin (- n 1)))))
+          (if (= n 0) 0 (do (cons 2 2) (cons 2 2) (cons 2 2) (cons 2 2) (cons 2 2) (spin (- n 1)))))
         (spin 50000)
         ((head holder) 0)
     "#;
     common::assert_int(src, 40);
 }
 
-/// TD-023（r24）：GcCell 堆根性摘要的**写路径 sound 不变式**——set!
+/// TD-023（r24）：GcCell 堆根性摘要的**写路径 sound 不变式**——assign
 /// 将 Pair 写入捕获单元后标志必须翻转（否则该 Pair 仅经闭包捕获链
 /// 可达，根扫描按标志跳过 → 误回收 → 悬垂读）。box 初值 nil（flag
 /// false）→ init 写 Pair（flag true）→ GC 压力 → 读回 42。
@@ -150,14 +150,14 @@ fn gc_cell_flag_flips_on_pair_write() {
     let src = r#"
         (define (make)
           (let ((box nil))
-            (lambda (cmd)
+            (fn (cmd)
               (if (eq cmd (quote init))
-                  (set! box (list 42))
+                  (assign box (list 42))
                   (head box)))))
         (define f (make))
         (f (quote init))
         (define (spin n)
-          (if (= n 0) 0 (begin (cons 1 2) (cons 3 4) (spin (- n 1)))))
+          (if (= n 0) 0 (do (cons 1 2) (cons 3 4) (spin (- n 1)))))
         (spin 50000)
         (f (quote read))
     "#;

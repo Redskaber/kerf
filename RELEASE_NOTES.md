@@ -1,3 +1,25 @@
+## v0.10.0-r43（2026-09-16）——E5 S2 关键字腿：关键字完全重筛深审（D19-D33）+ 三件切换 fn/assign/do + E0021 扩展（64-a/64-b/64-c/64-e/64-z/64-web——用户指令「内部关键字与候选衍生关键字的完全重新筛选——语义清晰/无二义/标准符合 + 2026 前沿 + 内循环迭代收敛」+「按 sop.md 继续推进」+「同步完整打包 tar.gz 与 web page」）
+
+### 交付零：关键字完全重筛深审轮（64-a/64-b/64-c——22 §12 D19-D33 + 八查询实证）
+- **全 24 文档七维度第三轮扫描**（r40 D1-D9 + r41 D10-D18 后第三轮——含新增**关键字语义面**维度）：六维既有收敛维持 + 关键字语义面首轮深审——25 名全量三判定（J-1 语义清晰 / J-2 无二义[含**名空间经济**新判据——E0020 严格保留字启用后首次完整适用] / J-3 2026 跨家族标准符合）
+- **两处 P2 候选修正**（判据驱动非先例驱动）：①`set!→assign`（**否决原候选 set**——名空间经济：set 是集合构造 2026 生态标配名[Clojure/Python/Kotlin]——E0020 全域排他将永久禁标准库 set 注册 + assign 精确对应 assignment）②`begin→do`（**否决原候选 seq**——Clojure seq 序列生态核心名占用 + do 与 Scheme begin 完全同义[Clojure 现代化先例] + 动词化[原则 29]）；`lambda→fn` 维持原候选强化（Rust/Janet/Gleam 三家族 2026 共识 + 形态同构 + 2 字符 + 低频标识符占用近零）；其余 22 名维持裁定（D22-D27 全表——每名 ≥2 实证源）；4 项 P3/登记项如实入册（let\* 平行/顺序频率倒挂[语义冻结无通道] / require Clojure 撞名 / when Kotlin 异形 / else 数据位结构登记）
+- **衍生关键字 S3 形态名一致性对账**（D30——原则 31）：fn↔Fn 对齐（S3 重命名族）/ assign↔SetBang 分离合法（S3 裁定不迁——D5 受控维持）/ do↔Begin→Let 分离合法（脱糖链解耦）；**否决记录表八行保留**（fun/func/mut/match/macro/continue 备选否决判据入册——原则 35「否决与采纳同等一等」）；`/` 分隔符与 (op args...) 操作位统一零交互复审（D32/D33——r40+r41+r43 三轮收敛证明）
+- 知识搜索八查询实证（tool-results/r43-search/：fn 四形态对比 / Clojure do-begin 同义 / `!` 标记 SE / 保留字占用 / OCaml5-Koka-Eff perform-resume / Janet-Gleam 现代 Lisp / **Clojure seq 生态占用** / **Clojure set 构造占用**——D20/D21 否决的决定性证据）
+
+### 交付一：S2 关键字腿实施（64-e——§3.2 六命令 + 832:0:0）
+- **三件切换**：`lambda→fn`/`set!→assign`/`begin→do`（Keyword::as_str + from_name 双向单源——变体名 Lambda/SetBang/Begin 不变[原则 31 表面/内部分离]；expander WORD\* 词表经 keyword_symbol 派生自动跟随；E0020 禁绑面 25 名计数不变——三名出三名入）
+- **E0021 扩展至关键字旧名**（22 §12 D29）：`REMOVED_KEYWORD_NAMES` 3 对表 + driver VarRef 臂分源检查（消息分源——内置旧名维持 S1 文案[27 负例组断言锚] + 关键字旧形新文案「关键字已切换——现代形式」）；**接管豁免同口径**（用户 `(define lambda 5)` 后 lambda 为合法用户变量——退役的是 N4 关键字面非 N0 符号宇宙层）；CLI 端到端 REAL_EXIT 1 ×3 形态
+- **渲染面跟随表面**（r42 `#<builtin:head>` 先例）：CoreExpr::render 三 format 串（fn/assign/do——kind_name 内部 ADT 名维持[S3 腿才改]）+ 魔法符号 `<lambda>`→`<fn>`（匿名 fn 原型渲染）+ core_forms/anf/vm 用户可见消息面六处 + driver E0020/W1002 消息（「fn 参数」）
+- **三域分离实录**（R1 开发实录——本轮最重要实施发现）：`begin`/`lambda` 在语料中存在**三个命名域**——①表面关键字域（源码形式头——切换 ✓）②**自举桥 tag 域**（bootstrap\_compiler/bootstrap\_expander + compiler.krf `(eq tag "lambda"/"set"/"begin")`——CoreExpr 值序列化标签，`"set"` 无 `!` 即其独立证据——**零变更**[tag 与 .krf 侧解析精确匹配是自举链生命线]）③**core 节点 quote 符号域**（expander.krf `(list 'lambda ...)`——展开产物 tag——零变更）；误伤两次均当场发现修复（全局词边界替换的 IDCH 排除集把 `begin/` 中文斜杠语境排除 + cfg(test) 文件中位结构陷阱——**教训入 worklog**）
+- **全语料迁移 800+ 处**：引导 .krf ×4（compiler 120 + expander 92 + reader 3 + preamble 0）+ tests 578 + examples + audits——词法边界替换（IDCH 负向先行防 `set!x` 类标识符误伤）；语料终态 grep 实证（残留 = tag 域 + E0021 负例测试数据 + 内部名注释——全部合法）
+- **s2 负例组 4 case**（namespace_tests：E0021 三旧形四形态[操作位/值位/携新形指引] + 接管豁免[define lambda 合法值 5] + E0020 新名禁绑四形态 + 门 A 行为 parity[fn/assign/do 运行值断言——表面/内部分离原则 31 的行为面验证]）
+- §3.2 六命令 clean 起步全绿（build 14.00s 零告警 / check 0 / fmt 0 diff / clippy -D warnings 0 / **test 832:0:0**[828 基线 + s2 组 4 净增]）+ 五审计集 EXIT 0 ×5 + CLI 四路径 + E0021/W1003 端到端 + 双 Reader 同核行为面
+- 对账：22 v1.6（§12 D19-D33 + 三判定表 + 否决记录表 + 收敛证明）/ 01 v6.2 注记（§7.2 表面候选确认）/ 02 v6.4（Keyword 25 名文字）/ 20 v1.5 注记（S2 行 ✅）/ 18 v6.7 扩展（E0021 关键字旧名行）/ e5-plan v1.1（S2 载荷修正 + §4.2 否决记录）/ matrix v0.1.0-r43 / pipeline r43 / 23（E5 S2 行 ✅）/ v0.5-roadmap
+
+- **里程碑：E5 S2 关键字腿交付——1970 表面清算第二腿（N4 关键字面现代形唯一）；下一步 E5 S3 ADT 腿（Define 脱糖/Begin→Let 链/Module 层级迁移/重命名族/de Bruijn IR 层——字节码 parity 最严口径）→ S4 收口（非正交点 3→≤1）**
+
+---
+
 ## v0.9.0-r42（2026-09-15）——E5 窗开启 + 移除轮 S1 表面腿：旧名 27 件退役 + E0021 + W1003（63-a/63-b/63-z/63-web——用户指令「按 sop.md 继续推进任务」+「同步完整打包 tar.gz 与同步完整更新 web page」）
 
 ### 交付零：E5 开窗设计轮（63-a——入口信号四核对 + parity 链保护方案）

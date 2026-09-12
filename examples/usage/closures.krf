@@ -2,8 +2,8 @@
 (require io write)
 (define (make-counter)
   (let ((n 0))
-    (lambda ()
-      (set! n (+ n 1))
+    (fn ()
+      (assign n (+ n 1))
       n)))
 (define a (make-counter))
 (define b (make-counter))
@@ -11,6 +11,6 @@
 (b)
 (print (list (a) (b)))   ; ⇒ (4 2)：a 计数 4、b 独立计数 2
 (define (make-adder n)
-  (lambda (x) (+ x n)))
+  (fn (x) (+ x n)))
 (define add5 (make-adder 5))
 (add5 37)

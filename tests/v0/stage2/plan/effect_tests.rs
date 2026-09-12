@@ -42,10 +42,10 @@ fn effect_pure_body_no_effect() {
 /// 可见（continuation 三要素②：挂起点环境）。
 #[test]
 fn effect_resume_env_consistency() {
-    // 挂起前 set! x=1；handler 恢复后 set! x=100——B 帧局部槽共享
+    // 挂起前 assign x=1；handler 恢复后 assign x=100——B 帧局部槽共享
     //（快照 clone 的是 Rc<GcCell>——同一单元格）：恢复体读 x=100
     assert_int(
-        "(define (f) (define x 1) (+ (handle t ((p k) (resume k 0)) (begin (set! x 100) (perform (cons 't 0)) x)) x)) (f)",
+        "(define (f) (define x 1) (+ (handle t ((p k) (resume k 0)) (do (assign x 100) (perform (cons 't 0)) x)) x)) (f)",
         200,
     );
 }
@@ -55,7 +55,7 @@ fn effect_resume_env_consistency() {
 #[test]
 fn effect_value_eval_order() {
     assert_int(
-        "(define n 0) (define (bump) (begin (set! n (+ n 1)) n)) (handle t ((p k) (resume k (+ p n))) (+ 0 (perform (cons 't (bump)))))",
+        "(define n 0) (define (bump) (do (assign n (+ n 1)) n)) (handle t ((p k) (resume k (+ p n))) (+ 0 (perform (cons 't (bump)))))",
         2,
     );
     // n 在 perform 前已 bump 为 1；handler p=1（payload=(t . 1)）→
@@ -88,7 +88,7 @@ fn effect_dual_path_behaviors() {
         // 纯体
         "(handle t ((p k) 0) (+ 40 2))",
         // 恢复值 = 闭包（continuation 恢复后调用闭包）
-        "(define (mk a) (lambda (b) (+ a b))) (handle t ((p k) (resume k (mk 40))) ((perform (cons 't 0)) 2))",
+        "(define (mk a) (fn (b) (+ a b))) (handle t ((p k) (resume k (mk 40))) ((perform (cons 't 0)) 2))",
         // handler 不恢复（吞效应给替代值）
         "(handle t ((p k) 99) (+ 1 (perform (cons 't 0))))",
         // 多重效应串联（同 handler 两次 perform——浅处理：第二次经
@@ -183,11 +183,11 @@ fn negative_unhandled_escape_e0007() {
 #[test]
 fn negative_double_resume_e0008() {
     expect_run_err(
-        "(define k2 nil) (handle t ((p k) (begin (set! k2 k) (resume k 1))) (perform (cons 't 5))) (k2 2)",
+        "(define k2 nil) (handle t ((p k) (do (assign k2 k) (resume k 1))) (perform (cons 't 5))) (k2 2)",
         "error[E0008]",
     );
     expect_run_err(
-        "(define k2 nil) (handle t ((p k) (begin (set! k2 k) (resume k 1))) (perform (cons 't 5))) (k2 2)",
+        "(define k2 nil) (handle t ((p k) (do (assign k2 k) (resume k 1))) (perform (cons 't 5))) (k2 2)",
         "二次恢复",
     );
 }
@@ -240,7 +240,7 @@ fn negative_perform_non_symbol_tag() {
 #[test]
 fn gc_payload_survives_alloc_pressure() {
     assert_int(
-        "(define (mk n) (if (= n 0) nil (cons n (mk (- n 1))))) (handle t ((p k) (begin (mk 50000) (resume k (+ (head p) 1)))) (+ 0 (perform (cons 't (cons 41 0)))))",
+        "(define (mk n) (if (= n 0) nil (cons n (mk (- n 1))))) (handle t ((p k) (do (mk 50000) (resume k (+ (head p) 1)))) (+ 0 (perform (cons 't (cons 41 0)))))",
         42,
     );
 }
@@ -250,7 +250,7 @@ fn gc_payload_survives_alloc_pressure() {
 #[test]
 fn gc_continuation_boxed_survives_alloc_pressure() {
     assert_int(
-        "(define (mk n) (if (= n 0) nil (cons n (mk (- n 1))))) (define box nil) (handle t ((p k) (begin (set! box (cons k 41)) (mk 60000) (resume (head box) (+ (tail box) 1)))) (+ 0 (perform (cons 't 0))))",
+        "(define (mk n) (if (= n 0) nil (cons n (mk (- n 1))))) (define box nil) (handle t ((p k) (do (assign box (cons k 41)) (mk 60000) (resume (head box) (+ (tail box) 1)))) (+ 0 (perform (cons 't 0))))",
         42,
     );
 }
@@ -353,8 +353,8 @@ fn static_effect_zero_false_positive() {
         "(handle add ((p k) (resume k (+ p 10))) (+ 1 (perform (cons 'add 5))))",
         "(handle outer ((p k) (resume k p)) (handle inner ((q j) 42) (perform (cons 'outer 7))))",
         "(handle t ((p k) 0) (+ 40 2))",
-        "(define (f) (define x 1) (+ (handle t ((p k) (resume k 0)) (begin (set! x 100) (perform (cons 't 0)) x)) x)) (f)",
-        "(define n 0) (define (bump) (begin (set! n (+ n 1)) n)) (handle t ((p k) (resume k (+ p n))) (+ 0 (perform (cons 't (bump)))))",
+        "(define (f) (define x 1) (+ (handle t ((p k) (resume k 0)) (do (assign x 100) (perform (cons 't 0)) x)) x)) (f)",
+        "(define n 0) (define (bump) (do (assign n (+ n 1)) n)) (handle t ((p k) (resume k (+ p n))) (+ 0 (perform (cons 't (bump)))))",
         "(define (spin n) (if (= n 0) (perform (cons 's 99)) (spin (- n 1)))) (handle s ((p k) (resume k (+ p 1))) (spin 100000))",
         // 绑定器动态用点（payload Unknown/Dynamic 的算术与点对——零误报）
         "(handle t ((p k) (resume k (cons (head p) (tail p)))) (perform (cons 't 1)))",

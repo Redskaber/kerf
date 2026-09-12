@@ -29,10 +29,10 @@ fn backpatch_leaves_no_placeholders() {
     }
 }
 
-/// 常量池去重（§19.3 陷阱：(begin 1 1 1) 不膨胀）。
+/// 常量池去重（§19.3 陷阱：(do 1 1 1) 不膨胀）。
 #[test]
 fn const_pool_dedup() {
-    let out = compile_via_driver("(begin 1 1 1 1 1)");
+    let out = compile_via_driver("(do 1 1 1 1 1)");
     let int_consts = out
         .program
         .consts
@@ -56,10 +56,10 @@ fn debug_info_full_coverage() {
     }
 }
 
-/// 闭包捕获描述符：嵌套 lambda 的捕获源正确。
+/// 闭包捕获描述符：嵌套 fn 的捕获源正确。
 #[test]
 fn nested_closure_capture_descriptors() {
-    // (lambda (x) (lambda (y) (x y)))——内层捕获 x
+    // (fn (x) (fn (y) (x y)))——内层捕获 x
     let x = kerf_syntax::Symbol(1);
     let y = kerf_syntax::Symbol(2);
     let inner = Rc::new(CoreExpr::Lambda {

@@ -393,7 +393,7 @@ fn compile_expr(ctx: &mut CompileCtxt, e: &CoreExpr, tail: bool) -> Result<(), C
             // 共享 compile_source，故双侧同报 E0003。
             if ctx.current != 0 {
                 return Err(CompileError::new(
-                    "define 仅允许出现在顶层或函数体头部（begin/表达式位置包裹的 define 不合法——嵌套 define 请置于体头部）",
+                    "define 仅允许出现在顶层或函数体头部（do/表达式位置包裹的 define 不合法——嵌套 define 请置于体头部）",
                     span,
                 ));
             }
@@ -812,7 +812,7 @@ mod tests {
 
     #[test]
     fn const_pool_dedup_in_program() {
-        // (begin 1 1 1) → 常量池只含一个 Int(1)（§19.3 陷阱）
+        // (do 1 1 1) → 常量池只含一个 Int(1)（§19.3 陷阱）
         let exprs = vec![Rc::new(CoreExpr::Begin {
             body: vec![lit(1), lit(1), lit(1)],
             span: Span::dummy(),
@@ -860,7 +860,7 @@ mod tests {
 
     #[test]
     fn lambda_closure_conversion() {
-        // (lambda (x) (f x))——f 自由 → 全局引用（Stage 0 单帧无捕获源）
+        // (fn (x) (f x))——f 自由 → 全局引用（Stage 0 单帧无捕获源）
         let body = app(var(5), vec![var(0)]);
         let lam = Rc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
@@ -900,7 +900,7 @@ mod tests {
 
     #[test]
     fn nested_lambda_captures() {
-        // (lambda (x) (lambda (y) (x y)))——内层捕获 x
+        // (fn (x) (fn (y) (x y)))——内层捕获 x
         let inner = Rc::new(CoreExpr::Lambda {
             params: vec![Symbol(1)],
             param_scopes: vec![ScopeSet::new()],

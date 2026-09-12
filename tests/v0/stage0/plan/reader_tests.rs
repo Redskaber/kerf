@@ -148,7 +148,7 @@ fn empty_program_reads_to_nothing() {
 /// Span 合并（语法对象级）。
 #[test]
 fn list_span_merges_children() {
-    let src = "(begin 1)";
+    let src = "(do 1)";
     let mut t = SymbolTable::new();
     let forms = read_source(src, 0, &mut t).unwrap();
     assert_eq!(forms[0].span, Span::new(0, 0, src.len() as u32));

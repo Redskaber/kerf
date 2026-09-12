@@ -25,7 +25,7 @@ fn prelude_import_hofs_user_face() {
     // 用户面可见性：import 声明后 map/filter 可直接调用
     let src = r#"(module user (import kerf-prelude)
                   (define lst (list 1 2 3 4 5))
-                  (map (lambda (x) (* x 2)) lst))"#;
+                  (map (fn (x) (* x 2)) lst))"#;
     let o = run_source(src, "prelude.krf").expect("prelude 注入后应可运行");
     assert_eq!(value_of(&o), "(2 4 6 8 10)");
 }
@@ -35,18 +35,18 @@ fn prelude_composition_pipeline() {
     // 组合管道：filter → map → foldl（hofs 协同）
     let src = r#"(module user (import kerf-prelude)
                   (define lst (list 1 2 3 4 5))
-                  (foldl + 0 (map (lambda (x) (* x x))
-                                  (filter (lambda (x) (> x 2)) lst))))"#;
+                  (foldl + 0 (map (fn (x) (* x x))
+                                  (filter (fn (x) (> x 2)) lst))))"#;
     let o = run_source(src, "prelude.krf").expect("组合管道应可运行");
     assert_eq!(value_of(&o), "50");
 }
 
 #[test]
 fn prelude_for_each_side_effect() {
-    // for-each 副作用序（遍历序求和——set! 观测）
+    // for-each 副作用序（遍历序求和——assign 观测）
     let src = r#"(module user (import kerf-prelude)
                   (define count 0)
-                  (for-each (lambda (x) (set! count (+ count x)))
+                  (for-each (fn (x) (assign count (+ count x)))
                             (list 1 2 3))
                   count)"#;
     let o = run_source(src, "prelude.krf").expect("for-each 应可运行");
@@ -57,7 +57,7 @@ fn prelude_for_each_side_effect() {
 fn prelude_dual_execution_paths_agree() {
     // T1 双路径一致（42-d 新口径）：注入产物在生产链与种子链同果
     let src = r#"(module user (import kerf-prelude)
-                  (foldl (lambda (acc x) (+ acc x)) 0 (list 1 2 3 4)))"#;
+                  (foldl (fn (acc x) (+ acc x)) 0 (list 1 2 3 4)))"#;
     let a = run_source(src, "prelude.krf").expect("VM 路径失败");
     let b = run_source_seed(src, "prelude.krf").expect("种子链失败");
     assert!(a.value.eq_value(&b.value), "双路径应一致");
@@ -67,7 +67,7 @@ fn prelude_dual_execution_paths_agree() {
 #[test]
 fn prelude_import_without_module_stays_unbound() {
     // opt-in 语义：顶层直接引用（无 import 声明）→ 未绑定（无隐式注入）
-    let err = run_source("(map (lambda (x) x) (list 1))", "no-import.krf")
+    let err = run_source("(map (fn (x) x) (list 1))", "no-import.krf")
         .expect_err("未 import 时 map 应未绑定");
     assert!(err.rendered.contains("未绑定"), "实际：{}", err.rendered);
 }
@@ -77,7 +77,7 @@ fn prelude_name_capture_fails_explicitly() {
     // 同名 define → 「重复定义变量」结构化报错（显式失败，不静默遮蔽）
     let src = r#"(module user (import kerf-prelude)
                   (define (map f lst) lst)
-                  (map (lambda (x) x) (list 1)))"#;
+                  (map (fn (x) x) (list 1)))"#;
     let err = run_source(src, "capture.krf").expect_err("同名 define 应显式报错");
     assert!(err.rendered.contains("重复定义"), "实际：{}", err.rendered);
 }
@@ -132,7 +132,7 @@ fn prelude_foldr_foldl_duality() {
 #[test]
 fn prelude_foldr_dual_path() {
     let src = r#"(module user (import kerf-prelude)
-                  (foldr (lambda (a b) (+ a b)) 0 (list 1 2 3 4)))"#;
+                  (foldr (fn (a b) (+ a b)) 0 (list 1 2 3 4)))"#;
     let a = run_source(src, "foldr.krf").expect("生产链失败");
     let b = run_source_seed(src, "foldr.krf").expect("种子链失败");
     assert_eq!(value_of(&a), value_of(&b));

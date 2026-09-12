@@ -250,11 +250,14 @@ impl CoreExpr {
     }
 
     /// S 表达式形式渲染（需符号表解析函数；测试与 dump 用）。
+    /// 渲染面跟随表面关键字（r43 / E5 S2：fn/assign/do——r42
+    /// `#<builtin:head>` 先例：渲染随表面名更新；kind_name 维持
+    /// 内部 ADT 名[原则 31——S3 腿才改]）。
     pub fn render(&self, resolve: &dyn Fn(Symbol) -> String) -> String {
         match self {
             CoreExpr::Lambda { params, body, .. } => {
                 let ps: Vec<String> = params.iter().map(|p| resolve(*p)).collect();
-                format!("(lambda ({}) {})", ps.join(" "), body.render(resolve))
+                format!("(fn ({}) {})", ps.join(" "), body.render(resolve))
             }
             CoreExpr::App { fn_expr, args, .. } => {
                 let mut parts = vec![fn_expr.render(resolve)];
@@ -275,14 +278,14 @@ impl CoreExpr {
             CoreExpr::VarRef { name, .. } => resolve(*name),
             CoreExpr::Literal { value, .. } => value.render(),
             CoreExpr::SetBang { name, value, .. } => {
-                format!("(set! {} {})", resolve(*name), value.render(resolve))
+                format!("(assign {} {})", resolve(*name), value.render(resolve))
             }
             CoreExpr::Define { name, value, .. } => {
                 format!("(define {} {})", resolve(*name), value.render(resolve))
             }
             CoreExpr::Begin { body, .. } => {
                 let parts: Vec<String> = body.iter().map(|e| e.render(resolve)).collect();
-                format!("(begin {})", parts.join(" "))
+                format!("(do {})", parts.join(" "))
             }
             CoreExpr::Module {
                 name,
@@ -479,7 +482,7 @@ mod tests {
 
     #[test]
     fn free_variables_lambda_shadows() {
-        // (lambda (a) (f a b)) → 自由变量 {f, b}（a 被参数屏蔽）
+        // (fn (a) (f a b)) → 自由变量 {f, b}（a 被参数屏蔽）
         let body = Rc::new(CoreExpr::App {
             fn_expr: var(6),
             args: vec![var(0), var(1)],
@@ -497,7 +500,7 @@ mod tests {
 
     #[test]
     fn free_variables_nested() {
-        // (lambda (x) (lambda (y) (x y z))) → 自由变量 {z}
+        // (fn (x) (fn (y) (x y z))) → 自由变量 {z}
         let inner = CoreExpr::Lambda {
             params: vec![sym(1)],
             param_scopes: vec![ScopeSet::new()],

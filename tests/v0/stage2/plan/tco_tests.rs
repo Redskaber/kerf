@@ -2,7 +2,7 @@
 //!
 //! **覆盖面**（§9.4.3 正负比 ≥1:3——本地码路径专负例承载）：
 //! - 正例：深尾递归恒定帧（105_001 层——旧帧上限用例反转为通过项）、
-//!   相互尾递归（even/odd 30 万步）、尾位传播（if 两臂 / begin 末项 /
+//!   相互尾递归（even/odd 30 万步）、尾位传播（if 两臂 / do 末项 /
 //!   let 糖脱装嵌套）、内建尾调用（隐式 RET）、自举链深展开（TD-007
 //!   10_000 口径在自举 expander 路径的端到端达成——TCO 解除帧约束）；
 //! - 负例：无限尾循环指令预算护栏（预算注入式——38-c find_qbe 同型）、
@@ -56,12 +56,12 @@ fn tail_position_propagates_through_if_branches() {
     );
 }
 
-/// 尾位传播——Begin 末项（scheme 语义：begin 尾调用 = 尾调用）。
-/// 注：嵌套 begin 末项经外层 begin 末项链式传递尾位（三层传播）。
+/// 尾位传播——Begin 末项（scheme 语义：do 尾调用 = 尾调用）。
+/// 注：嵌套 do 末项经外层 do 末项链式传递尾位（三层传播）。
 #[test]
 fn tail_position_propagates_through_begin_last() {
     common::assert_int(
-        "(define (f n) (if (= n 0) 99 (begin 1 (begin 2 (f (- n 1))))))
+        "(define (f n) (if (= n 0) 99 (do 1 (do 2 (f (- n 1))))))
          (f 150000)",
         99,
     );

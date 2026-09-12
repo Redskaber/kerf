@@ -602,7 +602,7 @@ fn string_ordering_negative_boundary() {
 fn procedure_boxing_roundtrip_positive() {
     // 闭包装箱 → 解箱 → 立即调用
     assert_eq!(
-        common::run_rendered("((head (cons (lambda (x) x) nil)) 42)"),
+        common::run_rendered("((head (cons (fn (x) x) nil)) 42)"),
         "42"
     );
     // 内置装箱 → 解箱 → 调用
@@ -612,7 +612,7 @@ fn procedure_boxing_roundtrip_positive() {
     );
     // is-procedure 判定经往返保持
     assert_eq!(
-        common::run_rendered("(is-procedure (head (cons (lambda (x) x) nil)))"),
+        common::run_rendered("(is-procedure (head (cons (fn (x) x) nil)))"),
         "true"
     );
     assert_eq!(
@@ -621,30 +621,28 @@ fn procedure_boxing_roundtrip_positive() {
     );
     // eq 恒等性（Rc 共享装箱——按引用相等）
     assert_eq!(
-        common::run_rendered("(define f (lambda (x) x)) (eq (head (cons f nil)) f)"),
+        common::run_rendered("(define f (fn (x) x)) (eq (head (cons f nil)) f)"),
         "true"
     );
     // list 构造逐元素装箱（函数列表模式——库化前提）
     assert_eq!(
-        common::run_rendered(
-            "(define fs (list (lambda (x) (* x 2)) (lambda (x) (+ x 1)))) ((head fs) 21)"
-        ),
+        common::run_rendered("(define fs (list (fn (x) (* x 2)) (fn (x) (+ x 1)))) ((head fs) 21)"),
         "42"
     );
     assert_eq!(
         common::run_rendered(
-            "(define fs (list (lambda (x) (* x 2)) (lambda (x) (+ x 1)))) ((head (tail fs)) 41)"
+            "(define fs (list (fn (x) (* x 2)) (fn (x) (+ x 1)))) ((head (tail fs)) 41)"
         ),
         "42"
     );
     // map 应用函数列表（prelude 高阶面 + 装箱协同）
     assert_eq!(
-        common::run_rendered("(module m (import kerf-prelude) (define fs (list (lambda (x) (* x 2)))) (head (map (lambda (f) (f 21)) fs)))"),
+        common::run_rendered("(module m (import kerf-prelude) (define fs (list (fn (x) (* x 2)))) (head (map (fn (f) (f 21)) fs)))"),
         "42"
     );
     // 渲染形态（r42/S1：主名现代化——#<builtin:head>）
     assert_eq!(
-        common::run_rendered("(head (cons (lambda (x) x) nil))"),
+        common::run_rendered("(head (cons (fn (x) x) nil))"),
         "#<procedure>"
     );
     assert_eq!(
@@ -662,9 +660,9 @@ fn procedure_boxing_roundtrip_positive() {
 /// 不变（算术位拒绝函数值；序对渲染不误印为字符串）。
 #[test]
 fn procedure_boxing_negative_boundary() {
-    expect_run_err("(+ 1 (head (cons (lambda (x) x) nil)))", "+ 需要 int");
+    expect_run_err("(+ 1 (head (cons (fn (x) x) nil)))", "+ 需要 int");
     expect_run_err(
-        "(head (head (cons (lambda (x) x) nil)))",
+        "(head (head (cons (fn (x) x) nil)))",
         "head 需要 pair，实际 procedure",
     );
 }
@@ -703,10 +701,10 @@ fn type_predicates_positive() {
 }
 
 /// is-list 环安全（2 case）：tail 链成环 → false（Floyd 龟兔判定——
-/// 真表 tail 链无环；引用 Racket 语义）。环经 set! tail 构造。
+/// 真表 tail 链无环；引用 Racket 语义）。环经 assign tail 构造。
 #[test]
 fn list_predicate_cycle_safe() {
-    // 自环：(define x (list 1)) (set! ... tail ...) ——set! 作用于序对元素
+    // 自环：(define x (list 1)) (assign ... tail ...) ——assign 作用于序对元素
     // 需经 car/cdr 装箱往返；kerf 无 set-car!/set-cdr!（序对不可变），
     // 环不可经用户面构造 → 本 case 以 unit 层面锚定（vm 集成不可达面），
     // 断言改为：长真表判定正确（深链 Floyd 终止）
@@ -772,7 +770,7 @@ fn expect_removed(old_src: &str, modern: &str) {
 fn removed_rejects_car_cdr() {
     expect_removed("(car '(1 2 3))", "head");
     expect_removed("(cdr '(1 2 3))", "tail");
-    expect_removed("((lambda (x) (car x)) '(1 2))", "head"); // 值位嵌套同拒
+    expect_removed("((fn (x) (car x)) '(1 2))", "head"); // 值位嵌套同拒
 }
 
 /// `list-ref`/`list-tail` 退役（R1 压缩——现代名 nth/drop）。
@@ -865,12 +863,12 @@ fn removed_rejects_assert_eq() {
     expect_removed("(assert-eq? 1 1)", "assert-eq");
 }
 
-/// N3 局部遮蔽豁免（R-N1——与 E0014 同口径）：lambda 参数以旧名命名
+/// N3 局部遮蔽豁免（R-N1——与 E0014 同口径）：fn 参数以旧名命名
 /// 合法（退役的是内置注册面非符号宇宙层；参数遮蔽后体内引用 = 局部名）。
 #[test]
 fn removed_shadowed_by_param_is_legal() {
-    // (lambda (car) car)——car 是参数名非内置引用：编译过、行为 = 恒等
-    let out = common::run_rendered("((lambda (car) car) 5)");
+    // (fn (car) car)——car 是参数名非内置引用：编译过、行为 = 恒等
+    let out = common::run_rendered("((fn (car) car) 5)");
     assert_eq!(out, "5", "参数遮蔽旧名应合法（N3 局部绑定胜出）");
 }
 

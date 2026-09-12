@@ -20,6 +20,7 @@ use crate::common;
 
 use kerf_driver::{run_source, Stage};
 use kerf_span::DiagnosticCode;
+use kerf_vm::Value;
 
 const FNAME: &str = "ns.krf";
 
@@ -164,7 +165,7 @@ fn qualified_not_exported_known_ns_is_e0014() {
     expect_compile_err("(string/nonexist 1)", 14, "「string」不导出「nonexist」");
     expect_compile_err("(list/nonexist 1)", 14, "「list」不导出「nonexist」");
     expect_compile_err(
-        "(define f (lambda (x) (core/nonexist x)))",
+        "(define f (fn (x) (core/nonexist x)))",
         14,
         "「core」不导出「nonexist」",
     ); // 嵌套深度（Lambda 体递归）
@@ -200,17 +201,17 @@ fn reserved_domain_module_name_is_e0015() {
 
 /// 用户接管豁免（零误报纪律——与 R9 同口径）：define 含 `/` 名 +
 /// 引用同名 → 不触发 E0014；**Lambda 参数遮蔽**（R-N1：N3 局部绑定
-/// 先于 N2——`(lambda (foo/bar) foo/bar)` 是局部名非限定引用）。
+/// 先于 N2——`(fn (foo/bar) foo/bar)` 是局部名非限定引用）。
 #[test]
 fn takeover_slash_named_define_exempt() {
     assert_eq!(common::run_rendered("(define my/ns 5) my/ns"), "5");
     assert_eq!(
-        common::run_rendered("(define f (lambda (foo/bar) foo/bar)) (f 7)"),
+        common::run_rendered("(define f (fn (foo/bar) foo/bar)) (f 7)"),
         "7"
     );
     // 嵌套遮蔽：外层限定引用有效 + 内层参数同名遮蔽共存
     assert_eq!(
-        common::run_rendered("(define f (lambda (string/append) string/append)) (f 9)"),
+        common::run_rendered("(define f (fn (string/append) string/append)) (f 9)"),
         "9"
     ); // 参数遮蔽 N2 限定名（R-N2 第一行形态——N3 胜出合法）
 }
@@ -451,9 +452,9 @@ fn m2_module_define_duplicate_e0016() {
 /// 元素；表达式子树内 = 位置错误——fail-closed）。
 #[test]
 fn m2_require_position_e0018() {
-    // lambda 体内 require = 位置违例（授权声明非表达式）
+    // fn 体内 require = 位置违例（授权声明非表达式）
     expect_compile_err(
-        "(require io write) (require io read) (module m ((lambda (x) (require io read) x) 1))",
+        "(require io write) (require io read) (module m ((fn (x) (require io read) x) 1))",
         18,
         "require 位置违例",
     );
@@ -639,7 +640,7 @@ fn s1_w1003_scoping_and_qualified() {
 #[test]
 fn s1_prelude_injection_zero_warnings() {
     let o = run_source(
-        "(module user (import kerf-prelude) (define lst (list 1 2 3)) (map (lambda (x) x) lst))",
+        "(module user (import kerf-prelude) (define lst (list 1 2 3)) (map (fn (x) x) lst))",
         FNAME,
     )
     .expect("prelude 注入程序应运行");
@@ -665,12 +666,12 @@ fn s1_e0021_recovery_and_positions() {
         "E0021 携现代名指引：{}",
         err.rendered
     );
-    // set! 值位
-    let err2 = run_source("(module m (define x 1) (set! x (cdr (list 1 2))))", FNAME)
-        .expect_err("旧名 set! 值位应 E0021");
+    // assign 值位
+    let err2 = run_source("(module m (define x 1) (assign x (cdr (list 1 2))))", FNAME)
+        .expect_err("旧名 assign 值位应 E0021");
     assert!(
         err2.rendered.contains("[E0021]"),
-        "set! 值位：{}",
+        "assign 值位：{}",
         err2.rendered
     );
     // E0021 后管线健康（fail-closed 单条阻断——修正后正常编译）
@@ -691,7 +692,7 @@ fn s1_e0021_recovery_and_positions() {
 #[test]
 fn m2_w1002_shadow_import_warning() {
     let o = run_source(
-        "(module m (import kerf-list) ((lambda (length) length) 1))",
+        "(module m (import kerf-list) ((fn (length) length) 1))",
         FNAME,
     )
     .expect("参数遮蔽注入名合法（内层胜——R-N2）");
@@ -699,7 +700,7 @@ fn m2_w1002_shadow_import_warning() {
     assert!(
         o.warnings[0]
             .message
-            .contains("lambda 参数「length」遮蔽了 import 注入名"),
+            .contains("fn 参数「length」遮蔽了 import 注入名"),
         "消息：{}",
         o.warnings[0].message
     );
@@ -708,9 +709,9 @@ fn m2_w1002_shadow_import_warning() {
 /// R-N1 解析全序锚（22 §3.1：N3 → N2 → N1——内层绑定胜出全局名）。
 #[test]
 fn m2_r_n1_resolution_order_local_wins() {
-    // lambda 参数遮蔽全局名：局部绑定胜出（N3 > N1——词法 60 年共识）
+    // fn 参数遮蔽全局名：局部绑定胜出（N3 > N1——词法 60 年共识）
     assert_eq!(
-        common::run_rendered("(module m (import kerf-list) ((lambda (nth) nth) 99))"),
+        common::run_rendered("(module m (import kerf-list) ((fn (nth) nth) 99))"),
         "99"
     );
 }
@@ -767,13 +768,13 @@ fn d10_non_reserved_bindings_all_legal() {
         common::run_rendered(
             "(define my-x 5) (define (lambda-pair a b) (pair/cons a b)) \
              (let ((lo 1) (hi 2)) (+ lo hi)) \
-             ((lambda (first-arg second-arg) (* first-arg second-arg)) 3 4)"
+             ((fn (first-arg second-arg) (* first-arg second-arg)) 3 4)"
         ),
         "12"
     );
     // letrec/let* 正常名
     assert_eq!(
-        common::run_rendered("(letrec ((f (lambda (n) (if (= n 0) 1 n)))) (f 3))"),
+        common::run_rendered("(letrec ((f (fn (n) (if (= n 0) 1 n)))) (f 3))"),
         "3"
     );
     // handle 绑定器正常名（CoreExpr 层零误报——payload/resume 位合法名）
@@ -790,12 +791,12 @@ fn d10_non_reserved_bindings_all_legal() {
 #[test]
 fn d10_quote_reserved_word_data_symbols_legal() {
     assert_eq!(common::run_rendered("(is-symbol 'if)"), "true");
-    assert_eq!(common::run_rendered("(is-symbol (quote lambda))"), "true");
+    assert_eq!(common::run_rendered("(is-symbol (quote fn))"), "true");
     assert_eq!(common::run_rendered("(core/eq 'else 'else)"), "true");
 }
 
 /// 正例：宏展开产物正常绑定（CoreExpr 层防御纵深零误报——宏模板
-/// 展开生成 define/lambda 绑定不触发 E0020）。
+/// 展开生成 define/fn 绑定不触发 E0020）。
 #[test]
 fn d10_macro_expansion_bindings_legal() {
     assert_eq!(
@@ -812,30 +813,30 @@ fn d10_macro_expansion_bindings_legal() {
 #[test]
 fn d10_define_reserved_word_e0020() {
     expect_compile_err("(define if 5)", 20, "保留字不可绑定");
-    expect_compile_err("(define lambda 5)", 20, "「lambda」");
-    expect_compile_err("(define set! 7)", 20, "「set!」");
+    expect_compile_err("(define fn 5)", 20, "「fn」");
+    expect_compile_err("(define assign 7)", 20, "「assign」");
 }
 
-/// 负例：lambda 参数表保留字（修复前 `(lambda (lambda) lambda)` = 42）。
+/// 负例：fn 参数表保留字（修复前 `(fn (fn) fn)` = 42）。
 #[test]
 fn d10_lambda_param_reserved_word_e0020() {
-    expect_compile_err("((lambda (if) if) 1)", 20, "lambda 参数");
-    expect_compile_err("((lambda (x else) x) 1 2)", 20, "「else」");
-    expect_compile_err("((lambda (begin) begin) 1)", 20, "「begin」");
+    expect_compile_err("((fn (if) if) 1)", 20, "fn 参数");
+    expect_compile_err("((fn (x else) x) 1 2)", 20, "「else」");
+    expect_compile_err("((fn (do) do) 1)", 20, "「do」");
 }
 
 /// 负例：let 系绑定名保留字（三变体同判）。
 #[test]
 fn d10_let_bindings_reserved_word_e0020() {
     expect_compile_err("(let ((if 5)) if)", 20, "let 绑定名");
-    expect_compile_err("(let* ((begin 1)) begin)", 20, "「begin」");
+    expect_compile_err("(let* ((do 1)) do)", 20, "「do」");
     expect_compile_err("(letrec ((module 1)) module)", 20, "「module」");
 }
 
-/// 负例：set! 赋值目标保留字。
+/// 负例：assign 赋值目标保留字。
 #[test]
 fn d10_setbang_target_reserved_word_e0020() {
-    expect_compile_err("(define x 1) (set! begin 2)", 20, "赋值目标");
+    expect_compile_err("(define x 1) (assign do 2)", 20, "赋值目标");
 }
 
 /// 负例：module 名 / import as 别名 / define-syntax 宏名保留字。
@@ -858,16 +859,12 @@ fn d10_module_alias_macro_name_reserved_word_e0020() {
 #[test]
 fn d10_nested_begin_reserved_word_e0020() {
     expect_compile_err(
-        "(begin (define ok 1) (begin (define perform 2)))",
+        "(do (define ok 1) (do (define perform 2)))",
         20,
         "「perform」",
     );
-    // lambda 体深嵌套
-    expect_compile_err(
-        "((lambda (n) (let ((handle n)) handle)) 1)",
-        20,
-        "「handle」",
-    );
+    // fn 体深嵌套
+    expect_compile_err("((fn (n) (let ((handle n)) handle)) 1)", 20, "「handle」");
 }
 
 /// 负例：宏展开产物绑定保留字（CoreExpr 层防御纵深——宏模板生成
@@ -905,4 +902,72 @@ fn d10_value_position_reserved_word_unbound() {
         "诊断应含保留字名：\n{}",
         e.rendered
     );
+}
+
+// ---------------------------------------------------------------------------
+// r43 / E5 S2 关键字腿（22 §12 D19-D33 + e5-plan §3.2 S2 断言③④）
+// ---------------------------------------------------------------------------
+
+/// S2 断言③：关键字旧形（lambda/set!/begin）引用 → E0021 携新形指引
+/// （操作位调用形态 + 值位引用；消息分源——关键字文案「关键字已切换」）。
+#[test]
+fn s2_e0021_keyword_old_forms_rejected() {
+    for (src, modern) in [
+        ("(lambda (x) x)", "fn"),
+        ("(set! x 1)", "assign"),
+        ("(begin 1 2)", "do"),
+        ("(require io write) (define x 1) (print lambda)", "fn"),
+    ] {
+        let err = run_source(src, FNAME).expect_err("关键字旧形应 E0021");
+        assert!(
+            err.rendered.contains("[E0021]"),
+            "E0021 码位（{}）：\n{}",
+            src,
+            err.rendered
+        );
+        assert!(
+            err.rendered.contains(&format!("现代形式「{}」", modern)),
+            "E0021 携新形指引（{} → {}）：\n{}",
+            src,
+            modern,
+            err.rendered
+        );
+    }
+}
+
+/// S2 断言③接管豁免：用户 define 旧形 = 合法用户变量（退役的是 N4
+/// 关键字面非 N0 符号宇宙层——与 S1 内置旧名接管豁免同口径）。
+#[test]
+fn s2_e0021_takeover_exempt() {
+    let ok = run_source("(require io write) (define lambda 5) (print lambda)", FNAME)
+        .expect("用户接管旧形名合法（N0 符号宇宙层自由）");
+    let _ = ok;
+    assert_eq!(common::run_rendered("(define lambda 5) lambda"), "5");
+}
+
+/// S2 断言④：新名 fn/assign/do 即刻入 E0020 禁绑面（25 名计数不变
+/// ——三名出三名入；d10 组既有 12 case 已随语料迁移覆盖新名）。
+#[test]
+fn s2_e0020_new_reserved_names() {
+    for (src, kind) in [
+        ("(define fn 5)", "绑定名"),
+        ("(define do 5)", "绑定名"),
+        ("((fn (assign) assign) 1)", "fn 参数"),
+        ("((fn (do) do) 1)", "fn 参数"),
+    ] {
+        expect_compile_err(src, 20, kind);
+    }
+}
+
+/// S2 门 A（CoreExpr parity——e5-plan §3.2 S2 行断言①的集成形态）：
+/// 新形源码与旧形等价程序产相同行为（表面/内部分离原则 31 的行为面
+/// 验证——同映 CoreExpr::Lambda/SetBang/Begin）。
+#[test]
+fn s2_core_expr_parity_new_forms() {
+    assert_eq!(common::run_rendered("((fn (x) (* x x)) 6)"), "36");
+    assert_eq!(
+        common::run_rendered("(define x 1) (assign x (+ x 1)) x"),
+        "2"
+    );
+    assert_eq!(common::run_rendered("(do 1 2 3)"), "3");
 }

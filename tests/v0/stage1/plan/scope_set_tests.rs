@@ -3,12 +3,12 @@
 //!
 //! 覆盖口径（A4 原验收：Racket 式语义锚点测试 ≥6，含 ≥3 负例）：
 //! - **正例**：嵌套 shadowing（内层胜出）/ 闭包捕获（捕获绑定携带
-//!   绑定作用域集）/ set! 命中词法绑定而非全局——均双路径（VM + eval）
+//!   绑定作用域集）/ assign 命中词法绑定而非全局——均双路径（VM + eval）
 //!   一致（T1 定理在 scope-set 解析下的保持）；
 //! - **负例**：引用作用域集**不含**绑定作用域集时按 Racket 语义判
 //!   未绑定（VM → 全局兜底后报「未绑定的全局变量」；eval → 「未绑定
 //!   变量」）——这是与旧名称基解析的行为差异点（名称匹配但作用域
-//!   不匹配 ≠ 解析命中）；set! 同口径；宏引入绑定不捕获用户同名。
+//!   不匹配 ≠ 解析命中）；assign 同口径；宏引入绑定不捕获用户同名。
 //!
 //! 源码级正/负例走 driver 双入口；作用域不匹配负例经手工构造
 //! CoreExpr（展开器注入不变式保证真实源码不产生该形态，故手工构造
@@ -32,7 +32,7 @@ fn int_of(v: &Value) -> i64 {
 }
 
 /// 构造「绑定作用域集 = {binder}，引用作用域集 = {ref}」的
-/// `((lambda (x) x) 42)`——`binder ⊄ ref_scopes` 时引用不得命中绑定。
+/// `((fn (x) x) 42)`——`binder ⊄ ref_scopes` 时引用不得命中绑定。
 fn mismatched_lambda(binder: ScopeId, ref_scope: ScopeId) -> Vec<Rc<CoreExpr>> {
     let mut table = SymbolTable::new();
     let x = table.intern("x");
@@ -66,19 +66,19 @@ fn mismatched_lambda(binder: ScopeId, ref_scope: ScopeId) -> Vec<Rc<CoreExpr>> {
 /// 内层绑定作用域集基数严格更大）。双路径。
 #[test]
 fn shadowing_resolves_innermost_dual_path() {
-    let src = "(define x 10) ((lambda (x) x) 20)";
+    let src = "(define x 10) ((fn (x) x) 20)";
     let a = run_source(src, "s1.krf").unwrap();
     let b = run_source_seed(src, "s1.krf").unwrap();
     assert_eq!(int_of(&a.value), 20, "VM 路径内层绑定胜出");
     assert_eq!(int_of(&b.value), 20, "eval 路径内层绑定胜出");
 }
 
-/// 正例 2：双层同名嵌套 shadowing——`((lambda (x) ((lambda (x) x) 2)) 1)`
+/// 正例 2：双层同名嵌套 shadowing——`((fn (x) ((fn (x) x) 2)) 1)`
 /// → 2（最内层绑定；scope 注入不变式：内层绑定作用域集严格包含外层）。
 /// 双路径。
 #[test]
 fn nested_shadowing_innermost_wins_dual_path() {
-    let src = "(define x 0) ((lambda (x) ((lambda (x) x) 2)) 1)";
+    let src = "(define x 0) ((fn (x) ((fn (x) x) 2)) 1)";
     let a = run_source(src, "s2.krf").unwrap();
     let b = run_source_seed(src, "s2.krf").unwrap();
     assert_eq!(int_of(&a.value), 2);
@@ -86,27 +86,27 @@ fn nested_shadowing_innermost_wins_dual_path() {
 }
 
 /// 正例 3：闭包捕获——捕获绑定携带原绑定作用域集，内层原型体内引用
-/// 经同一子集匹配命中捕获槽。`((lambda (x) ((lambda (y) (+ x y)) 2)) 1)`
+/// 经同一子集匹配命中捕获槽。`((fn (x) ((fn (y) (+ x y)) 2)) 1)`
 /// → 3。双路径。
 #[test]
 fn closure_capture_by_scope_set_dual_path() {
-    let src = "((lambda (x) ((lambda (y) (+ x y)) 2)) 1)";
+    let src = "((fn (x) ((fn (y) (+ x y)) 2)) 1)";
     let a = run_source(src, "s3.krf").unwrap();
     let b = run_source_seed(src, "s3.krf").unwrap();
     assert_eq!(int_of(&a.value), 3, "VM 捕获经子集匹配");
     assert_eq!(int_of(&b.value), 3, "eval 捕获经子集匹配");
 }
 
-/// 正例 4：set! 目标解析——命中词法形参绑定而非全局（赋值后全局
-/// 不变）。`(define g 0) (begin ((lambda (x) (set! x 5) x) 9) g)` → 0。
+/// 正例 4：assign 目标解析——命中词法形参绑定而非全局（赋值后全局
+/// 不变）。`(define g 0) (do ((fn (x) (assign x 5) x) 9) g)` → 0。
 /// 双路径（与旧名称基同解，验证切换零回归）。
 #[test]
 fn setbang_hits_lexical_not_global_dual_path() {
-    let src = "(define g 0) (begin ((lambda (x) (set! x 5) x) 9) g)";
+    let src = "(define g 0) (do ((fn (x) (assign x 5) x) 9) g)";
     let a = run_source(src, "s4.krf").unwrap();
     let b = run_source_seed(src, "s4.krf").unwrap();
-    assert_eq!(int_of(&a.value), 0, "VM：set! 命中形参，g 不变");
-    assert_eq!(int_of(&b.value), 0, "eval：set! 命中形参，g 不变");
+    assert_eq!(int_of(&a.value), 0, "VM：assign 命中形参，g 不变");
+    assert_eq!(int_of(&b.value), 0, "eval：assign 命中形参，g 不变");
 }
 
 // ---- 负例（Racket 语义差异点：作用域不匹配 ≠ 名称匹配） ----
@@ -143,9 +143,9 @@ fn scope_mismatch_reference_unbound_eval() {
     );
 }
 
-/// 负例 3：set! 目标作用域集不含绑定作用域集 → 不命中词法绑定
-/// （VM：StoreGlobal → 「set! 未绑定变量」；eval：env.set 无命中 →
-/// 同报）。构造 `(lambda (x) (set! x 1) x)` 形态：绑定 {7}，目标引用 {9}。
+/// 负例 3：assign 目标作用域集不含绑定作用域集 → 不命中词法绑定
+/// （VM：StoreGlobal → 「assign 未绑定变量」；eval：env.set 无命中 →
+/// 同报）。构造 `(fn (x) (assign x 1) x)` 形态：绑定 {7}，目标引用 {9}。
 #[test]
 fn scope_mismatch_setbang_unbound_dual_path() {
     let mut table = SymbolTable::new();
@@ -172,7 +172,7 @@ fn scope_mismatch_setbang_unbound_dual_path() {
         body,
         span: Span::dummy(),
     });
-    // 应用闭包使体执行：((lambda (x) (begin (set! x 1))) 2)
+    // 应用闭包使体执行：((fn (x) (do (assign x 1))) 2)
     let two = Rc::new(CoreExpr::Literal {
         value: kerf_core::LiteralValue::Int(2),
         span: Span::dummy(),
@@ -188,7 +188,7 @@ fn scope_mismatch_setbang_unbound_dual_path() {
     let mut heap = Heap::new();
     let err_vm = run_program(&program, &mut globals, &mut heap).unwrap_err();
     assert!(
-        err_vm.message.contains("set! 未绑定变量"),
+        err_vm.message.contains("assign 未绑定变量"),
         "VM 实际错误：{}",
         err_vm.message
     );
@@ -197,7 +197,7 @@ fn scope_mismatch_setbang_unbound_dual_path() {
     let mut heap2 = Heap::new();
     let err_ev = eval_program(&[app], &root, &mut heap2).unwrap_err();
     assert!(
-        err_ev.message.contains("set! 未绑定变量"),
+        err_ev.message.contains("assign 未绑定变量"),
         "eval 实际错误：{}",
         err_ev.message
     );
@@ -212,7 +212,7 @@ fn scope_mismatch_setbang_unbound_dual_path() {
 fn macro_introduced_binding_does_not_capture_user_binding() {
     let src = r#"
         (define-syntax self7 (syntax-rules () ((self7) (let ((t 7)) t))))
-        ((lambda (t) (self7)) 99)
+        ((fn (t) (self7)) 99)
     "#;
     let a = run_source(src, "s5.krf").unwrap();
     let b = run_source_seed(src, "s5.krf").unwrap();

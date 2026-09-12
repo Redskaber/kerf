@@ -147,7 +147,7 @@ const FIB10: &str = "(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)
 const COUNTERS: &str = r#"
         (define (make-counter)
           (let ((n 0))
-            (lambda () (set! n (+ n 1)) n)))
+            (fn () (assign n (+ n 1)) n)))
         (define a (make-counter))
         (define b (make-counter))
         (a) (a) (a)
@@ -162,7 +162,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Syntax),
-        src: "(lambda (x)",
+        src: "(fn (x)",
         expect: Expect::Err {
             stage: Stage::Read,
             msg: "括号未闭合",
@@ -222,10 +222,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Unbound),
-        src: "(set! y 1)",
+        src: "(assign y 1)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "set! 未绑定变量",
+            msg: "assign 未绑定变量",
             trace: false,
         },
     },
@@ -270,7 +270,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Arity),
-        src: "((lambda (x) x) 1 2)",
+        src: "((fn (x) x) 1 2)",
         expect: Expect::Err {
             stage: Stage::Run,
             msg: "过程参数数量不匹配：期望 1 实际 2",
@@ -343,7 +343,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(define (make-adder n) (lambda (x) (+ x n))) ((make-adder \"s\") 1)",
+        src: "(define (make-adder n) (fn (x) (+ x n))) ((make-adder \"s\") 1)",
         expect: Expect::Err {
             stage: Stage::Run,
             msg: "+ 需要 int",
@@ -355,10 +355,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Unbound),
-        src: "(define x 1) (set! y x)",
+        src: "(define x 1) (assign y x)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "set! 未绑定变量",
+            msg: "assign 未绑定变量",
             trace: false,
         },
     },
@@ -396,7 +396,7 @@ const CASES: &[Case] = &[
         src: "(define (f x x) x)",
         expect: Expect::Err {
             stage: Stage::Expand,
-            msg: "lambda 参数重名",
+            msg: "fn 参数重名",
             trace: false,
         },
     },
@@ -520,7 +520,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // 宏展开产物中的运行时类型错（expansion 代次 Span）
-        src: "(define-syntax twice! (syntax-rules () ((twice! e) (begin e e)))) (twice! (head 5))",
+        src: "(define-syntax twice! (syntax-rules () ((twice! e) (do e e)))) (twice! (head 5))",
         expect: Expect::Err {
             stage: Stage::Run,
             msg: "head 需要 pair",
@@ -545,7 +545,7 @@ const CASES: &[Case] = &[
         // Ok(42)，eval 路径无回退 → Err 未绑定（双路径分裂）。
         // 类归属：⑤ 类型不匹配非也——归 ②未绑定标识符（eval 侧错误类）。
         class: Some(ErrorClass::Unbound),
-        src: "<宏 inc! 展开 set! (+ v 1) 引用全局 +：VM 卫生回退 / eval 无回退>",
+        src: "<宏 inc! 展开 assign (+ v 1) 引用全局 +：VM 卫生回退 / eval 无回退>",
         expect: Expect::Custom(probe_macro_global_dual_path),
     },
     // ---- D 桶：错误恢复（同进程序列）----
@@ -619,7 +619,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Positive,
         polarity: Polarity::Positive,
         class: None,
-        src: "((lambda (x y) (- x y)) 10 4)",
+        src: "((fn (x y) (- x y)) 10 4)",
         expect: Expect::OkInt(6),
     },
 ];
@@ -852,7 +852,7 @@ fn probe_circular_module_dep() -> CaseResult {
 /// resolve_hygiene_fallbacks 回退后 Ok(42)；种子链（Rust 三段 + VM，
 /// 42-d eval 退役后的对拍 oracle）同样接线 ⇒ 双路径一致 42。
 fn probe_macro_global_dual_path() -> CaseResult {
-    let src = "(define-syntax inc! (syntax-rules () ((inc! v) (set! v (+ v 1))))) (define x 41) (inc! x) x";
+    let src = "(define-syntax inc! (syntax-rules () ((inc! v) (assign v (+ v 1))))) (define x 41) (inc! x) x";
     // 生产链（自举三段 + VM——卫生回退生效，正向锚点）
     match run_source(src, FNAME) {
         Ok(o) if matches!(o.value, Value::Int(42)) => {}
@@ -996,7 +996,7 @@ fn probe_error_barrage_then_correct() -> CaseResult {
         ("()", Stage::Expand, "空列表不能作为表达式求值"),
         ("(+ 1", Stage::Read, "括号未闭合"),
         ("(head 5)", Stage::Run, "head 需要 pair"),
-        ("(set! zz 1)", Stage::Run, "set! 未绑定变量"),
+        ("(assign zz 1)", Stage::Run, "assign 未绑定变量"),
     ];
     for (src, want_stage, msg) in barrage {
         match run_source(src, FNAME) {
@@ -1058,9 +1058,9 @@ fn probe_heap_intact_after_error() -> CaseResult {
 fn probe_diagnostics_structure_after_errors() -> CaseResult {
     let _ = run_source("(+ 1 \"s\")", FNAME);
     let _ = run_source("(/ 1 0)", FNAME);
-    let err = match run_source("(set! zz 1)", FNAME) {
+    let err = match run_source("(assign zz 1)", FNAME) {
         Err(e) => e,
-        Ok(_) => return fail("(set! zz 1) 意外成功".to_string()),
+        Ok(_) => return fail("(assign zz 1) 意外成功".to_string()),
     };
     if err.stage != Stage::Run {
         return fail(format!("阶段漂移：{:?}", err.stage));
@@ -1071,7 +1071,7 @@ fn probe_diagnostics_structure_after_errors() -> CaseResult {
     if err.diagnostic.primary_span.is_empty() {
         return fail("Span 漂移（为空）".to_string());
     }
-    if !err.rendered.contains("set! 未绑定变量") || !err.rendered.contains(FNAME) {
+    if !err.rendered.contains("assign 未绑定变量") || !err.rendered.contains(FNAME) {
         return fail(format!("消息/位置漂移：{}", first_line(&err.rendered)));
     }
     pass("两错误后第三错误诊断结构完整（stage/E0004/Span/位置）".to_string())

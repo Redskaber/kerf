@@ -477,7 +477,7 @@ mod tests {
     #[test]
     fn keyword_vs_identifier() {
         let mut t = kerf_syntax::SymbolTable::new();
-        let toks = lex_source("lambda lambdax if iff", 0, &mut t).unwrap();
+        let toks = lex_source("fn lambdax if iff", 0, &mut t).unwrap();
         assert!(matches!(toks[0].kind, TokenKind::Keyword(Keyword::Lambda)));
         assert!(matches!(toks[1].kind, TokenKind::Identifier(_)));
         assert!(matches!(toks[2].kind, TokenKind::Keyword(Keyword::If)));

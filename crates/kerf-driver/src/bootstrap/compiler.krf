@@ -175,7 +175,7 @@
 ; CC-PROTOS   = 原型记录列表（rust 序追加；记录 = (名形 参数 nlocals
 ;               捕获名 捕获源 code-rev spans-rev 自由变量)）
 ; CC-CUR      = 当前发射原型索引；当前窗口的指令/span 在 CC-CODE-REV /
-;               CC-SPANS-REV（逆序累积——发射 O(1)，lambda 切换时回写）
+;               CC-SPANS-REV（逆序累积——发射 O(1)，fn 切换时回写）
 ; CC-CONSTS   = ('const tag 值) 节点列表（插入序 = 池索引）
 ; CC-GLOBAL-IDX = (名字str . 池索引) 关联列表（intern_global 快查）
 ; CC-GLOBAL-REFS = 全局名 str 列表（首次插入序）
@@ -193,7 +193,7 @@
 ; CC-TRAMPOLINE = trampoline 哨兵原型索引（r25/42-f 惰性单例——nil =
 ;               未生成；镜像 Rust CompileCtxt.trampoline）
 (define CC-TRAMPOLINE nil)
-; 自由变量分析暂存（lambda 编译期）
+; 自由变量分析暂存（fn 编译期）
 (define CC-BOUND nil)
 (define CC-FREE nil)
 (define CC-CAP-NAMES nil)
@@ -208,24 +208,24 @@
 
 ; 发射一条指令 + span（debug_spans 与 code 逐 pc 对齐——§19.3 不变式 3）
 (define (emit! opnode s e x)
-  (begin
-    (set! CC-CODE-REV (cons opnode CC-CODE-REV))
-    (set! CC-SPANS-REV (cons (list s e x) CC-SPANS-REV))))
+  (do
+    (assign CC-CODE-REV (cons opnode CC-CODE-REV))
+    (assign CC-SPANS-REV (cons (list s e x) CC-SPANS-REV))))
 
 ; 发射占位跳转并登记回填（返回 pc）
 (define (emit-jump opcode s e x)
   (let ((pc (here)))
-    (begin
+    (do
       (emit! (list 'op opcode PATCH-SENTINEL) s e x)
-      (set! CC-PATCHES (cons (cons CC-CUR pc) CC-PATCHES))
+      (assign CC-PATCHES (cons (cons CC-CUR pc) CC-PATCHES))
       pc)))
 
 ; 回填跳转目标（逆序列表中最终位 pc ↔ 逆序位 = 长度-1-pc）
 (define (patch-jump pc)
   (let ((target (here)))
-    (begin
-      (set! CC-CODE-REV (patch-code CC-CODE-REV (- target 1 pc) target))
-      (set! CC-PATCHES (remove-patch CC-PATCHES CC-CUR pc))
+    (do
+      (assign CC-CODE-REV (patch-code CC-CODE-REV (- target 1 pc) target))
+      (assign CC-PATCHES (remove-patch CC-PATCHES CC-CUR pc))
       target)))
 
 ; 替换逆序码表中第 k 位指令的目标操作数（Jump/JumpIfFalse 恰一操作数）
@@ -245,7 +245,7 @@
 
 ; 原型记录按索引替换（窗口切换回写）
 (define (proto-set-at! idx rec)
-  (set! CC-PROTOS (proto-set-loop CC-PROTOS idx rec 0)))
+  (assign CC-PROTOS (proto-set-loop CC-PROTOS idx rec 0)))
 
 (define (proto-set-loop lst idx rec k)
   (if (= k idx)
@@ -282,8 +282,8 @@
   (let ((idx (const-index-of cnode CC-CONSTS 0)))
     (if (is-nil idx)
         (let ((i (length CC-CONSTS)))
-          (begin
-            (set! CC-CONSTS (append CC-CONSTS (list cnode)))
+          (do
+            (assign CC-CONSTS (append CC-CONSTS (list cnode)))
             i))
         idx)))
 
@@ -293,9 +293,9 @@
   (let ((hit (idx-lookup namestr CC-GLOBAL-IDX)))
     (if (is-nil hit)
         (let ((i (intern-const (list 'const 'sym namestr))))
-          (begin
-            (set! CC-GLOBAL-REFS (append CC-GLOBAL-REFS (list namestr)))
-            (set! CC-GLOBAL-IDX (cons (cons namestr i) CC-GLOBAL-IDX))
+          (do
+            (assign CC-GLOBAL-REFS (append CC-GLOBAL-REFS (list namestr)))
+            (assign CC-GLOBAL-IDX (cons (cons namestr i) CC-GLOBAL-IDX))
             i))
         (tail hit))))
 
@@ -364,13 +364,13 @@
 (define (fvo-bound-add! namestr)
   (if (contains? namestr CC-BOUND)
       nil
-      (set! CC-BOUND (cons namestr CC-BOUND))))
+      (assign CC-BOUND (cons namestr CC-BOUND))))
 
 (define (fvo-pop! n)
   (if (= n 0)
       nil
-      (begin
-        (set! CC-BOUND (tail CC-BOUND))
+      (do
+        (assign CC-BOUND (tail CC-BOUND))
         (fvo-pop! (- n 1)))))
 
 (define (fvo-has-name? free namestr)
@@ -383,7 +383,7 @@
 (define (fvo-push-free! namestr scopes)
   (if (and (not (contains? namestr CC-BOUND))
            (not (fvo-has-name? CC-FREE namestr)))
-      (set! CC-FREE (cons (cons namestr scopes) CC-FREE))
+      (assign CC-FREE (cons (cons namestr scopes) CC-FREE))
       nil))
 
 (define (fvo-node node)
@@ -395,25 +395,25 @@
       ((eq tag "lit") nil)
       ((eq tag "lambda")
        (let ((shadowed (length (first fields))))
-         (begin
+         (do
            (fvo-params! (first fields))
            (fvo-node (third fields))
            (fvo-pop! shadowed))))
       ((eq tag "app")
-       (begin
+       (do
          (fvo-node (first fields))
          (fvo-seq (tail fields))))
       ((eq tag "if")
-       (begin
+       (do
          (fvo-node (first fields))
          (fvo-node (second fields))
          (fvo-node (third fields))))
       ((eq tag "set")
-       (begin
+       (do
          (fvo-push-free! (first fields) (second fields))
          (fvo-node (third fields))))
       ((eq tag "define")
-       (begin
+       (do
          (fvo-node (second fields))
          (fvo-bound-add! (first fields))))
       ((eq tag "begin")
@@ -428,7 +428,7 @@
       ((eq tag "perform")
        (fvo-node (first fields)))
       ((eq tag "handle")
-       (begin
+       (do
          (fvo-bound-add! (second fields))
          (fvo-bound-add! (fourth fields))
          (fvo-node (sixth fields))
@@ -439,14 +439,14 @@
 (define (fvo-params! params)
   (if (is-nil params)
       nil
-      (begin
+      (do
         (fvo-bound-add! (head params))
         (fvo-params! (tail params)))))
 
 (define (fvo-seq items)
   (if (is-nil items)
       nil
-      (begin
+      (do
         (fvo-node (head items))
         (fvo-seq (tail items)))))
 
@@ -460,24 +460,24 @@
       nil
       (let ((nm (head (head free)))
             (sc (tail (head free))))
-        (begin
-          (set! CC-FREEVARS (cons nm CC-FREEVARS))
+        (do
+          (assign CC-FREEVARS (cons nm CC-FREEVARS))
           (let ((r (resolve-var nm sc)))
-            (begin
+            (do
               (if (eq (head r) 'local)
-                  (begin
-                    (set! CC-CAP-NAMES (cons nm CC-CAP-NAMES))
-                    (set! CC-CAP-BINDINGS
+                  (do
+                    (assign CC-CAP-NAMES (cons nm CC-CAP-NAMES))
+                    (assign CC-CAP-BINDINGS
                       (cons (cons nm (third r)) CC-CAP-BINDINGS))
-                    (set! CC-CAP-SRCS
+                    (assign CC-CAP-SRCS
                       (cons (list 'local (second r)) CC-CAP-SRCS)))
                   nil)
               (if (eq (head r) 'captured)
-                  (begin
-                    (set! CC-CAP-NAMES (cons nm CC-CAP-NAMES))
-                    (set! CC-CAP-BINDINGS
+                  (do
+                    (assign CC-CAP-NAMES (cons nm CC-CAP-NAMES))
+                    (assign CC-CAP-BINDINGS
                       (cons (cons nm (third r)) CC-CAP-BINDINGS))
-                    (set! CC-CAP-SRCS
+                    (assign CC-CAP-SRCS
                       (cons (list 'captured (second r)) CC-CAP-SRCS)))
                   nil)
               (capture-resolve-loop (tail free))))))))
@@ -507,36 +507,36 @@
       (list 'anon)
       (list 'name (head paramstrs))))
 
-(define (compile-lambda fields s e x)
+(define (compile-fn fields s e x)
   (let ((paramstrs (first fields))
         (paramscopes (second fields))
         (body (third fields)))
-    (begin
+    (do
       ; 1. 自由变量出现（bound 起点 = 形参——LIFO 形态镜像 Vec 尾）
-      (set! CC-BOUND (params->bound paramstrs nil))
-      (set! CC-FREE nil)
+      (assign CC-BOUND (params->bound paramstrs nil))
+      (assign CC-FREE nil)
       (fvo-node body)
       ; 2. 捕获解析（对当前作用域栈——新帧尚未压入）
-      (set! CC-CAP-NAMES nil)
-      (set! CC-CAP-BINDINGS nil)
-      (set! CC-CAP-SRCS nil)
-      (set! CC-FREEVARS nil)
+      (assign CC-CAP-NAMES nil)
+      (assign CC-CAP-BINDINGS nil)
+      (assign CC-CAP-SRCS nil)
+      (assign CC-FREEVARS nil)
       (capture-resolve-loop (reverse CC-FREE))
       (let ((cap-names (reverse CC-CAP-NAMES))
             (cap-binds (reverse CC-CAP-BINDINGS))
             (cap-srcs (reverse CC-CAP-SRCS))
             (freevars (reverse CC-FREEVARS)))
         (let ((proto-idx (length CC-PROTOS)))
-          (begin
+          (do
             ; 3. 新原型（捕获描述符随原型冻结；code/spans 空）
-            (set! CC-PROTOS
+            (assign CC-PROTOS
               (append CC-PROTOS
                 (list (list (proto-name-form paramstrs)
                             paramstrs
                             (length paramstrs)
                             cap-names cap-srcs nil nil freevars))))
             ; 4. 新作用域帧（形参绑定 + 捕获绑定）
-            (set! CC-SCOPES
+            (assign CC-SCOPES
               (append CC-SCOPES
                 (list (cons (param-bindings paramstrs paramscopes)
                             cap-binds))))
@@ -544,14 +544,14 @@
             (let ((enc-cur CC-CUR)
                   (enc-code CC-CODE-REV)
                   (enc-spans CC-SPANS-REV))
-              (begin
-                (set! CC-CUR proto-idx)
-                (set! CC-CODE-REV nil)
-                (set! CC-SPANS-REV nil)
+              (do
+                (assign CC-CUR proto-idx)
+                (assign CC-CODE-REV nil)
+                (assign CC-SPANS-REV nil)
                 (let ((r (compile-expr body true)))
                   (if (err? r)
                       r
-                      (begin
+                      (do
                         ; 尾部 RET（span = 体的 Span）
                         (emit! (list 'op OP-RET)
                                (node-s body) (node-e body) (node-exp body))
@@ -563,11 +563,11 @@
                                 cap-names cap-srcs
                                 CC-CODE-REV CC-SPANS-REV
                                 freevars))
-                        (set! CC-SCOPES (drop-last CC-SCOPES))
-                        (set! CC-CUR enc-cur)
-                        (set! CC-CODE-REV enc-code)
-                        (set! CC-SPANS-REV enc-spans)
-                        ; 7. 外围原型发射 CLOSURE（span = lambda 的 Span）
+                        (assign CC-SCOPES (drop-last CC-SCOPES))
+                        (assign CC-CUR enc-cur)
+                        (assign CC-CODE-REV enc-code)
+                        (assign CC-SPANS-REV enc-spans)
+                        ; 7. 外围原型发射 CLOSURE（span = fn 的 Span）
                         (emit! (list 'op OP-CLOSURE proto-idx
                                     (length cap-names))
                                s e x)
@@ -594,7 +594,7 @@
       ; ---- VarRef（解析 → LoadLocal/LoadCaptured/LoadGlobal）----
       ((eq tag "var") (compile-var (first fields) (second fields) s e x))
       ; ---- Lambda ----
-      ((eq tag "lambda") (compile-lambda fields s e x))
+      ((eq tag "lambda") (compile-fn fields s e x))
       ; ---- App（求值顺序契约：被调函数先，参数从左到右；尾位 TailCall）----
       ((eq tag "app")
        (let ((rf (compile-expr (first fields) false)))
@@ -613,12 +613,12 @@
                  (if (err? rt)
                      rt
                      (let ((je (emit-jump OP-JUMP s e x)))
-                       (begin
+                       (do
                          (patch-jump jf)
                          (let ((re (compile-expr (third fields) tail-pos)))
                            (if (err? re)
                                re
-                               (begin
+                               (do
                                  (patch-jump je)
                                  nil)))))))))))
       ; ---- Set!（值 → DUP → 存储；目标解析与 VarRef 同一口径）----
@@ -626,7 +626,7 @@
        (let ((rv (compile-expr (third fields) false)))
          (if (err? rv)
              rv
-             (begin
+             (do
                (emit! (list 'op OP-DUP) s e x)
                (let ((r (resolve-var (first fields) (second fields))))
                  (cond
@@ -642,17 +642,17 @@
       ;        结构化拒绝——D1 全局泄漏防护，两路径同报）----
       ((eq tag "define")
        (if (not (= CC-CUR 0))
-           (cerr "define 仅允许出现在顶层或函数体头部（begin/表达式位置包裹的 define 不合法——嵌套 define 请置于体头部）"
+           (cerr "define 仅允许出现在顶层或函数体头部（do/表达式位置包裹的 define 不合法——嵌套 define 请置于体头部）"
                  s e)
            (let ((rv (compile-expr (second fields) false)))
              (if (err? rv)
                  rv
-                 (begin
+                 (do
                    (emit! (list 'op OP-DUP) s e x)
                    (emit! (list 'op OP-DEFINE-GLOBAL
                                 (intern-global (first fields)))
                           s e x))))))
-      ; ---- Begin（末项继承尾位——begin 尾调用 = 尾调用；中间值弹出
+      ; ---- Begin（末项继承尾位——do 尾调用 = 尾调用；中间值弹出
       ;        span = 项自身 Span）----
       ((eq tag "begin")
        (if (is-nil fields)
@@ -676,7 +676,7 @@
        (let ((rf (compile-expr (first fields) false)))
          (if (err? rf)
              rf
-             (begin
+             (do
                (emit! (list 'op OP-PERFORM) s e x)
                nil))))
       ; ---- Handle（r25/42-f——D6 三原型帧编排：T 惰性 → H → B →
@@ -703,7 +703,7 @@
         (if (err? r)
             r
             (if (< (+ idx 1) total)
-                (begin
+                (do
                   (emit! (list 'op OP-POP)
                          (node-s (head items)) (node-e (head items))
                          (node-exp (head items)))
@@ -711,7 +711,7 @@
                 (compile-begin-seq (tail items) (+ idx 1) total tail-pos))))))
 
 ; module 体 inline（镜像 CoreExpr::Module 臂——逐项恒 tail=false 编译
-; （区别于 begin 末项继承尾位：module 项不构成尾位——TCO 不参与）+
+; （区别于 do 末项继承尾位：module 项不构成尾位——TCO 不参与）+
 ; 中间值 Pop（span = 项自身 Span）；空体 PushNil（span = module Span））
 (define (compile-module-body items s e x)
   (if (is-nil items)
@@ -725,7 +725,7 @@
         (if (err? r)
             r
             (if (< (+ idx 1) total)
-                (begin
+                (do
                   (emit! (list 'op OP-POP)
                          (node-s (head items)) (node-e (head items))
                          (node-exp (head items)))
@@ -810,7 +810,7 @@
         (if (err? r)
             r
             (if (> rem 1)
-                (begin
+                (do
                   (emit! (list 'op OP-POP)
                          (node-s (head nodes)) (node-e (head nodes))
                          (node-exp (head nodes)))
@@ -819,26 +819,26 @@
 
 ; nodes（core 节点列表）→ ('prog ...) 或 ('err msg s e)
 (define (lexc-compile-program nodes)
-  (begin
+  (do
     ; 入口复位（确定性纪律——镜像 CompileCtxt::new 每调用新上下文）
-    (set! CC-SCOPES (list (cons nil nil)))
-    (set! CC-PROTOS nil)
-    (set! CC-CUR 0)
-    (set! CC-CODE-REV nil)
-    (set! CC-SPANS-REV nil)
-    (set! CC-CONSTS nil)
-    (set! CC-GLOBAL-IDX nil)
-    (set! CC-GLOBAL-REFS nil)
-    (set! CC-PATCHES nil)
-    (set! CC-TRAMPOLINE nil)
-    (set! CC-BOUND nil)
-    (set! CC-FREE nil)
-    (set! CC-CAP-NAMES nil)
-    (set! CC-CAP-BINDINGS nil)
-    (set! CC-CAP-SRCS nil)
-    (set! CC-FREEVARS nil)
+    (assign CC-SCOPES (list (cons nil nil)))
+    (assign CC-PROTOS nil)
+    (assign CC-CUR 0)
+    (assign CC-CODE-REV nil)
+    (assign CC-SPANS-REV nil)
+    (assign CC-CONSTS nil)
+    (assign CC-GLOBAL-IDX nil)
+    (assign CC-GLOBAL-REFS nil)
+    (assign CC-PATCHES nil)
+    (assign CC-TRAMPOLINE nil)
+    (assign CC-BOUND nil)
+    (assign CC-FREE nil)
+    (assign CC-CAP-NAMES nil)
+    (assign CC-CAP-BINDINGS nil)
+    (assign CC-CAP-SRCS nil)
+    (assign CC-FREEVARS nil)
     ; main 原型占位（帧 0 + 原型 0；渲染名由桥侧魔法标记重建）
-    (set! CC-PROTOS
+    (assign CC-PROTOS
       (list (list (list 'main) nil 0 nil nil nil nil nil)))
     ; 空程序：PushNil（main_span = 首形式 Span 或哑元 (0 0 0)）
     (if (is-nil nodes)
@@ -850,11 +850,11 @@
       (let ((r (compile-toplevel nodes (length nodes))))
         (if (err? r)
             r
-            (begin
+            (do
               (emit! (list 'op OP-HALT) main-s main-e main-x)
               ; 回填完备性断言（§19.3 不变式 2）
               (if (is-nil CC-PATCHES)
-                  (begin
+                  (do
                     ; main 窗口回写 + 组装输出
                     (proto-set-at! 0
                       (list (list 'main) nil 0 nil nil
@@ -884,7 +884,7 @@
             (if (err? bp)
                 bp
                 (let ((tk (intern-const (list 'const 'symlit (first fields)))))
-                  (begin
+                  (do
                     (emit! (list 'op OP-INSTALL-HANDLER hp bp tk tp) s e x)
                     nil))))))))
 
@@ -894,64 +894,64 @@
 (define (ensure-trampoline)
   (if (is-nil CC-TRAMPOLINE)
       (let ((idx (length CC-PROTOS)))
-        (begin
-          (set! CC-PROTOS
+        (do
+          (assign CC-PROTOS
             (append CC-PROTOS
               (list (list (list 'anon) nil 0 nil nil
                           (list (list 'op OP-RET))
                           (list (list 0 0 0))
                           nil))))
-          (set! CC-TRAMPOLINE idx)
+          (assign CC-TRAMPOLINE idx)
           idx))
       CC-TRAMPOLINE))
 
-; 内层原型构造（compile-lambda 的原型段——无 CLOSURE 发射；H/B 原型
+; 内层原型构造（compile-fn 的原型段——无 CLOSURE 发射；H/B 原型
 ; 复用：自由变量分析（bound 起点 = 形参）→ 捕获解析 → 新原型 → 作用域
-; 帧压入 → 体编译（tail-pos = true——lambda 体语义）→ 尾部 RET（span = 体
+; 帧压入 → 体编译（tail-pos = true——fn 体语义）→ 尾部 RET（span = 体
 ; 自身 Span）→ 回写 → 弹帧 → 还原窗口。错误路径直传（入口全量复位
-; 约定——同 compile-lambda 错误口径）
+; 约定——同 compile-fn 错误口径）
 (define (compile-inner-proto paramstrs paramscopes body)
-  (begin
+  (do
     ; 1. 自由变量出现（bound 起点 = 形参——LIFO 形态镜像 Vec 尾）
-    (set! CC-BOUND (params->bound paramstrs nil))
-    (set! CC-FREE nil)
+    (assign CC-BOUND (params->bound paramstrs nil))
+    (assign CC-FREE nil)
     (fvo-node body)
     ; 2. 捕获解析（对当前作用域栈——新帧尚未压入）
-    (set! CC-CAP-NAMES nil)
-    (set! CC-CAP-BINDINGS nil)
-    (set! CC-CAP-SRCS nil)
-    (set! CC-FREEVARS nil)
+    (assign CC-CAP-NAMES nil)
+    (assign CC-CAP-BINDINGS nil)
+    (assign CC-CAP-SRCS nil)
+    (assign CC-FREEVARS nil)
     (capture-resolve-loop (reverse CC-FREE))
     (let ((cap-names (reverse CC-CAP-NAMES))
           (cap-binds (reverse CC-CAP-BINDINGS))
           (cap-srcs (reverse CC-CAP-SRCS))
           (freevars (reverse CC-FREEVARS)))
       (let ((proto-idx (length CC-PROTOS)))
-        (begin
+        (do
           ; 3. 新原型（捕获描述符随原型冻结；code/spans 空）
-          (set! CC-PROTOS
+          (assign CC-PROTOS
             (append CC-PROTOS
               (list (list (proto-name-form paramstrs)
                           paramstrs
                           (length paramstrs)
                           cap-names cap-srcs nil nil freevars))))
           ; 4. 新作用域帧（形参绑定 + 捕获绑定）
-          (set! CC-SCOPES
+          (assign CC-SCOPES
             (append CC-SCOPES
               (list (cons (param-bindings paramstrs paramscopes)
                           cap-binds))))
-          ; 5. 体编译（尾位 = true——lambda 体语义；窗口切换）
+          ; 5. 体编译（尾位 = true——fn 体语义；窗口切换）
           (let ((enc-cur CC-CUR)
                 (enc-code CC-CODE-REV)
                 (enc-spans CC-SPANS-REV))
-            (begin
-              (set! CC-CUR proto-idx)
-              (set! CC-CODE-REV nil)
-              (set! CC-SPANS-REV nil)
+            (do
+              (assign CC-CUR proto-idx)
+              (assign CC-CODE-REV nil)
+              (assign CC-SPANS-REV nil)
               (let ((r (compile-expr body true)))
                 (if (err? r)
                     r
-                    (begin
+                    (do
                       ; 尾部 RET（span = 体的 Span）
                       (emit! (list 'op OP-RET)
                              (node-s body) (node-e body) (node-exp body))
@@ -963,8 +963,8 @@
                               cap-names cap-srcs
                               CC-CODE-REV CC-SPANS-REV
                               freevars))
-                      (set! CC-SCOPES (drop-last CC-SCOPES))
-                      (set! CC-CUR enc-cur)
-                      (set! CC-CODE-REV enc-code)
-                      (set! CC-SPANS-REV enc-spans)
+                      (assign CC-SCOPES (drop-last CC-SCOPES))
+                      (assign CC-CUR enc-cur)
+                      (assign CC-CODE-REV enc-code)
+                      (assign CC-SPANS-REV enc-spans)
                       proto-idx))))))))))

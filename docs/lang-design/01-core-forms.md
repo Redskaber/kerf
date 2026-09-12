@@ -144,6 +144,8 @@ type core_expr =
 
 **裁定**：核心 ADT 命名在冻结期内不变（§2 核心冻结）；本表作为 **Stage 2 表面语言（用户可见关键字）与目标语法 Reader 的命名参考**——表面语法与核心 ADT 解耦（[02-语法模型 §1](./02-syntax-model.md) 表面语法层可替换）。
 
+> **r43 / E5 S2 表面切换注记（22 §12 D19-D33 重筛后终选）**：表面关键字三件已切换——`lambda→fn`/`set!→assign`/`begin→do`（set! 行导向替代 Assign 确认[原表第一候选兑现]；begin 行的 Seq 是 **ADT 层**候选[S3 载荷——表面层与 ADT 层解耦，原则 31]，表面层选 do[否决 seq——名空间经济：Clojure seq 生态占用]）；其余 22 名维持（22 §12.2 D22-D27 全表裁定）；表面/ADT 映射一致性对账见 22 §12.2 D30（fn↔Fn 对齐 / assign↔SetBang 分离合法[S3 不迁] / do↔Begin→Let 分离合法）。
+
 ### 7.3 Stage 2+ 演进候选：效应原语化（next2 推荐 8 原语形态）
 
 next2 讨论的最终推荐（不考虑兼容性的重新设计）为 8 原语：`Fn / Let / Apply / Const / Var / Branch / Perform / Handle`——其中：

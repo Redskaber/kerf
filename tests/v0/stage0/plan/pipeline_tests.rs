@@ -156,8 +156,8 @@ fn user_macro_programs() {
           (syntax-rules ()
             ((swap! a b)
              (let ((tmp a))
-               (set! a b)
-               (set! b tmp)))))
+               (assign a b)
+               (assign b tmp)))))
         (define x 1)
         (define y 2)
         (swap! x y)
@@ -169,7 +169,7 @@ fn user_macro_programs() {
 /// 结构化错误：DriverError 可 Display。
 #[test]
 fn driver_error_display_format() {
-    let err = run_source("(lambda (x))", "f.krf").unwrap_err();
+    let err = run_source("(fn (x))", "f.krf").unwrap_err();
     let text = format!("{}", err);
     assert!(text.starts_with("[expand]"));
 }

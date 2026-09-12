@@ -69,14 +69,7 @@ fn expect_run_err(src: &str, msg: &str) -> kerf_driver::DriverError {
 #[test]
 fn arithmetic_non_numeric_operands() {
     let ops = ["+", "-", "*", "/", "mod"];
-    let bad = [
-        "\"s\"",
-        "true",
-        "nil",
-        "(cons 1 2)",
-        "(lambda (x) x)",
-        "head",
-    ];
+    let bad = ["\"s\"", "true", "nil", "(cons 1 2)", "(fn (x) x)", "head"];
     for op in ops {
         for b in bad {
             for b_on_right in [true, false] {
@@ -228,7 +221,7 @@ fn car_cdr_non_pair_operands() {
         ("\"s\"", "str"),
         ("true", "bool"),
         ("nil", "nil"),
-        ("(lambda (x) x)", "procedure"),
+        ("(fn (x) x)", "procedure"),
         ("head", "builtin-procedure"),
     ];
     for op in ["head", "tail"] {
@@ -277,7 +270,7 @@ fn not_requires_bool() {
         ("\"s\"", "str"),
         ("nil", "nil"),
         ("(cons 1 2)", "pair"),
-        ("(lambda (x) x)", "procedure"),
+        ("(fn (x) x)", "procedure"),
         ("head", "builtin-procedure"),
     ];
     for (operand, type_name) in bad {
@@ -320,7 +313,7 @@ fn str_append_requires_strings() {
         "true",
         "nil",
         "(cons 1 2)",
-        "(lambda (x) x)",
+        "(fn (x) x)",
         "head",
     ];
     for b in bad {
@@ -377,7 +370,7 @@ fn if_condition_requires_bool() {
         ("\"s\"", "str"),
         ("nil", "nil"),
         ("(cons 1 2)", "pair"),
-        ("(lambda (x) x)", "procedure"),
+        ("(fn (x) x)", "procedure"),
     ];
     for (operand, type_name) in bad {
         let src = format!("(if {} 1 2)", operand);
@@ -392,13 +385,10 @@ fn if_condition_requires_bool() {
 /// lambda/函数糖元数不匹配（5 case，含多语句程序）。
 #[test]
 fn lambda_arity_mismatch() {
-    expect_run_err("((lambda (x) x) 1 2)", "过程参数数量不匹配：期望 1 实际 2");
-    expect_run_err("((lambda (x y) x) 1)", "过程参数数量不匹配：期望 2 实际 1");
-    expect_run_err(
-        "((lambda (a b c) a) 1 2)",
-        "过程参数数量不匹配：期望 3 实际 2",
-    );
-    expect_run_err("((lambda () 1) 1)", "过程参数数量不匹配：期望 0 实际 1");
+    expect_run_err("((fn (x) x) 1 2)", "过程参数数量不匹配：期望 1 实际 2");
+    expect_run_err("((fn (x y) x) 1)", "过程参数数量不匹配：期望 2 实际 1");
+    expect_run_err("((fn (a b c) a) 1 2)", "过程参数数量不匹配：期望 3 实际 2");
+    expect_run_err("((fn () 1) 1)", "过程参数数量不匹配：期望 0 实际 1");
     expect_run_err(
         "(define (f x) x) (f 1 2)",
         "过程参数数量不匹配：期望 1 实际 2",
@@ -493,11 +483,11 @@ fn dual_path_agrees_on_error_programs() {
         // E6：同层重复定义（Task 12 修复面）
         "(define x 1) (define x 2)",
         "(define (f x) x) (define (f y) y)",
-        "(begin (define x 1) (define x 2))",
-        // E3：set! 未绑定（Task 12 修复面）
-        "(set! y 1)",
+        "(do (define x 1) (define x 2))",
+        // E3：assign 未绑定（Task 12 修复面）
+        "(assign y 1)",
         // 参数重名（展开期单点防御）
-        "(lambda (x x) x)",
+        "(fn (x x) x)",
         // E5：内置运行时错误
         "(/ 1 0)",
         "(mod 5 0)",

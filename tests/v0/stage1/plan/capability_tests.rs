@@ -158,10 +158,10 @@ fn check_path_gated_identically() {
     assert!(e.rendered.contains("error[E0006]"));
 }
 
-/// 嵌套深处的引用（lambda 体内 + 条件分支）仍被静态捕获。
+/// 嵌套深处的引用（fn 体内 + 条件分支）仍被静态捕获。
 #[test]
 fn nested_reference_gated() {
-    let src = "(define (f) (lambda () (if true (print 1) 2)))";
+    let src = "(define (f) (fn () (if true (print 1) 2)))";
     let e = run(src).unwrap_err();
     assert_eq!(e.stage, Stage::Compile);
     assert!(e.rendered.contains("print"));

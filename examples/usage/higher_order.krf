@@ -8,4 +8,4 @@
         ((pred (head lst)) (cons (head lst) (filter pred (tail lst))))
         (else (filter pred (tail lst)))))
 (define (even? n) (= (mod n 2) 0))
-(map (lambda (x) (* x x)) (quote (1 2 3 4 5)))
+(map (fn (x) (* x x)) (quote (1 2 3 4 5)))

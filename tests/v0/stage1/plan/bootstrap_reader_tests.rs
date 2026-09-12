@@ -153,7 +153,7 @@ fn parity_forms_positive() {
         "(quote (a b (c 1 \"s\" true nil)))",
         "'(quote x)",
         "[1 2 3]",
-        "lambda",
+        "fn",
         "lambdax",
         "true false nil",
         "\"a\\nb\\nc\"",
@@ -178,8 +178,8 @@ fn parity_forms_positive() {
         "1e999",
         "",
         "   \n; 仅注释\n",
-        "(begin 1)",
-        "(define (make-adder n) (lambda (x) (+ x n)))\n(define add5 (make-adder 5))\n(list (add5 10) (if (is-nil nil) 1 2))",
+        "(do 1)",
+        "(define (make-adder n) (fn (x) (+ x n)))\n(define add5 (make-adder 5))\n(list (add5 10) (if (is-nil nil) 1 2))",
         "'é",
         "'λx",
     ];
@@ -219,7 +219,7 @@ fn parity_reader_negative() {
         "3.",
         "1.2.3",
         "(a b))",
-        "(lambda (x) x))",
+        "(fn (x) x))",
         "1e3.5",
     ];
     for src in corpus {
@@ -273,7 +273,7 @@ fn parity_token_stream_kinds_and_spans() {
     let corpus = [
         "(define x 1)",
         "(+ 12 ab)",
-        "lambda lambdax if iff",
+        "fn lambdax if iff",
         "3 3.5 1e3 -5 -5.5 +7",
         "+ - * / <= >= = mod < >",
         "\"a\\nb\nc\"",
@@ -653,8 +653,8 @@ fn parity_negative_battery_brackets() {
         "(\"s\"",
         "(quote \"s",
         "[quote 1",
-        "(lambda (x",
-        "(begin (+ 1",
+        "(fn (x",
+        "(do (+ 1",
         "[let [x",
         "(1 (2",
         "((",

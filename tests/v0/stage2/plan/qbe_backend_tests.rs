@@ -2,10 +2,10 @@
 //!
 //! **覆盖面**（§9.4.3 正负比 ≥1:3——本地码路径专负例承载）：
 //! - 正例：fib 递归端到端（IL 生成结构 + 本地码运行 144）、算术、
-//!   值上下文 if（块参数 merge/phi 路径）、尾位 if、begin、VM/native
+//!   值上下文 if（块参数 merge/phi 路径）、尾位 if、do、VM/native
 //!   双路径一致性；
-//! - 负例：lambda 值位置（闭包边界）、define 非 lambda、字符串/浮点/
-//!   点对字面量、set!、module、未定义函数、arity 不匹配、自由变量、
+//! - 负例：fn 值位置（闭包边界）、define 非 fn、字符串/浮点/
+//!   点对字面量、assign、module、未定义函数、arity 不匹配、自由变量、
 //!   函数值一等传递；
 //! - 工具链：qbe 查找链 + AOT 进程错误。
 //!
@@ -107,8 +107,8 @@ fn value_context_if_merges_via_block_params() {
 
 #[test]
 fn begin_and_multiple_top_level_forms() {
-    // begin 序列 + 多顶层语句（中间值丢弃，尾值返回）
-    let src = "(begin (+ 1 2) (* 3 4))\n(+ 100 44)\n";
+    // do 序列 + 多顶层语句（中间值丢弃，尾值返回）
+    let src = "(do (+ 1 2) (* 3 4))\n(+ 100 44)\n";
     assert_eq!(native_exit_of(src, "t_begin"), 144);
 }
 
@@ -150,15 +150,15 @@ fn vm_native_consistency_on_multiple_programs() {
 
 #[test]
 fn negative_lambda_value_position_rejected() {
-    let src = "((lambda (x) x) 5)\n";
-    let e = lower_src(src).expect_err("lambda 值位置（被调者）应拒绝");
+    let src = "((fn (x) x) 5)\n";
+    let e = lower_src(src).expect_err("fn 值位置（被调者）应拒绝");
     assert!(e.message.contains("被调者"), "消息：{}", e.message);
 }
 
 #[test]
 fn negative_define_non_lambda_rejected() {
     let src = "(define x 5)\n(x)\n";
-    let e = lower_src(src).expect_err("define 非 lambda 应拒绝");
+    let e = lower_src(src).expect_err("define 非 fn 应拒绝");
     assert!(e.message.contains("define"), "消息：{}", e.message);
 }
 
@@ -178,9 +178,9 @@ fn negative_float_literal_rejected() {
 
 #[test]
 fn negative_setbang_rejected() {
-    let src = "(define (f x) (set! x 5) x)\n(f 1)\n";
-    let e = lower_src(src).expect_err("set! 应拒绝");
-    assert!(e.message.contains("set!"), "消息：{}", e.message);
+    let src = "(define (f x) (assign x 5) x)\n(f 1)\n";
+    let e = lower_src(src).expect_err("assign 应拒绝");
+    assert!(e.message.contains("assign"), "消息：{}", e.message);
 }
 
 #[test]

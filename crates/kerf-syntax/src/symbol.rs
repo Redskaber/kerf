@@ -57,11 +57,11 @@ impl Keyword {
     /// 关键字源文本。
     pub fn as_str(self) -> &'static str {
         match self {
-            Keyword::Lambda => "lambda",
+            Keyword::Lambda => "fn",
             Keyword::If => "if",
-            Keyword::SetBang => "set!",
+            Keyword::SetBang => "assign",
             Keyword::Define => "define",
-            Keyword::Begin => "begin",
+            Keyword::Begin => "do",
             Keyword::Module => "module",
             Keyword::Import => "import",
             Keyword::Export => "export",
@@ -88,11 +88,11 @@ impl Keyword {
     /// 查表归类（纯查表，无语义判断，§19.1 不变式 3）。
     pub fn from_name(name: &str) -> Option<Keyword> {
         Some(match name {
-            "lambda" => Keyword::Lambda,
+            "fn" => Keyword::Lambda,
             "if" => Keyword::If,
-            "set!" => Keyword::SetBang,
+            "assign" => Keyword::SetBang,
             "define" => Keyword::Define,
-            "begin" => Keyword::Begin,
+            "do" => Keyword::Begin,
             "module" => Keyword::Module,
             "import" => Keyword::Import,
             "export" => Keyword::Export,
@@ -286,7 +286,7 @@ mod tests {
     #[test]
     fn keywords_prefetched() {
         let mut t = SymbolTable::new();
-        let sym = t.intern("lambda");
+        let sym = t.intern("fn");
         assert_eq!(t.keyword_symbol(Keyword::Lambda), sym);
         assert!(t.is_keyword(sym, Keyword::Lambda));
         assert!(!t.is_keyword(sym, Keyword::If));

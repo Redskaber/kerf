@@ -1873,7 +1873,7 @@ mod tests {
 
     #[test]
     fn define_and_call_closure() {
-        // (define f (lambda (x) (+ x 1))) (f 41) → 42
+        // (define f (fn (x) (+ x 1))) (f 41) → 42
         let plus = StdRc::new(CoreExpr::VarRef {
             name: Symbol(100),
             scopes: ScopeSet::new(),
@@ -1923,8 +1923,8 @@ mod tests {
 
     #[test]
     fn closure_captures_shared_mutation() {
-        // (define (make-counter) ...)：闭包捕获的 set! 语义——两闭包共享捕获单元
-        // 程序：((lambda (n) (lambda () n)) 5) → 闭包；此处验证捕获值经 LOAD_CAPTURED
+        // (define (make-counter) ...)：闭包捕获的 assign 语义——两闭包共享捕获单元
+        // 程序：((fn (n) (fn () n)) 5) → 闭包；此处验证捕获值经 LOAD_CAPTURED
         let inner = StdRc::new(CoreExpr::Lambda {
             params: vec![],
             param_scopes: vec![ScopeSet::new()],
@@ -2043,7 +2043,7 @@ mod tests {
 
     #[test]
     fn arity_mismatch_error() {
-        // (define f (lambda (x) x)) (f 1 2) → 参数数量不匹配
+        // (define f (fn (x) x)) (f 1 2) → 参数数量不匹配
         let lam = StdRc::new(CoreExpr::Lambda {
             params: vec![Symbol(0)],
             param_scopes: vec![ScopeSet::new()],
@@ -2109,7 +2109,7 @@ mod tests {
     #[test]
     fn gc_safepoint_collects_garbage() {
         // 循环构造丢弃的序对：堆应保持有界（回收经指令边界安全点）
-        // 程序：(begin (quote (1)) (quote (1)) ... ) × 4000 —— 每次分配 3 槽
+        // 程序：(do (quote (1)) (quote (1)) ... ) × 4000 —— 每次分配 3 槽
         let mut body: Vec<StdRc<CoreExpr>> = Vec::new();
         for _ in 0..4000 {
             body.push(StdRc::new(CoreExpr::Literal {
@@ -2160,7 +2160,7 @@ mod tests {
             })
         }
         let _ = build;
-        // 直接构造递归：f = (lambda (n) (if (= n 0) 0 (f (- n 1))))
+        // 直接构造递归：f = (fn (n) (if (= n 0) 0 (f (- n 1))))
         let eq_builtin = crate::value::BuiltinFn::new("=", |_, args| {
             Ok(Value::Bool(
                 args.iter().all(|a| a.as_int() == args[0].as_int()),

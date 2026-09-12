@@ -13,7 +13,7 @@
 (define (ask) (perform (cons 'gift (cons 0 20))))
 
 (define (guarded)
-  (handle gift ((p k) (begin (mk 50000) (resume k (+ (tail p) (head p)))))
+  (handle gift ((p k) (do (mk 50000) (resume k (+ (tail p) (head p)))))
     (+ 100 (ask))))
 
 (guarded)

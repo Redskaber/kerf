@@ -24,7 +24,7 @@ pub fn err_not_bool(actual: &str) -> String {
 
 /// `set!` 未绑定（VM `SetGlobal` / eval set! 臂共用——两路径既有同文，单源化维持）。
 pub fn err_setbang_unbound() -> String {
-    "set! 未绑定变量".to_string()
+    "assign 未绑定变量".to_string()
 }
 
 /// `car`/`cdr` 非序对操作数（VM 操作码 / driver 内置共用——两路径既有同文）。

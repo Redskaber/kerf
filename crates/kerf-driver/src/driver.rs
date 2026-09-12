@@ -134,7 +134,7 @@ pub struct CompileOutput {
 fn resolve_symbol(s: Symbol, table: &SymbolTable) -> String {
     match s.0 {
         x if x == u32::MAX - 1 => "<main>".to_string(),
-        x if x == u32::MAX - 2 => "<lambda>".to_string(),
+        x if x == u32::MAX - 2 => "<fn>".to_string(),
         _ => table.name(s).to_string(),
     }
 }
@@ -320,6 +320,13 @@ const RESERVED_BINDING_CODE: DiagnosticCode = DiagnosticCode(20);
 /// 面，非符号宇宙层）。
 const REMOVED_NAME_CODE: DiagnosticCode = DiagnosticCode(21);
 
+/// E0021 关键字旧形表（r43 / E5 S2——22 §12 D29：关键字切换后旧形
+/// 入同一拒绝面；与 REMOVED_BUILTIN_NAMES 同型[旧形→现代形]）。
+/// 接管豁免同口径（用户 define 旧形 = 合法用户变量——退役的是
+/// N4 关键字面非 N0 符号宇宙层）。
+const REMOVED_KEYWORD_NAMES: &[(&str, &str)] =
+    &[("lambda", "fn"), ("set!", "assign"), ("begin", "do")];
+
 /// 保留字判定（单源 = kerf-syntax `Keyword::from_name` 25 名查表——
 /// 与 Reader/expander 消费同一表，零名单漂移面）。
 fn is_reserved_word(name: &str) -> bool {
@@ -369,16 +376,17 @@ fn reserved_stx_diag(f: &Stx, table: &SymbolTable) -> Option<Diagnostic> {
         Some(s) => table.name(s),
         None => "",
     };
-    // 单名绑定族：define / set! / define-syntax / module
+    // 单名绑定族：define / assign / define-syntax / module
+    // （r43 / E5 S2：set! → assign 表面切换——head 匹配同步[22 §12 D20]）
     match head {
-        "define" | "set!" | "module" => {
+        "define" | "assign" | "module" => {
             if items.len() >= 2 {
                 if let Some(n) = items[1].datum.as_symbol() {
                     let name = table.name(n);
                     if is_reserved_word(name) {
                         let kind = match head {
                             "module" => "模块名",
-                            "set!" => "赋值目标",
+                            "assign" => "赋值目标",
                             _ => "绑定名",
                         };
                         return Some(reserved_binding_diag(name, items[1].span, kind));
@@ -402,15 +410,16 @@ fn reserved_stx_diag(f: &Stx, table: &SymbolTable) -> Option<Diagnostic> {
             }
             return None;
         }
-        // lambda 参数表（各参数名均为绑定器）
-        "lambda" => {
+        // fn 参数表（各参数名均为绑定器）
+        // （r43 / E5 S2：lambda → fn 表面切换——head 匹配同步[22 §12 D19]）
+        "fn" => {
             if items.len() >= 2 {
                 if let Some(params) = items[1].datum.as_list() {
                     for p in params {
                         if let Some(n) = p.datum.as_symbol() {
                             let name = table.name(n);
                             if is_reserved_word(name) {
-                                return Some(reserved_binding_diag(name, p.span, "lambda 参数"));
+                                return Some(reserved_binding_diag(name, p.span, "fn 参数"));
                             }
                         }
                     }
@@ -465,7 +474,7 @@ fn reserved_stx_diag(f: &Stx, table: &SymbolTable) -> Option<Diagnostic> {
         }
         _ => {}
     }
-    // 子树递归（begin 体 / module 体 / lambda 体 / let 体 / if 分支 /
+    // 子树递归（do 体 / module 体 / fn 体 / let 体 / if 分支 /
     // 被绑值子树等——全部穿透）
     for item in items {
         if let Some(d) = reserved_stx_diag(item, table) {
@@ -1057,7 +1066,7 @@ fn warn_diag(
                     out.push(Diagnostic::warning(
                         Some(SHADOW_IMPORT_CODE),
                         format!(
-                            "lambda 参数「{}」遮蔽了 import 注入名（R-N2：合法但多半是命名事故）",
+                            "fn 参数「{}」遮蔽了 import 注入名（R-N2：合法但多半是命名事故）",
                             pn
                         ),
                         e.span(),
@@ -1289,7 +1298,11 @@ fn qualified_ref_diag(
             }
             // r42 / S1 移除轮——E0021 已移除旧名（值位/操作位全域；与
             // E0014 同 traversal——遮蔽已豁免[上]，接管豁免[下]同口径：
-            // 用户 define/set! 旧名 = 用户全局合法[退役的是内置注册面]）
+            // 用户 define/assign 旧名 = 用户全局合法[退役的是内置注册面]）
+            // r43 / S2 关键字腿——关键字旧形入同一拒绝面（22 §12 D29：
+            // lambda/set!/begin 旧形 → E0021 携新形指引；接管豁免同口径；
+            // 消息分源——内置旧名维持 S1 文案[27 负例组断言锚]，关键字
+            // 旧形用 S2 文案）
             if !takeover.contains(raw) && !takeover.contains(base) {
                 if let Some(&(_, modern)) = crate::builtins::REMOVED_BUILTIN_NAMES
                     .iter()
@@ -1299,6 +1312,18 @@ fn qualified_ref_diag(
                         Some(REMOVED_NAME_CODE),
                         format!(
                             "「{}」已于 v0.9 移除——现代名「{}」（20 §7 移除轮；限定名形 kerf 域亦可用）",
+                            base, modern
+                        ),
+                        *span,
+                    ));
+                }
+                if let Some(&(_, modern)) =
+                    REMOVED_KEYWORD_NAMES.iter().find(|&&(old, _)| old == base)
+                {
+                    return Some(Diagnostic::error(
+                        Some(REMOVED_NAME_CODE),
+                        format!(
+                            "「{}」关键字已切换——现代形式「{}」（22 §12 S2 关键字切换；用户接管同名不受影响）",
                             base, modern
                         ),
                         *span,
@@ -2334,7 +2359,7 @@ mod tests {
         // 统一 +1）双信号确认。
         let ok = std::thread::spawn(|| {
             let before = crate::bootstrap_expander::is_loaded();
-            let src = "(define-syntax m (syntax-rules () ((m x) (begin x)))) (m 42)";
+            let src = "(define-syntax m (syntax-rules () ((m x) (do x)))) (m 42)";
             let (front, _hit) = compile_front_cached(src, "t.krf").expect("编译失败");
             let after = crate::bootstrap_expander::is_loaded();
             let has_expansion_mark = front.core.iter().any(|e| match e.as_ref() {
@@ -2424,7 +2449,7 @@ mod tests {
 
     #[test]
     fn expand_error_is_rendered() {
-        let err = run_source("(lambda (x))", "bad.krf").unwrap_err();
+        let err = run_source("(fn (x))", "bad.krf").unwrap_err();
         assert_eq!(err.stage, Stage::Expand);
         assert!(err.to_string().contains("[expand]"));
     }
@@ -2460,7 +2485,7 @@ mod tests {
         let src = r#"
             (define-syntax inc!
               (syntax-rules ()
-                ((inc! v) (set! v (+ v 1)))))
+                ((inc! v) (assign v (+ v 1)))))
             (define x 41)
             (inc! x)
             x

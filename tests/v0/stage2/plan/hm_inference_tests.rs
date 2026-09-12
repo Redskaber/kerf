@@ -6,9 +6,9 @@
 //! - **零误报门**：examples 六件套 + 动态边界语料（typecheck_tests
 //!   dynamic_programs_clean 同源）→ 0 诊断；
 //! - **HM 增值面**（R1-R8 静默放过、38-d §2.2 四类缺口的检出证明）：
-//!   ①用户 lambda 实参类型错；②car/cdr 元素类型（Pair(τ,τ) 构造子）；
+//!   ①用户 fn 实参类型错；②car/cdr 元素类型（Pair(τ,τ) 构造子）；
 //!   ③分支分歧；④递归函数体内元数/域错；
-//! - **裁定负例**：occurs check（含自应用）≥3 + 值限制（set! 目标 /
+//! - **裁定负例**：occurs check（含自应用）≥3 + 值限制（assign 目标 /
 //!   App 结果不泛化）≥2 + 多错误 Span 序。
 //!
 //! **旗标期口径（D8 阶段 2——r29 / 50-a / MUV 48-c）**：`kerf check`
@@ -115,7 +115,7 @@ fn dynamic_boundary_corpus_clean() {
     assert_clean("(head '(1 2 3))");
     assert_clean("(define (head x) 42) (head 5)");
     assert_clean(
-        "(require io write) (define x 1) (set! x (+ x 1)) (begin (print x) (if (is-nil nil) x 2))",
+        "(require io write) (define x 1) (assign x (+ x 1)) (do (print x) (if (is-nil nil) x 2))",
     );
     assert_clean("(if (is-nil nil) 1 2)");
     assert_clean("(if (eq 'a 'a) 1 2)");
@@ -132,8 +132,8 @@ fn numeric_tower_and_set_join_clean() {
     assert_clean("(- 2.5 1)");
     assert_clean("(* 1.5 2.0 3)");
     // D3 join 保守契约：异型赋值 → Dynamic 降级零诊断
-    assert_clean("(define x 1) (set! x \"foo\") (string-append x \"!\")");
-    assert_clean("(define x 1) (set! x 2.5) (+ x 1)");
+    assert_clean("(define x 1) (assign x \"foo\") (string-append x \"!\")");
+    assert_clean("(define x 1) (assign x 2.5) (+ x 1)");
 }
 
 // ---------------------------------------------------------------------------
@@ -204,8 +204,8 @@ fn superset_gate_r1_to_r8() {
         "(1 2 3)",
         "(\"s\" 1)",
         // R7（元数）
-        "((lambda (x) x) 1 2)",
-        "((lambda (x y) x) 1)",
+        "((fn (x) x) 1 2)",
+        "((fn (x y) x) 1)",
         "(head 1 2)",
         // R8（串/符号族）
         "(string-append 1 \"a\")",
@@ -231,10 +231,10 @@ fn superset_gate_r1_to_r8() {
 
 #[test]
 fn gap1_user_lambda_arg_type_error_detected() {
-    // 缺口①：用户 lambda 实参类型错（保守检查：参数 Unknown 放过）
-    assert_diag("((lambda (x) (+ x 1)) \"foo\")", "需要数值");
+    // 缺口①：用户 fn 实参类型错（保守检查：参数 Unknown 放过）
+    assert_diag("((fn (x) (+ x 1)) \"foo\")", "需要数值");
     // 非数值域参数（bool 传入算术位）
-    assert_diag("((lambda (x) (+ x 1)) true)", "需要数值");
+    assert_diag("((fn (x) (+ x 1)) true)", "需要数值");
 }
 
 #[test]
@@ -291,16 +291,16 @@ fn occurs_check_negatives() {
 fn value_restriction_negatives() {
     // ① App 结果不泛化：head 的元素类型 Mono 共享——两用点异型报错
     assert_diag(
-        "(define f (head (cons (lambda (x) x) nil))) (f 1) (f true)",
+        "(define f (head (cons (fn (x) x) nil))) (f 1) (f true)",
         "类型不一致",
     );
-    // ② set! 目标弱单态：Poly 绑定经 set! 后永久单态——两用点异型报错
+    // ② assign 目标弱单态：Poly 绑定经 assign 后永久单态——两用点异型报错
     assert_diag(
-        "(define id (lambda (x) x)) (set! id id) (id 1) (id true)",
+        "(define id (fn (x) x)) (assign id id) (id 1) (id true)",
         "类型不一致",
     );
-    // 正例对照：未经 set! 的 lambda 绑定泛化（两域用点均合法）
-    assert_clean("(define id (lambda (x) x)) (id 1) (id true)");
+    // 正例对照：未经 assign 的 fn 绑定泛化（两域用点均合法）
+    assert_clean("(define id (fn (x) x)) (id 1) (id true)");
 }
 
 // ---------------------------------------------------------------------------
@@ -310,14 +310,14 @@ fn value_restriction_negatives() {
 #[test]
 fn let_shape_generalization() {
     // 表面 let 糖（脱装为 App-of-Lambda）与用户手写同待遇
-    assert_clean("(let ((id (lambda (x) x))) (+ (id 1) (id 2)))");
-    assert_clean("((lambda (id) (+ (id 1) (id 2))) (lambda (x) x))");
+    assert_clean("(let ((id (fn (x) x))) (+ (id 1) (id 2)))");
+    assert_clean("((fn (id) (+ (id 1) (id 2))) (fn (x) x))");
     // 泛化实例化：let 绑定的 id 在 Int/Bool 两域用点均合法
-    assert_clean("(let ((id (lambda (x) x))) (begin (id 1) (id true)))");
+    assert_clean("(let ((id (fn (x) x))) (do (id 1) (id true)))");
     // letrec 形状（D4）：lambda-RHS 泛化（体内两域用点合法）
-    assert_clean("(letrec ((id (lambda (x) x))) (begin (id 1) (id true)))");
+    assert_clean("(letrec ((id (fn (x) x))) (do (id 1) (id true)))");
     // 递归 letrec：fact 自引用推断（非 Dynamic）
-    let src = "(letrec ((fact (lambda (n) (if (= n 0) 1 (* n (fact (- n 1))))))) (fact 5))";
+    let src = "(letrec ((fact (fn (n) (if (= n 0) 1 (* n (fact (- n 1))))))) (fact 5))";
     assert_clean(src);
 }
 
@@ -357,8 +357,8 @@ fn dynamic_escape_not_forced() {
     // 未绑定引用（卫生符号/动态风格）不被推断面强制——零诊断
     assert_clean("(define (f x) (head x))");
     assert_clean("(print-unregistered-thing 1 2 3)");
-    // 混型 set! 后降级 Dynamic：下游零约束
-    assert_clean("(define x 1) (set! x true) (if x 1 2)");
+    // 混型 assign 后降级 Dynamic：下游零约束
+    assert_clean("(define x 1) (assign x true) (if x 1 2)");
 }
 
 #[test]

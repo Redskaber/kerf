@@ -68,10 +68,10 @@ fn prelude_define_shared_across_cases() {
     assert!(r.all_passed());
 }
 
-/// require/set! 为前置形态（不作用例计数）。
+/// require/assign 为前置形态（不作用例计数）。
 #[test]
 fn require_and_setbang_are_prelude_forms() {
-    let src = "(define x 1) (set! x 2) (require io write) (= x 2)";
+    let src = "(define x 1) (assign x 2) (require io write) (= x 2)";
     let r = report(src);
     assert_eq!(r.cases.len(), 1, "仅最后一个 = 形式为用例");
     assert!(r.all_passed());
@@ -136,9 +136,9 @@ fn failure_recovers_next_case_continues() {
 /// **短路**：case 内首错即停——后续表达式不执行（副作用不外泄）。
 #[test]
 fn first_error_short_circuits_within_case() {
-    // case = (begin undefined-x (= 1 2))：首表达式错误即停，
+    // case = (do undefined-x (= 1 2))：首表达式错误即停，
     // 整 case 单条 FAIL（detail 为首错，非 #f 断言）
-    let src = "(define x 1) (begin undefined-x (= 1 2))";
+    let src = "(define x 1) (do undefined-x (= 1 2))";
     let r = report(src);
     assert_eq!(r.cases.len(), 1);
     assert!(!r.cases[0].pass);
@@ -166,16 +166,16 @@ fn deep_nested_failure_reaches_boundary() {
 }
 
 /// **状态隔离**：失败 case 的脏状态不毒化后续 case（每 case 全新
-/// 环境与堆——前置逐用例重放：case 1 内的 set! 不泄漏进 case 2）。
+/// 环境与堆——前置逐用例重放：case 1 内的 assign 不泄漏进 case 2）。
 #[test]
 fn failing_case_does_not_poison_following_cases() {
-    let src = "(define x 5) (begin (set! x 6) (= 1 2)) (= x 5)";
+    let src = "(define x 5) (do (assign x 6) (= 1 2)) (= x 5)";
     let r = report(src);
-    assert_eq!(r.cases.len(), 2, "define 为前置，两个 begin/= 为用例");
+    assert_eq!(r.cases.len(), 2, "define 为前置，两个 do/= 为用例");
     assert!(!r.cases[0].pass, "首用例 #f 断言应失败");
     assert!(
         r.cases[1].pass,
-        "次用例独立重放前置（x=5）——首用例的 set! 不泄漏（隔离）"
+        "次用例独立重放前置（x=5）——首用例的 assign 不泄漏（隔离）"
     );
 }
 

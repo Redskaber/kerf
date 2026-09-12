@@ -178,9 +178,9 @@ const SWAP: &str = r#"(define-syntax swap!
   (syntax-rules ()
     ((swap! a b)
      (let ((tmp a))
-       (begin (set! a b) (set! b tmp))))))
+       (do (assign a b) (assign b tmp))))))
 (define x 1) (define y 2)
-(begin (swap! x y) (- x y))"#;
+(do (swap! x y) (- x y))"#;
 
 const MY_OR: &str = r#"(define-syntax my-or
   (syntax-rules ()
@@ -190,7 +190,7 @@ const MY_OR: &str = r#"(define-syntax my-or
 const COUNTERS: &str = r#"
         (define (make-counter)
           (let ((n 0))
-            (lambda () (set! n (+ n 1)) n)))
+            (fn () (assign n (+ n 1)) n)))
         (define a (make-counter))
         (define b (make-counter))
         (a) (a) (a)
@@ -200,7 +200,7 @@ const COUNTERS: &str = r#"
 
 const PRELUDE_PIPE: &str = r#"(module user (import kerf-prelude)
   (define lst (list 1 2 3 4 5))
-  (foldl + 0 (map (lambda (x) (* x x)) (filter (lambda (x) (> x 2)) lst))))"#;
+  (foldl + 0 (map (fn (x) (* x x)) (filter (fn (x) (> x 2)) lst))))"#;
 
 // ---------------------------------------------------------------------------
 // 案例表（50 case）
@@ -285,8 +285,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: None,
-        src: "(set! 1 2)",
-        expect: Expect::Err { stage: Stage::Expand, msg: "set! 目标必须是符号" },
+        src: "(assign 1 2)",
+        expect: Expect::Err { stage: Stage::Expand, msg: "assign 目标必须是符号" },
     },
     Case {
         id: "A11",
@@ -301,7 +301,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Arity),
-        src: "((lambda (x) x) 1 2)",
+        src: "((fn (x) x) 1 2)",
         expect: Expect::Err { stage: Stage::Run, msg: "参数数量不匹配" },
     },
     // ---- B 桶：多语句/多函数负向（集成正确性，12）----
@@ -342,7 +342,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Unbound),
-        src: "(define (f) (set! y 1)) (f)",
+        src: "(define (f) (assign y 1)) (f)",
         expect: Expect::Err { stage: Stage::Run, msg: "未绑定" },
     },
     Case {
@@ -385,7 +385,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: None,
-        src: "(lambda (x) (define y 1) (define z 2) (+ x y) (define w 3))",
+        src: "(fn (x) (define y 1) (define z 2) (+ x y) (define w 3))",
         expect: Expect::Err { stage: Stage::Expand, msg: "define 必须位于函数体头部" },
     },
     Case {
@@ -454,7 +454,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: None,
-        src: "(let ((f (lambda (x) (g x)))) (f 1))",
+        src: "(let ((f (fn (x) (g x)))) (f 1))",
         expect: Expect::Err { stage: Stage::Run, msg: "未绑定" },
     },
     Case {
@@ -486,7 +486,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: None,
-        src: "(while true (set! x (+ x 1)))",
+        src: "(while true (assign x (+ x 1)))",
         expect: Expect::Err { stage: Stage::Run, msg: "未绑定" },
     },
     // ---- D 桶：错误恢复（错误后同进程续跑，6）----
@@ -535,7 +535,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Recovery,
         polarity: Polarity::Recovery,
         class: None,
-        src: "((lambda (x) x) 1 2)",
+        src: "((fn (x) x) 1 2)",
         expect: Expect::Custom(probe_arity_recovery),
     },
     // ---- E 桶：上轮修复边界 case（§7.3.2——本批次修复面，6）----
@@ -560,7 +560,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Boundary,
         polarity: Polarity::Positive,
         class: None,
-        src: "(define x 1) (set! x 2) x",
+        src: "(define x 1) (assign x 2) x",
         expect: Expect::OkDual("2"),
     },
     Case {
@@ -586,8 +586,8 @@ const CASES: &[Case] = &[
         class: None,
         src: "(define-syntax swap!
   (syntax-rules ()
-    ((swap! a b) (let ((tmp a)) (begin (set! a b) (set! b tmp))))))
-(let ((tmp 10) (u 3) (v 4)) (begin (swap! u v) (+ u v tmp)))",
+    ((swap! a b) (let ((tmp a)) (do (assign a b) (assign b tmp))))))
+(let ((tmp 10) (u 3) (v 4)) (do (swap! u v) (+ u v tmp)))",
         expect: Expect::Custom(probe_macro_in_sugar_span_boundary),
     },
     // ---- P 桶：正向 sanity + §21.3 锚定（4）----
@@ -785,7 +785,7 @@ fn probe_depth_recovery() -> CaseResult {
         return fail("前置错误应 Err".to_string());
     }
     match run_source(
-        "(define-syntax m (syntax-rules () ((m x) x))) (begin (m 1) (m 2) (m 3))",
+        "(define-syntax m (syntax-rules () ((m x) x))) (do (m 1) (m 2) (m 3))",
         FNAME,
     ) {
         Ok(o) if matches!(o.value, kerf_vm::Value::Int(3)) => {
@@ -809,7 +809,7 @@ fn probe_run_recovery() -> CaseResult {
 }
 
 fn probe_arity_recovery() -> CaseResult {
-    let bad = run_source("((lambda (x) x) 1 2)", FNAME);
+    let bad = run_source("((fn (x) x) 1 2)", FNAME);
     if bad.is_ok() {
         return fail("前置错误应 Err".to_string());
     }
@@ -835,8 +835,8 @@ fn probe_arity_recovery() -> CaseResult {
 fn probe_macro_in_sugar_span_boundary() -> CaseResult {
     let s = "(define-syntax swap!
   (syntax-rules ()
-    ((swap! a b) (let ((tmp a)) (begin (set! a b) (set! b tmp))))))
-(let ((tmp 10) (u 3) (v 4)) (begin (swap! u v) (+ u v tmp)))";
+    ((swap! a b) (let ((tmp a)) (do (assign a b) (assign b tmp))))))
+(let ((tmp 10) (u 3) (v 4)) (do (swap! u v) (+ u v tmp)))";
     match run_source(s, FNAME) {
         Ok(o) => {
             let got = kerf_vm::render_value(&o.value, &o.heap);

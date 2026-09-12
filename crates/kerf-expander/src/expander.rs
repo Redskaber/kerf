@@ -427,8 +427,8 @@ mod tests {
     #[test]
     fn expand_lambda_and_app() {
         let mut c = ctx();
-        let out = expand_src("((lambda (x) (+ x 1)) 41)", &mut c).unwrap();
-        assert_eq!(render(&out, &c), vec!["((lambda (x) (+ x 1)) 41)"]);
+        let out = expand_src("((fn (x) (+ x 1)) 41)", &mut c).unwrap();
+        assert_eq!(render(&out, &c), vec!["((fn (x) (+ x 1)) 41)"]);
     }
 
     #[test]
@@ -442,23 +442,23 @@ mod tests {
     fn expand_define_function_sugar() {
         let mut c = ctx();
         let out = expand_src("(define (f x) (* x x))", &mut c).unwrap();
-        assert_eq!(render(&out, &c)[0], "(define f (lambda (x) (* x x)))");
+        assert_eq!(render(&out, &c)[0], "(define f (fn (x) (* x x)))");
     }
 
     #[test]
     fn expand_let_derives_to_lambda_app() {
         let mut c = ctx();
         let out = expand_src("(let ((x 1) (y 2)) (+ x y))", &mut c).unwrap();
-        assert_eq!(render(&out, &c)[0], "((lambda (x y) (+ x y)) 1 2)");
+        assert_eq!(render(&out, &c)[0], "((fn (x y) (+ x y)) 1 2)");
     }
 
     #[test]
     fn expand_letrec_derives() {
         let mut c = ctx();
-        let out = expand_src("(letrec ((f (lambda () 1))) (f))", &mut c).unwrap();
+        let out = expand_src("(letrec ((f (fn () 1))) (f))", &mut c).unwrap();
         let r = render(&out, &c)[0].clone();
-        assert!(r.starts_with("((lambda (f)"), "letrec 推导：{}", r);
-        assert!(r.contains("set! f"));
+        assert!(r.starts_with("((fn (f)"), "letrec 推导：{}", r);
+        assert!(r.contains("assign f"));
     }
 
     #[test]
@@ -485,7 +485,7 @@ mod tests {
     #[test]
     fn expand_while_uses_fresh_loop() {
         let mut c = ctx();
-        let out = expand_src("(while (< i 10) (set! i (+ i 1)))", &mut c).unwrap();
+        let out = expand_src("(while (< i 10) (assign i (+ i 1)))", &mut c).unwrap();
         let r = render(&out, &c)[0].clone();
         assert!(r.contains("loop$hyg$"), "while 的 loop 必须唯一化：{}", r);
     }
@@ -510,16 +510,16 @@ mod tests {
     #[test]
     fn inner_define_hoisted() {
         let mut c = ctx();
-        let out = expand_src("(lambda (x) (define y 2) (+ x y))", &mut c).unwrap();
+        let out = expand_src("(fn (x) (define y 2) (+ x y))", &mut c).unwrap();
         let r = render(&out, &c)[0].clone();
-        // (lambda (x) ((lambda (y) (begin (set! y 2) (+ x y))) nil))
-        assert!(r.contains("set! y 2"), "内部 define 提升：{}", r);
+        // (fn (x) ((fn (y) (do (assign y 2) (+ x y))) nil))
+        assert!(r.contains("assign y 2"), "内部 define 提升：{}", r);
     }
 
     #[test]
     fn inner_define_after_expr_is_error() {
         let mut c = ctx();
-        let err = expand_src("(lambda (x) (+ x 1) (define y 2))", &mut c).unwrap_err();
+        let err = expand_src("(fn (x) (+ x 1) (define y 2))", &mut c).unwrap_err();
         assert!(err.message.contains("define 必须位于函数体头部"));
     }
 
@@ -604,9 +604,9 @@ mod tests {
             (define-syntax swap!
               (syntax-rules ()
                 ((swap! a b)
-                 (begin
-                   (set! tmp (quote (1)))
-                   (set! a b)))))
+                 (do
+                   (assign tmp (quote (1)))
+                   (assign a b)))))
             (swap! x y)
         "#;
         let out = expand_src(src, &mut c).unwrap();

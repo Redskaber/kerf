@@ -9,9 +9,9 @@
 //! 每行 = 1 case（表格驱动）。所有期望消息/Span 均经实测校准。
 //!
 //! 语义边界（实测确认，非负例，按实际行为归类）：
-//! - `(define)`/`(lambda)`/`(if)` 等**结构**错误在 Expand 阶段报 E0002
+//! - `(define)`/`(fn)`/`(if)` 等**结构**错误在 Expand 阶段报 E0002
 //!   （非 Reader——Reader 只查括号三态与字符合法性）；
-//! - `(begin)`/`(and)`/`(or)` 零参数合法（空 begin → nil；and → true；or → false）；
+//! - `(do)`/`(and)`/`(or)` 零参数合法（空 do → nil；and → true；or → false）；
 //! - `(if c t)` 双分支形态合法（缺省 else → nil）；
 //! - 宏模板中未绑定于模式的标识符**不报错**——经卫生重命名成为引入
 //!   标识符，错误推迟到 Run 阶段（未绑定全局）——见语义发现 FS-3。
@@ -56,22 +56,22 @@ fn expect_span(err: &kerf_driver::DriverError, start: u32, end: u32) {
 }
 
 /// 空应用 `()`（§7.1.1 类 3——T14-b 零测试分类补齐）（11 case）：
-/// 多形态——顶层 / begin 体 / 调用位 / 参数位 / let 绑定值 / if 条件 /
-/// define 值 / set! 值 / 三层嵌套内层 / 多个 / begin 尾部。
+/// 多形态——顶层 / do 体 / 调用位 / 参数位 / let 绑定值 / if 条件 /
+/// define 值 / assign 值 / 三层嵌套内层 / 多个 / do 尾部。
 #[test]
 fn empty_application_family() {
     let cases: &[(&str, u32, u32)] = &[
         ("()", 0, 2),
-        ("(begin ())", 7, 9),
+        ("(do ())", 4, 6),
         ("(() 1)", 1, 3),
         ("(+ ())", 3, 5),
         ("() ()", 0, 2),
         ("(let ((x ())) 1)", 9, 11),
         ("(if () 1 2)", 4, 6),
         ("(define x ())", 10, 12),
-        ("(define x 1) (set! x ())", 21, 23),
+        ("(define x 1) (assign x ())", 23, 25),
         ("((()))", 2, 4),
-        ("(begin 1 ())", 9, 11),
+        ("(do 1 ())", 6, 8),
     ];
     for (src, s, e) in cases {
         let err = expect_expand_err(src, "空列表不能作为表达式求值");
@@ -84,26 +84,20 @@ fn empty_application_family() {
     }
 }
 
-/// lambda 误用（8 case）：元数/参数表结构/参数类型/重名/嵌套重名/
+/// fn 误用（8 case）：元数/参数表结构/参数类型/重名/嵌套重名/
 /// 体部重复 define（TD-014 r24：嵌套重名以专门消息归因——原
-/// 「lambda 参数重名」提升路径兜底已消除）。
+/// 「fn 参数重名」提升路径兜底已消除）。
 #[test]
 fn lambda_misuse() {
     let cases: &[(&str, &str)] = &[
-        ("(lambda)", "lambda 形式：(lambda (参数...) 体...)"),
-        ("(lambda (x))", "lambda 形式：(lambda (参数...) 体...)"),
-        ("(lambda x 1)", "lambda 参数必须是符号列表"),
-        ("(lambda (1) 1)", "lambda 参数必须是符号（不支持解构参数）"),
-        (
-            "(lambda (x \"s\") x)",
-            "lambda 参数必须是符号（不支持解构参数）",
-        ),
-        ("(lambda (x x) x)", "lambda 参数重名"),
-        ("((lambda (x) (lambda (x x) x)) 1)", "lambda 参数重名"),
-        (
-            "(lambda () (define x 1) (define x 2))",
-            "嵌套 define 重复绑定",
-        ),
+        ("(fn)", "fn 形式：(fn (参数...) 体...)"),
+        ("(fn (x))", "fn 形式：(fn (参数...) 体...)"),
+        ("(fn x 1)", "fn 参数必须是符号列表"),
+        ("(fn (1) 1)", "fn 参数必须是符号（不支持解构参数）"),
+        ("(fn (x \"s\") x)", "fn 参数必须是符号（不支持解构参数）"),
+        ("(fn (x x) x)", "fn 参数重名"),
+        ("((fn (x) (fn (x x) x)) 1)", "fn 参数重名"),
+        ("(fn () (define x 1) (define x 2))", "嵌套 define 重复绑定"),
     ];
     for (src, msg) in cases {
         expect_expand_err(src, msg);
@@ -123,14 +117,14 @@ fn if_misuse() {
     }
 }
 
-/// set! 误用（4 case）：元数 2/4、目标非符号。
+/// assign 误用（4 case）：元数 2/4、目标非符号。
 #[test]
 fn setbang_misuse() {
     let cases: &[(&str, &str, u32, u32)] = &[
-        ("(set! x)", "set! 形式：(set! 名 值)", 0, 8),
-        ("(set! x 1 2)", "set! 形式：(set! 名 值)", 0, 12),
-        ("(set! 1 2)", "set! 目标必须是符号", 6, 7),
-        ("(set! \"s\" 1)", "set! 目标必须是符号", 6, 9),
+        ("(assign x)", "assign 形式：(assign 名 值)", 0, 10),
+        ("(assign x 1 2)", "assign 形式：(assign 名 值)", 0, 14),
+        ("(assign 1 2)", "assign 目标必须是符号", 8, 9),
+        ("(assign \"s\" 1)", "assign 目标必须是符号", 8, 11),
     ];
     for (src, msg, s, e) in cases {
         let err = expect_expand_err(src, msg);
@@ -182,14 +176,14 @@ fn module_misuse() {
     }
 }
 
-/// import/export 误用（4 case）：module 外使用（顶层 + lambda 体）。
+/// import/export 误用（4 case）：module 外使用（顶层 + fn 体）。
 #[test]
 fn import_export_misuse() {
     for src in [
         "(import x)",
         "(export x)",
-        "(lambda () (import x))",
-        "(lambda () (export x))",
+        "(fn () (import x))",
+        "(fn () (export x))",
     ] {
         expect_expand_err(src, "import/export 只能出现在 module 形式内部");
     }
@@ -361,10 +355,7 @@ fn define_syntax_misuse() {
 /// syntax-rules 裸用（2 case）：define-syntax 外出现。
 #[test]
 fn syntax_rules_misuse() {
-    for src in [
-        "(syntax-rules () (_ 1))",
-        "(lambda () (syntax-rules () (_ 1)))",
-    ] {
+    for src in ["(syntax-rules () (_ 1))", "(fn () (syntax-rules () (_ 1)))"] {
         expect_expand_err(src, "syntax-rules 只能出现在 define-syntax 内部");
     }
 }
@@ -379,8 +370,8 @@ fn vector_in_expression_position() {
 /// define 不在函数体头部（1 case）——§19.2 陷阱 3 的反面。
 #[test]
 fn define_not_at_body_head() {
-    let err = expect_expand_err("(lambda () 1 (define x 2))", "define 必须位于函数体头部");
-    expect_span(&err, 13, 25);
+    let err = expect_expand_err("(fn () 1 (define x 2))", "define 必须位于函数体头部");
+    expect_span(&err, 9, 21);
 }
 
 /// 宏展开负例（6 case）：调用与模式不匹配 ×3（多余实参/裸符号模式/
@@ -470,14 +461,14 @@ fn module_import_undeclared_from_source() {
 /// E0002 渲染形状完整断言（3 case）：error[E0002] + `-->` + 源摘录。
 #[test]
 fn expander_error_rendering_shape() {
-    let err = expect_expand_err("(lambda (x))", "lambda 形式");
-    assert!(err.rendered.contains("error[E0002]: lambda 形式"));
+    let err = expect_expand_err("(fn (x))", "fn 形式");
+    assert!(err.rendered.contains("error[E0002]: fn 形式"));
     assert!(err.rendered.contains("--> neg.krf:1:1"));
-    assert!(err.rendered.contains("1 | (lambda (x))"));
-    let err2 = expect_expand_err("(set! 1 2)", "set! 目标必须是符号");
-    assert!(err2.rendered.contains("--> neg.krf:1:7"));
-    let err3 = expect_expand_err("(lambda (x x) x)", "lambda 参数重名");
-    assert!(err3.rendered.contains("--> neg.krf:1:12"));
+    assert!(err.rendered.contains("1 | (fn (x))"));
+    let err2 = expect_expand_err("(assign 1 2)", "assign 目标必须是符号");
+    assert!(err2.rendered.contains("--> neg.krf:1:9"));
+    let err3 = expect_expand_err("(fn (x x) x)", "fn 参数重名");
+    assert!(err3.rendered.contains("--> neg.krf:1:8"));
     assert!(
         err3.diagnostic.code == Some(kerf_span::DiagnosticCode(2)),
         "Expand 错误必须编号为 E0002"

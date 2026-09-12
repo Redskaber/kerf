@@ -8,7 +8,7 @@
 (define (grow n)
   (if (= n 0)
       0
-      (begin
+      (do
         (cons 1 2) (cons 3 4) (cons 5 6) (cons 7 8) (cons 9 10)
         (+ (grow (- n 1)) 1))))
 (grow 30000)

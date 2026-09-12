@@ -4929,3 +4929,54 @@ Work Log:
 
 Stage Summary:
 - **E5 S1 表面腿交付**：旧名 27 件退役（E0021 + 负例组 27 名全覆盖 + 闭合守卫）+ W1001 下线 + W1003 落地 + 全语料现代名终态（grep 零旧名实证）——**828:0:0 + 五审计集 233 + E0021/W1003 端到端**；TD-027 清偿关闭；注册面 84→57 扁平（104 全授权）；63-z 打包 + 63-web web 面随后
+---
+Task ID: 63-z（r42 收尾——打包 + 包内自举 + rec 树；详录 flat 63-z）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r42 tar.gz + 包内自举 + rec 树 05_r42 + worklog 双源
+
+Work Log:
+- r42 tar.gz（§19.3 commit-then-package 正序：git 本体 commit 先行）：**kerf-stage3-v0.9.0-r42-e5s1-oldnames-828tests.tar.gz（2.18MB / 356 条目）**落 download/；排除 target/.git/download/tool-results
+- **包内自举**（/tmp/r42boot 全新解包）：build --release **14.20s 零告警** + **828:0:0 复跑**（逐二进制实测汇总）+ 包内五审计集 EXIT 0 ×5（233）+ CLI 一致（fib ⇒ 144 / macros ⇒ 42 / check ok 0 / **E0021 端到端 REAL_EXIT 1**）+ qbe 在包（tools/qbe/bin/qbe）
+- rec 树：03_stage-3_入场序列/**05_r42_E5窗开启_移除轮S1_旧名退役.md**（交付零开窗设计 + 交付一 S1 本体 + 交付二打包 + 里程碑）+ 03 层 l 05 行 + root l 更新随后（63-web 承载）
+- 遵循：§19.1（规则四条：时机/格式/内容/位置）/ §19.3（三检查：§3.2 全绿 ✅ + commit 先行 ✅ + RELEASE_NOTES ✅）/ §8.6（worklog 双源）
+
+Stage Summary:
+- r42 打包门达成——E5 S1 验收三门全过（§3.2 全绿 ✅[828:0:0] + 包内自举 ✅[828 复跑 + 审计 ×5 + CLI 一致 + qbe] + E2E[63-web 承载]）；63-web web 面随后
+
+---
+Task ID: 64-a/64-b/64-c（r43 深审轮——关键字完全重筛 + 语法结构复审）
+Agent: Super Z (main) — ARCH-A + REV-A 双角色（批间插入设计深审轮 + S2 设计前置）
+Task: lang-design 全 24 文档缺陷面第三轮扫描 + N4 25 名关键字完全重筛（语义/二义/标准三判定）+ 衍生关键字 S3 形态名对账 + 语法结构复审（'/' 与操作位统一零交互）
+
+Work Log:
+- 驱动源 = 用户指令「内部关键字和候选衍生关键字的完全重新筛选——语义清晰/无二义/标准符合 + 2026 前沿 + 内循环迭代收敛」——**r41 深审批的是二义性（形式层），本轮批命名质量（语义层）**——新增「关键字语义面」维度（七维度第三轮扫描）
+- 知识搜索八查询实证（tool-results/r43-search/）：q1 fn/fun/func/lambda 四形态（langdev + kotlinlang + HN——fn 无歧义胜出）+ q2 Clojure do vs Scheme begin 同义（Schemer 视角）+ q3 `!` 标记（SE——单家族约定）+ q4 保留字占用（Oracle/Databricks/MATLAB）+ q5 OCaml5/Koka/Eff perform/resume（ocaml.org——"resuming a continuation"概念词）+ q6 Janet/Gleam 现代 Lisp fn（Gleam tour 2026 + HN 2025）+ **q7 Clojure seq 生态占用（seq/lazy-seq/seqable? 六源——D21 否决 seq 的决定性证据）** + **q8 Clojure set 构造占用（(set coll)/#{} + transients——D20 否决 set 的决定性证据）**
+- **名空间经济新判据**（J-2 二义性判据的结构性扩展——E0020 严格保留字启用后首次完整适用）：关键字名 = 标识符全域排他 → 高频生态名（set 集合构造/seq 序列协议）被关键字占用 = 标准库永久禁用该名 → 远期占用风险是**否决候选**的判据（先例仅佐证风险真实性——原则 35 判据先于先例合规）
+- **两处 P2 候选修正**：D20 `set!→assign`（否决 e5-plan 原候选 set——三判据：名空间经济[集合构造 2026 生态标配]/J-1 语义精度[assign 精确对应 assignment]/01 §7.2 既有 Assign 候选一致）+ D21 `begin→do`（否决原候选 seq——Clojure do 与 begin 完全同义[强先例] + 动词化[原则 29] + 2 字符；负迁移登记：Haskell monad do/C do-while——最近邻 Clojure/Racket 正迁移收益 > 远邻成本）；D19 `lambda→fn` 维持强化（Rust/Janet/Gleam 三家族 + Janet (fn [x]) 形态同构 + 2 字符 + fn 低频标识符占用近零）
+- **22 名维持裁定**（D22-D27）：if/else/and/or/when/while/unless（跨家族通用语 7 名）/ let 系三件（含 let\* 平行/顺序频率倒挂 P3 登记——语义冻结无通道）/ cond（缩写 60 年共识 + kerf 无模式匹配故 match 不适用）/ define/quote/module/import/export/require（WASI 需求声明同构 + Clojure require 撞名登记）/ define-syntax/syntax-rules（宏系统 Racket 谱系名实对齐）/ perform/handle/resume（OCaml5/Koka/Eff 前沿精确对齐——resume 优于 OCaml continue[精确指向恢复续体]）
+- **否决记录表八行**（原则 35「否决与采纳同等一等」）：set/seq（名空间经济）/ fun（英语歧义）/ func（概念重叠）/ mut（Rust 类型标记非赋值动词）/ match（模式匹配错位）/ macro（语义扁平化）/ continue（J-1 弱于 resume）
+- **衍生关键字对账**（D30——原则 31）：fn↔Fn 对齐（S3 重命名族）+ assign↔SetBang 分离合法（S3 D5 裁定不迁）+ do↔Begin→Let 分离合法（脱糖链解耦）；候选空间完备性证明（lambda 域 7 候选/set! 域 7 候选/begin 域 6 候选全展开）
+- **语法结构复审**：D32 `/` 维持（D12 重申——切换三件不含 `/` 零交互 + `::`/`.` 期权维持）+ D33 (op args...) 操作位统一维持（D13/D17 重申——操作位三形态结构不变 + else 数据位一形态[25 名唯一非操作位]）
+- 落位：**22 §12 新增 D19-D33**（七维度扫描表 + 25 名三判定总表 + 收敛证明 + S2 实施对账）+ 22 v1.6 头 + e5-plan v1.1（S2 行候选修正 + §4.2 否决记录）+ 01 §7.2 注记 + 20 §6.3/§7 注记 + 02 v6.4
+- 遵循：§13.5（设计-审查循环——三轮收敛 r40/r41/r43）/ 原则 29（行为导向——fn/assign/do 动词化）/ 原则 31（表面-内部分离——D30 + kind_name 维持）/ 原则 33（表面现代化——关键字面收口）/ 原则 35（判据先于先例——名空间经济新判据 + 否决记录 + 候选空间全展开）/ R1（八查询实测实证）
+
+Stage Summary:
+- 深审收敛证明：r40 六维度 + r41 二义性面 + r43 命名语义面——三层全收敛（无未清 P0/P1 + 无未裁定 P2 + 4 项 P3/登记如实入册）；每裁定持判据集 + ≥2 实证源 + 实施锚
+---
+Task ID: 64-e（r43 实施——E5 S2 关键字腿）
+Agent: Super Z (main) — DEV-A + QA-A（e5-plan §4 r43 排期窗内实施）
+Task: 三件切换 fn/assign/do + E0021 扩展 + 全语料迁移 + s2 负例组 + §3.2 六命令全绿
+
+Work Log:
+- **单源切换**：symbol.rs Keyword::as_str/from_name 双向三件（fn/assign/do——变体名 Lambda/SetBang/Begin 不变[原则 31]）；expander WORD\* 经 keyword_symbol 自动跟随 + lexer Keyword::from_name 查表自动跟随 + E0020 is_reserved_word 单源自动跟随（25 名计数不变——三名出三名入）
+- **三域分离实录（R1 开发实录——本轮最重要实施发现）**：`lambda`/`set!`/`begin` 在语料中存在**三个命名域**——①表面关键字域（源码形式头——切换对象）②**自举桥 tag 域**（bootstrap_compiler.rs tag("lambda"/"set"/"begin") + bootstrap_expander.rs core_from_value 匹配臂 + compiler.krf (eq tag "…")——CoreExpr 值序列化标签；**"set" 无 "!" 即其独立于表面关键字域的证据**——零变更[tag 与 .krf 侧解析精确匹配是自举链生命线]）③**core 节点 quote 符号域**（expander.krf `(list 'lambda …)` 展开产物 tag——零变更）；**误伤两次均当场发现修复**：第一次（bootstrap 双面 tag 改后自举链断——回退）+ 第二次（测试区迁移脚本"cfg(test) 之后全替换"策略遇 cfg(test) 在文件中位的结构陷阱[bootstrap_expander.rs @106 行/生产臂 @388]——精确恢复）；**教训**：全局词边界替换对多域命名的语料必须按域分立验证（grep 分域 + 编译 + 测试三道闸）
+- **词法边界迁移**（IDCH 负向先行 `(?![A-Za-z0-9_?!<>=/+-])` 防 set!x 类标识符误伤）：.krf ×4（compiler 120[**tag 保护占位符法**——(eq tag "X") 六处先占位后还原] + expander 92[**表面域字符串（kw-name 分派/sym-node 脱糖构造/关键字表）改 + core tag quote 符号回退五处**] + reader 3[关键字表]）+ tests 578 + examples + crates 测试区 45（11 文件）= **800+ 处**；**IDCH 排除集把 `begin/` 中文斜杠语境排除的边缘案例**（compiler.krf define 位置消息——手工修复一处 + test_runner 注释一处）
+- **渲染面跟随表面**（r42 `#<builtin:head>` 先例）：CoreExpr::render 三 format 串 + 魔法符号 `<lambda>`→`<fn>`（匿名 fn 原型——driver resolve_symbol + 测试镜像同步）+ core_forms.rs 消息六处（fn 形式/assign 形式/assign 目标/fn 参数 ×3——parity 与 expander.krf 一致）+ anf.rs qbe 消息 + vm/messages.rs E0004「assign 未绑定变量」+ driver W1002「fn 参数」+ kind_name **维持内部 ADT 名**（lambda/set!/begin——S3 腿才改——原则 31）
+- **E0021 扩展**（22 §12 D29）：REMOVED_KEYWORD_NAMES 3 对表（lambda→fn/set!→assign/begin→do）+ driver VarRef 臂**分源检查**（内置旧名维持 S1 文案[27 负例组断言锚不破坏] + 关键字旧形新文案「关键字已切换——现代形式」）+ **接管豁免同口径**（用户 (define lambda 5) 后 lambda = 合法用户变量——退役的是 N4 关键字面非 N0 符号宇宙层）；CLI 端到端 REAL_EXIT 1 ×3 形态实证
+- **s2 负例组 4 case**（namespace_tests）：E0021 三旧形四形态（操作位 ×3 + 值位[需 require 前置——E0006 门控]——携新形指引断言）+ 接管豁免（define lambda 合法 + 值 5 可读）+ E0020 新名禁绑四形态（fn/assign/do 绑定名与 fn 参数位）+ 门 A 行为 parity（fn/assign/do 运行值断言——e5-plan §3.2 S2 行断言①的集成形态）
+- **测试期望平移**：negative_expander_tests Span 八处（assign 比 set! 多 2 字符 + fn 比 lambda 少 4 字符 + do 比 begin 少 3 字符——逐处精确计算）+ 渲染列号两处（1:7→1:9/1:12→1:8）
+- **§3.2 六命令 clean 起步全绿**：clean 552 files → build --release 14.00s 零告警 → check 0 → fmt 0 diff → clippy -D warnings 0 → **test 832:0:0**（614 集成[610+4] + 218 单元 = workspace 口径；828 基线 + 4 净增）+ 五审计集 EXIT 0 ×5（233 维持）+ CLI 四路径（fib 75025/144、macros 42、higher_order (1 4 9 16 25)、closures (4 2) 42、check ok）+ E0021 端到端 ×3 + W1003 知会维持
+- 遵循：§3.2（六命令 clean 起步）/ §8.4.5（R4——渲染/消息面随实现同步 + 对账文档八件）/ §8.6（worklog 双源）/ 原则 31（三域分离——表面切换 + 桥 tag/core tag 零变更）/ 原则 28（渐进替换——E0021 携指引 + 接管豁免 DX）/ R1（三域分离实录 + 两次误伤实测修复）
+
+Stage Summary:
+- **E5 S2 关键字腿交付**：三件切换（fn/assign/do——22 §12 重筛终选）+ E0021 关键字旧名扩展 + 语料零旧形（grep 实证——合法残留 = 桥 tag 域 + 负例测试数据 + 内部名）——**832:0:0 + 五审计集 233 + E0021 端到端 ×3**；e5-plan §3.2 S2 断言 ①-④ 全过（门 A 行为 parity ✅ / 门 B fixpoint 随六命令 ✅ / 负例组 ✅ / E0020 禁绑面更新 ✅）

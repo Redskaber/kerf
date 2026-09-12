@@ -306,7 +306,7 @@ mod tests {
 
     #[test]
     fn spans_merge_over_list() {
-        let src = "(begin 1)";
+        let src = "(do 1)";
         let mut t = SymbolTable::new();
         let forms = read_source(src, 0, &mut t).unwrap();
         let stx = &forms[0];
@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn keyword_as_symbol_datum() {
-        let forms = read("lambda").unwrap();
+        let forms = read("fn").unwrap();
         assert!(matches!(forms[0].datum, StxDatum::Symbol(_)));
     }
 }

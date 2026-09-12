@@ -609,8 +609,8 @@ mod tests {
             t.intern("x"),
             t.intern("y"),
             t.intern("tmp"),
-            t.intern("begin"),
-            t.intern("set!"),
+            t.intern("do"),
+            t.intern("assign"),
             t.intern("quote"),
         ];
         BuiltinTransformers::init_markers(&mut t);
@@ -624,7 +624,7 @@ mod tests {
     #[test]
     fn syntax_rules_parse_and_simple_match() {
         let (mut t, syms) = setup();
-        // (syntax-rules () (swap a b) (begin (set! tmp a) (set! a b) (set! b tmp)))
+        // (syntax-rules () (swap a b) (do (assign tmp a) (assign a b) (assign b tmp)))
         // 构造模式与模板
         let a = t.intern("a");
         let b = t.intern("b");
@@ -635,7 +635,7 @@ mod tests {
         );
         let template = Stx::list(
             vec![
-                sym_stx(syms[5]), // begin
+                sym_stx(syms[5]), // do
                 Stx::list(
                     vec![sym_stx(syms[6]), sym_stx(syms[5]), sym_stx(a)],
                     Span::dummy(),
@@ -666,16 +666,16 @@ mod tests {
         ];
         let mut hygiene = HygieneCtx::new(&mut t);
         let out = rules.apply(&call_args, &mut hygiene).unwrap();
-        // begin 保留；模式变量 a 替换为 1
+        // do 保留；模式变量 a 替换为 1
         let rendered = out.render(&|s| t.name(s).to_string());
-        assert!(rendered.contains("begin"));
-        assert!(rendered.contains("set!"));
+        assert!(rendered.contains("do"));
+        assert!(rendered.contains("assign"));
     }
 
     #[test]
     fn hygiene_renames_introduced_identifiers() {
         let (mut t, syms) = setup();
-        // 模板 (set! tmp x)：tmp 为引入标识符（非模式变量）→ 重命名
+        // 模板 (assign tmp x)：tmp 为引入标识符（非模式变量）→ 重命名
         let x = t.intern("x");
         let pattern = Stx::list(
             vec![sym_stx(syms[0]), sym_stx(x)],
@@ -729,7 +729,7 @@ mod tests {
             Span::dummy(),
             ScopeSet::new(),
         );
-        // 模板 (begin a rest ...)
+        // 模板 (do a rest ...)
         let template = Stx::list(
             vec![
                 sym_stx(t.keyword_symbol(kerf_syntax::Keyword::Begin)),
@@ -745,7 +745,7 @@ mod tests {
             clauses: vec![(pattern, template)],
             def_scopes: ScopeSet::new(),
         };
-        // 调用 (my-or 1 2 3) → begin 1 2 3
+        // 调用 (my-or 1 2 3) → do 1 2 3
         let args: Vec<Stx> = [1i64, 2, 3]
             .iter()
             .map(|v| {
@@ -759,15 +759,15 @@ mod tests {
         let mut hygiene = HygieneCtx::new(&mut t);
         let out = rules.apply(&args, &mut hygiene).unwrap();
         let rendered = out.render(&|s| t.name(s).to_string());
-        assert_eq!(rendered, "(begin 1 2 3)");
-        // 零省略段：(my-or 1) → begin 1
+        assert_eq!(rendered, "(do 1 2 3)");
+        // 零省略段：(my-or 1) → do 1
         let one = vec![Stx::literal(
             kerf_syntax::StxLiteral::Int(1),
             Span::dummy(),
             ScopeSet::new(),
         )];
         let out0 = rules.apply(&one, &mut HygieneCtx::new(&mut t)).unwrap();
-        assert_eq!(out0.render(&|s| t.name(s).to_string()), "(begin 1)");
+        assert_eq!(out0.render(&|s| t.name(s).to_string()), "(do 1)");
     }
 
     fn ellipsis_sym(_t: &SymbolTable) -> Symbol {

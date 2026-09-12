@@ -25,14 +25,14 @@ use kerf_vm::Value;
 #[test]
 fn gate_g1_reader_parses_nine_primitives() {
     let forms = [
-        "(lambda (x) x)",
+        "(fn (x) x)",
         "(f 1 2)",
         "(if a b c)",
         "x",
         "42",
-        "(set! x 1)",
+        "(assign x 1)",
         "(define x 1)",
-        "(begin 1 2)",
+        "(do 1 2)",
         "(module m (define x 1) x)",
     ];
     for src in forms {
@@ -48,10 +48,10 @@ fn gate_g1_reader_parses_nine_primitives() {
 fn gate_g2_expander_expands_all_core_forms() {
     let src = r#"
         (define x 1)
-        (set! x 2)
-        (begin x x)
+        (assign x 2)
+        (do x x)
         (if (= x 2) 10 20)
-        ((lambda (y) (+ y 1)) 5)
+        ((fn (y) (+ y 1)) 5)
         (module m (define z 3) z)
     "#;
     let out = compile_source(src, "gate.krf").unwrap();
@@ -72,10 +72,10 @@ fn gate_g3_compiler_debug_info_complete() {
 /// G4：VM 执行全部操作码类别（各组至少一个操作码经真实程序触达）。
 #[test]
 fn gate_g4_vm_executes_opcode_groups() {
-    // 栈操作（DUP 经 set!）/ 变量访问（local/captured/global）/
+    // 栈操作（DUP 经 assign）/ 变量访问（local/captured/global）/
     // 控制流（jump）/ 函数（closure/call/ret）/ 算术 / 数据构造 / 谓词 / 终止
     let src = r#"
-        (define (make-adder n) (lambda (x) (+ x n)))
+        (define (make-adder n) (fn (x) (+ x n)))
         (define add5 (make-adder 5))
         (define lst (quote (1 2 3)))
         (define acc 0)
@@ -85,7 +85,7 @@ fn gate_g4_vm_executes_opcode_groups() {
           (is-pair lst)
           (eq (head lst) 1)
           (mod 7 3)
-          (begin (set! acc 1) acc))
+          (do (assign acc 1) acc))
     "#;
     let o = run_source(src, "gate.krf").unwrap();
     assert!(matches!(o.value, Value::Pair(_)));
@@ -97,7 +97,7 @@ fn gate_g5_gc_collects_unreferenced() {
     let src = r#"
         (define (spin n)
           (if (= n 0) 0
-              (begin (cons 1 2) (cons 3 4) (cons 5 6) (cons 7 8)
+              (do (cons 1 2) (cons 3 4) (cons 5 6) (cons 7 8)
                      (cons 9 10) (cons 11 12) (spin (- n 1)))))
         (spin 30000)
     "#;

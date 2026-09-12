@@ -17,15 +17,15 @@ fn nine_primitives_semantics() {
     // VarRef / Define
     assert_int("(define x 99) x", 99);
     // Lambda / App
-    assert_int("((lambda (x) x) 42)", 42);
-    assert_int("((lambda (x y) (- x y)) 10 4)", 6);
+    assert_int("((fn (x) x) 42)", 42);
+    assert_int("((fn (x y) (- x y)) 10 4)", 6);
     // If（真/假/无 else）
     assert_int("(if true 1 2)", 1);
     assert_int("(if false 1 2)", 2);
     // SetBang
-    assert_int("(define n 1) (set! n 5) n", 5);
+    assert_int("(define n 1) (assign n 5) n", 5);
     // Begin
-    assert_int("(begin 1 2 3)", 3);
+    assert_int("(do 1 2 3)", 3);
     // Module
     assert_int("(module m (define x 8) x)", 8);
 }
@@ -50,7 +50,7 @@ fn closures_share_mutable_captures() {
     let src = r#"
         (define (make-counter)
           (let ((n 0))
-            (lambda () (set! n (+ n 1)) n)))
+            (fn () (assign n (+ n 1)) n)))
         (define a (make-counter))
         (define b (make-counter))
         (a) (a) (a)
@@ -68,7 +68,7 @@ fn higher_order_functions() {
           (if (is-nil lst)
               nil
               (cons (f (head lst)) (map f (tail lst)))))
-        (map (lambda (x) (* x x)) (quote (1 2 3 4 5)))
+        (map (fn (x) (* x x)) (quote (1 2 3 4 5)))
     "#;
     assert_eq!(common::run_rendered(src), "(1 4 9 16 25)");
 }
@@ -117,11 +117,11 @@ fn dual_execution_paths_cross_validate() {
         "(define (f x) (+ x 1)) (f 41)",
         "(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2))))) (fib 12)",
         "(let ((x 1) (y 2)) (+ x y))",
-        "(letrec ((even? (lambda (n) (if (= n 0) true (odd? (- n 1))))) (odd? (lambda (n) (if (= n 0) false (even? (- n 1)))))) (even? 10))",
+        "(letrec ((even? (fn (n) (if (= n 0) true (odd? (- n 1))))) (odd? (fn (n) (if (= n 0) false (even? (- n 1)))))) (even? 10))",
         "(cond ((< 1 0) 1) ((> 1 0) 2) (else 3))",
-        "(define (make-counter) (let ((n 0)) (lambda () (set! n (+ n 1)) n))) (define c (make-counter)) (c) (c) (c)",
+        "(define (make-counter) (let ((n 0)) (fn () (assign n (+ n 1)) n))) (define c (make-counter)) (c) (c) (c)",
         "(head (quote (1 2 3)))",
-        "((lambda (x y) (cons x y)) 1 2)",
+        "((fn (x y) (cons x y)) 1 2)",
     ];
     for src in programs {
         assert!(dual_path_agrees(src), "双路径结果不一致：{}", src);
@@ -160,22 +160,22 @@ fn duplicate_define_errors_dual_path() {
     assert!(dual_path_agrees(src)); // 错误消息形态一致（渲染层对账）
 }
 
-/// E3（[06-操作语义 §2 R5/S1]）：set! 未绑定变量在 VM 路径同样报错
+/// E3（[06-操作语义 §2 R5/S1]）：assign 未绑定变量在 VM 路径同样报错
 /// （修复前 VM 静默创建全局——与 eval 分裂，违反 T1）。
 #[test]
 fn set_unbound_errors_on_vm() {
-    let err = common::run("(set! y 1)").unwrap_err();
-    assert!(err.contains("set! 未绑定变量"), "VM 路径应报 E3：{}", err);
-    assert!(dual_path_agrees("(set! y 1)"));
-    // 正例：已绑定（先 define 后 set!）两路径均成功
-    assert!(dual_path_agrees("(define n 1) (set! n 5) n"));
+    let err = common::run("(assign y 1)").unwrap_err();
+    assert!(err.contains("assign 未绑定变量"), "VM 路径应报 E3：{}", err);
+    assert!(dual_path_agrees("(assign y 1)"));
+    // 正例：已绑定（先 define 后 assign）两路径均成功
+    assert!(dual_path_agrees("(define n 1) (assign n 5) n"));
 }
 
-/// A3 卫式（[06-操作语义 §2]）：lambda 形参表重名在展开期即拒绝
+/// A3 卫式（[06-操作语义 §2]）：fn 形参表重名在展开期即拒绝
 /// （两执行路径的共同上游单点防御）。
 #[test]
 fn lambda_duplicate_params_rejected_at_expand() {
-    let err = common::run("(lambda (x x) x)").unwrap_err();
+    let err = common::run("(fn (x x) x)").unwrap_err();
     assert!(err.contains("参数重名"), "展开期应拒绝重名形参：{}", err);
 }
 
@@ -211,7 +211,7 @@ fn app_evaluation_order_fn_first_dual_path() {
     assert!(vm_err.rendered.contains("E0004"));
     assert!(ev_err.rendered.contains("E0004"));
     // 正例：函数先求值不改变正确程序的结果
-    assert!(dual_path_agrees("((lambda (x) (* x x)) 6)"));
+    assert!(dual_path_agrees("((fn (x) (* x x)) 6)"));
     assert!(dual_path_agrees("(define (f a b) (+ a b)) (f 1 2)"));
 }
 

@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn well_formed_and_free_vars() {
-        // (lambda (x) (x y)) → 自由 {y}
+        // (fn (x) (x y)) → 自由 {y}
         let e = lam(0, app(var(0), var(1)));
         let cv = CodeValue::from_expr(&e);
         assert!(cv.is_well_formed());

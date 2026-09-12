@@ -201,9 +201,9 @@ const SWAP: &str = r#"(define-syntax swap!
   (syntax-rules ()
     ((swap! a b)
      (let ((tmp a))
-       (begin (set! a b) (set! b tmp))))))
+       (do (assign a b) (assign b tmp))))))
 (define x 1) (define y 2)
-(begin (swap! x y) (- x y))"#;
+(do (swap! x y) (- x y))"#;
 
 const MY_WHEN: &str = r#"(define-syntax my-when
   (syntax-rules ()
@@ -213,14 +213,14 @@ const MY_WHEN: &str = r#"(define-syntax my-when
 
 const PRELUDE_PIPE: &str = r#"(module user (import kerf-prelude)
   (define lst (list 1 2 3 4 5))
-  (foldl + 0 (map (lambda (x) (* x x)) (filter (lambda (x) (> x 2)) lst))))"#;
+  (foldl + 0 (map (fn (x) (* x x)) (filter (fn (x) (> x 2)) lst))))"#;
 
 /// 效应金路径（r25 M1 原型——perform 挂起 → dispatch → resume 注入）。
 const EFFECT_GOLDEN: &str =
     "(handle add ((p k) (resume k (+ p 10))) (+ 1 (perform (cons 'add 5))))";
 
 /// E0008 语料（continuation 逃逸 + 二次恢复——r25 D3 线性唯一性）。
-const DOUBLE_RESUME: &str = "(define k2 nil) (handle t ((p k) (begin (set! k2 k) (resume k 1))) (perform (cons 't 5))) (k2 2)";
+const DOUBLE_RESUME: &str = "(define k2 nil) (handle t ((p k) (do (assign k2 k) (resume k 1))) (perform (cons 't 5))) (k2 2)";
 
 /// TCO + 效应组合（D8——10 万深尾递归穿透 handler 帧后 perform 恢复）。
 const TCO_EFFECT: &str = "(define (spin n) (if (= n 0) (perform (cons 's 99)) (spin (- n 1)))) (handle s ((p k) (resume k (+ p 1))) (spin 100000))";
@@ -276,7 +276,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Arity),
-        src: "((lambda (x) x) 1 2)",
+        src: "((fn (x) x) 1 2)",
         expect: Expect::Err { stage: Stage::Run, msg: "参数数量不匹配", code: None },
     },
     Case {
@@ -389,7 +389,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Unbound),
-        src: "(set! never-defined 1)",
+        src: "(assign never-defined 1)",
         expect: Expect::Err { stage: Stage::Run, msg: "未绑定", code: None },
     },
     Case {
@@ -486,7 +486,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: None,
         // continuation 逃逸到全局 + 闭包外二次恢复（E0008 深链变体）
-        src: "(define saved nil) (define (gen) (handle t ((p k) (begin (set! saved k) (resume k p))) (perform (cons 't 1)))) (gen) (saved 2)",
+        src: "(define saved nil) (define (gen) (handle t ((p k) (do (assign saved k) (resume k p))) (perform (cons 't 1)))) (gen) (saved 2)",
         expect: Expect::Err { stage: Stage::Run, msg: "二次恢复", code: Some(8) },
     },
     Case {
@@ -494,8 +494,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Unbound),
-        // 宏（糖展开）+ set! 面 + 未绑定（集成层归因）
-        src: "(define-syntax swap! (syntax-rules () ((swap! a b) (let ((tmp a)) (begin (set! a b) (set! b tmp)))))) (swap! x y)",
+        // 宏（糖展开）+ assign 面 + 未绑定（集成层归因）
+        src: "(define-syntax swap! (syntax-rules () ((swap! a b) (let ((tmp a)) (do (assign a b) (assign b tmp)))))) (swap! x y)",
         expect: Expect::Err { stage: Stage::Run, msg: "未绑定", code: None },
     },
     Case {
@@ -987,7 +987,7 @@ fn probe_e0008_first_resume_position() -> CaseResult {
 }
 
 /// E04（r24 TD-014 边界）：嵌套 define 重名走专门归因——消息为
-/// 「嵌套 define 重复绑定」且**不含**失真兜底「lambda 参数重名」。
+/// 「嵌套 define 重复绑定」且**不含**失真兜底「fn 参数重名」。
 fn probe_nested_define_attribution() -> CaseResult {
     let src = "(define (f) (define a 1) (define a 2) a) (f)";
     let err = match run_source(src, FNAME) {
@@ -997,7 +997,7 @@ fn probe_nested_define_attribution() -> CaseResult {
     if !err.rendered.contains("嵌套 define 重复绑定") {
         return fail(format!("缺专门归因消息：{}", first_line(&err.rendered)));
     }
-    if err.rendered.contains("lambda 参数重名") {
+    if err.rendered.contains("fn 参数重名") {
         return fail("归因回退到失真兜底消息（TD-014 回归）".to_string());
     }
     pass("嵌套 define 重名 → 专门归因（无失真兜底回退）".to_string())

@@ -536,7 +536,7 @@ fn lower_atom(ctx: &mut LowerCtxt<'_>, e: &CoreExpr) -> Result<AAtom, LowerError
             *span,
         )),
         CoreExpr::SetBang { span, .. } => Err(LowerError::new(
-            "本地码 PoC 边界：set!（可变赋值）未进 PoC",
+            "本地码 PoC 边界：assign（可变赋值）未进 PoC",
             *span,
         )),
         CoreExpr::Define { span, .. } => Err(LowerError::new(

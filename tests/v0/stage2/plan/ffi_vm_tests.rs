@@ -13,7 +13,7 @@
 //! | case | 判定 | 测试锚 |
 //! |------|------|--------|
 //! | 1 pin 后 GC 运行 | F-PIN 存活保证 | `f_pin_case1_survives_gc` |
-//! | 2 pin 期间 set! | 允许（不冻结内容） | `pin_window_allows_binding_mutation_case2` |
+//! | 2 pin 期间 assign | 允许（不冻结内容） | `pin_window_allows_binding_mutation_case2` |
 //! | 3 外部回调越过窗口 | Stage 2 无回调通路 | `negative_cstruct_cfunction_registration_out_of_subset`（CFunction 形状拒绝）|
 //! | 4 AllocExternal size 0 | 编译期拒绝 + 运行期纵深 | `negative_alloc_size_zero_compile_rejected` + `negative_alloc_size_zero_vm_defense` |
 //! | 5 双重释放 | E0010 诊断吸收非 UB | `negative_double_free_e10` |
@@ -448,7 +448,7 @@ fn shallow_pin_case8_deep_reachability() {
     );
 }
 
-/// **case 2**：pin 期间 set!（绑定变更）——pin 只约束回收资格，
+/// **case 2**：pin 期间 assign（绑定变更）——pin 只约束回收资格，
 /// 不冻结内容/绑定流。
 #[test]
 fn pin_window_allows_binding_mutation_case2() {
@@ -458,7 +458,7 @@ fn pin_window_allows_binding_mutation_case2() {
     let p = heap.alloc_pair(s, s);
     heap.pin_object(p);
     let cell = GcCell::new(Value::Pair(p));
-    // set!：绑定改指新值（绑定流不冻结）
+    // assign：绑定改指新值（绑定流不冻结）
     cell.set(Value::Int(99));
     assert_eq!(heap.pin_count(p), 1, "pin 簿不受绑定变更影响");
     mark_sweep_cycle(&mut heap, &RootSet::new());

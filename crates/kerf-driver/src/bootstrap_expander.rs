@@ -387,7 +387,7 @@ fn core_from_value(
         }
         "lambda" => {
             if rest.len() != 3 {
-                return Err(internal_x("lambda 节点字段数异常"));
+                return Err(internal_x("fn 节点字段数异常"));
             }
             let name_fields = value_list_fields(&rest[0], heap).map_err(read_to_expand)?;
             let names: Vec<Symbol> = name_fields
@@ -483,7 +483,7 @@ fn core_from_value(
             Ok(Rc::new(CoreExpr::Perform { effect, span }))
         }
         // ('handle s e x tagstr 载荷名 载荷作用域 恢复名 恢复作用域
-        //   handler节点 body节点)——两绑定器作用域集与 lambda 节点同型
+        //   handler节点 body节点)——两绑定器作用域集与 fn 节点同型
         "handle" => {
             if rest.len() != 7 {
                 return Err(internal_x("handle 节点字段数异常"));
