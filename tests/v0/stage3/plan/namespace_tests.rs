@@ -91,10 +91,12 @@ fn string_module_full_export_face() {
         "él"
     );
     assert_eq!(common::run_rendered("(string/index-of \"abc\" \"b\")"), "1");
-    // v0.5 语义维持（B1 契约变更 v0.6 M2 承载——20 §4/§8 契约列）
+    // M2（r40）B1 契约落位（20 §4）：限定名 miss → nil（nil-as-absence
+    // 与语言值域一致——read-int EOF→nil 先例同型；旧名/扁平新名维持
+    // -1 旧契约——「新名新契约、旧名旧契约并存至移除」迁移不变量）
     assert_eq!(
         common::run_rendered("(string/index-of \"abc\" \"z\")"),
-        "-1"
+        "nil"
     );
     assert_eq!(
         common::run_rendered("(string/contains \"abc\" \"bc\")"),
@@ -344,4 +346,312 @@ fn qualified_names_dual_path_agrees() {
     assert!(common::dual_path_agrees("(list/nth '(a b c) 1)"));
     assert!(common::dual_path_agrees("(core/eq 'x 'x)"));
     assert!(common::dual_path_agrees("(/ 10 2)"));
+}
+
+// ---------------------------------------------------------------------------
+// 批次 M 次件 M2（v0.6 命名空间层，r40）——import 注入面/别名 +
+// 组合闭包 + 位置纪律 + E0016 + W 弃用/遮蔽族 + B1/B2/B3 契约
+// （22 §8 实施对账表 M2 行 + 20 §4/§7 + 21 §4.4 + 深审 D1-D9 裁定）
+// ---------------------------------------------------------------------------
+
+/// R-N5 非限定导入 + 22 §6 冲突类三过渡期语义锚：`(import kerf-string)`
+/// 后裸 `append` 仍解析到 N1 全局 list-append（不同语义位——非限定
+/// 引用走 R-N1 查到 N1；限定引用走 R-N3 查 N2；N1 旧名移除[Stage 3]
+/// 后竞争自消——22 §6 第三行既裁行为，v0.6 过渡期如实锚定）。
+#[test]
+fn m2_unqualified_import_injects_export_face() {
+    // 裸 append = 全局 list-append（22 §6 冲突类三——过渡期语义）
+    assert_eq!(
+        common::run_rendered("(module m (import kerf-string) (append '(1) '(2)))"),
+        "(1 2)"
+    );
+    // 裸 nth = 全局 list 族（同上——注入面与全局面同名时全局胜出）
+    assert_eq!(
+        common::run_rendered("(module m (import kerf-list) (nth '(a b c) 1))"),
+        "b"
+    );
+    // 限定引用 = string 家 append（R-N3 精确消歧——注入声明的正面收益）
+    assert_eq!(
+        common::run_rendered("(module m (import kerf-string) (string/append \"a\" \"b\"))"),
+        "ab"
+    );
+}
+
+/// R-N5 限定别名：`(import kerf-string as str)` → `str/append` 别名
+/// 限定引用（编译期归一——22 §3.5「别名是局部绑定」机制面）。
+#[test]
+fn m2_qualified_alias_import_resolves() {
+    assert_eq!(
+        common::run_rendered("(module m (import kerf-string as str) (str/append \"a\" \"b\"))"),
+        "ab"
+    );
+    assert_eq!(
+        common::run_rendered("(module m (import kerf-list as l) (l/nth '(a b c) 1))"),
+        "b"
+    );
+    // 别名 + 非限定混合导入（22 §3.5 三形态并存）
+    assert_eq!(
+        common::run_rendered(
+            "(module m (import kerf-list as l) (import kerf-core) (l/nth (list 1 2) 0))"
+        ),
+        "1"
+    );
+}
+
+/// E0013 非限定 import 冲突（22 §6 冲突类一：两模块同名导出——显式
+/// 错误非静默遮蔽；消息携带双方模块名 + 逃生阀指引）。
+#[test]
+fn m2_import_conflict_e0013() {
+    expect_compile_err(
+        "(module m (import kerf-list) (import kerf-string) 42)",
+        13,
+        "import 冲突",
+    );
+    // 逃生阀：as 别名限定导入后不注入非限定名——冲突消除（22 §6）
+    assert_eq!(
+        common::run_rendered(
+            "(module m (import kerf-list as l) (import kerf-string) (string/append \"a\" (string/append \"b\" \"c\")))"
+        ),
+        "abc"
+    );
+}
+
+/// E0017 别名重复（22 §3.5 R-N5 冲突列：别名重复定义错误）。
+#[test]
+fn m2_alias_duplicate_e0017() {
+    expect_compile_err(
+        "(module m (import kerf-string as s) (import kerf-symbol as s) 42)",
+        17,
+        "别名重复",
+    );
+}
+
+/// E0019 未知导入模块（深审 D2 裁定：Clojure require 同型编译期拒绝；
+/// 消息携带在册名单 + Stage 3 窗口指引）。
+#[test]
+fn m2_unknown_import_e0019() {
+    expect_compile_err(
+        "(module m (import kerf-nonexist) 42)",
+        19,
+        "未知导入模块「kerf-nonexist」",
+    );
+}
+
+/// E0016 module 体内同名 define 重复（09 v6.2 既有裁定的 M2 落位）。
+#[test]
+fn m2_module_define_duplicate_e0016() {
+    expect_compile_err(
+        "(module m (define x 1) (define x 2) x)",
+        16,
+        "重复定义：模块「m」内 define「x」重复",
+    );
+}
+
+/// E0018 require 位置纪律（深审 D3 裁定：合法位 = 顶层/module 体直接
+/// 元素；表达式子树内 = 位置错误——fail-closed）。
+#[test]
+fn m2_require_position_e0018() {
+    // lambda 体内 require = 位置违例（授权声明非表达式）
+    expect_compile_err(
+        "(require io write) (require io read) (module m ((lambda (x) (require io read) x) 1))",
+        18,
+        "require 位置违例",
+    );
+    // module 体直接元素合法（需求元数据——组合闭包收集面）
+    let r = run_source(
+        "(require io write) (module m (require io write) (define f (print 1)) 42)",
+        FNAME,
+    );
+    assert!(
+        r.is_ok(),
+        "module 体直接位 require 合法：\n{:?}",
+        r.err().map(|e| e.rendered)
+    );
+}
+
+/// 组合闭包（21 §4.4）：模块需求 ⊆ 入口授权——模块体内 require 是
+/// 需求元数据非授权获得；缺失 → E0006 增强形态（携带模块归属）。
+#[test]
+fn m2_capability_closure_e0006_enhanced() {
+    expect_compile_err(
+        "(module m (require io write) (define f (print 1)) 42)",
+        6,
+        "模块「m」声明需要 io write",
+    );
+    // 上移入口后通过（授权获得唯一路径 = 顶层声明）
+    let r = run_source(
+        "(require io write) (module m (require io write) (define f (print 1)) 42)",
+        FNAME,
+    );
+    assert!(
+        r.is_ok(),
+        "require 上移入口后应通过：\n{:?}",
+        r.err().map(|e| e.rendered)
+    );
+}
+
+/// 组合闭包双分项（read 与 write 独立核对——需求并集语义）。
+#[test]
+fn m2_capability_closure_covers_read_write_union() {
+    // 程序声明 write、模块需求 read+write → read 缺失（并集不满足）
+    expect_compile_err(
+        "(require io write) (module m (require io read) (require io write) (define f (print 1)) 42)",
+        6,
+        "io read",
+    );
+}
+
+/// B1 契约（20 §4）：限定名 `string/index-of` miss → nil；旧名
+/// `str-index-of` 与扁平新名 `string-index-of` 维持 -1（迁移不变量：
+/// 「新名新契约、旧名旧契约并存至移除」——r38 别名层 parity 不动）。
+#[test]
+fn m2_b1_contract_qualified_nil_vs_legacy_minus_one() {
+    // 限定名（新契约）
+    assert_eq!(
+        common::run_rendered("(string/index-of \"abc\" \"z\")"),
+        "nil"
+    );
+    assert_eq!(common::run_rendered("(string/index-of \"abc\" \"b\")"), "1");
+    // 旧名（旧契约维持）
+    assert_eq!(common::run_rendered("(str-index-of \"abc\" \"z\")"), "-1");
+    // 扁平新名（v0.5 别名层 parity 维持——改名与改行为永不混步）
+    assert_eq!(
+        common::run_rendered("(string-index-of \"abc\" \"z\")"),
+        "-1"
+    );
+}
+
+/// B2 契约（20 §4）：`list/member`/`list/assoc` miss → nil（返回类型
+/// 单一化：表-or-nil）；命中形态不变；旧名 false 维持。
+#[test]
+fn m2_b2_contract_member_assoc_nil() {
+    assert_eq!(common::run_rendered("(list/member 9 (list 1 2 3))"), "nil");
+    assert_eq!(
+        common::run_rendered("(list/member 2 (list 1 2 3))"),
+        "(2 3)"
+    );
+    assert_eq!(common::run_rendered("(list/assoc 'z '((a 1)))"), "nil");
+    assert_eq!(common::run_rendered("(list/assoc 'a '((a 1)))"), "(a 1)");
+    // 旧名（旧契约维持）
+    assert_eq!(common::run_rendered("(member 9 (list 1 2 3))"), "false");
+    assert_eq!(common::run_rendered("(assoc 'z '((a 1)))"), "false");
+}
+
+/// B3 契约（20 §4）：`io/read-line` 严格 0 参（多余实参 = 运行时错误
+/// ——底层已对齐[FS-4 修复面，20 §4 B3 行 R4 修正]；本 case 为测试锚）。
+#[test]
+fn m2_b3_contract_read_line_strict_arity() {
+    let e = run_source("(require io read) (module m (io/read-line 1))", FNAME)
+        .expect_err("多余实参应报运行时错误");
+    assert!(
+        e.rendered.contains("read-line 需要 0 个参数"),
+        "实际：{}",
+        e.rendered
+    );
+}
+
+/// W1001 旧名弃用警告（23 §3.4 弃用期 v0.6 起）：旧名引用 → 非阻断
+/// 警告（消息携现代名指引）；现代名/限定名 → 零警告。
+#[test]
+fn m2_w1001_deprecated_name_warning() {
+    let o = run_source("(module m (car (list 1 2)))", FNAME).expect("旧名仍可用（弃用非移除）");
+    assert_eq!(o.warnings.len(), 1, "恰一条 car 弃用警告");
+    assert!(
+        o.warnings[0].message.contains("旧名「car」已弃用")
+            && o.warnings[0].message.contains("现代名「head」"),
+        "消息：{}",
+        o.warnings[0].message
+    );
+    // 现代名零警告
+    let o2 = run_source("(module m (head (list 1 2)))", FNAME).expect("现代名可用");
+    assert!(o2.warnings.is_empty(), "现代名不应警告");
+    // 限定名零警告
+    let o3 = run_source("(module m (pair/head (pair/cons 1 2)))", FNAME).expect("限定名可用");
+    assert!(o3.warnings.is_empty(), "限定名不应警告");
+}
+
+/// W1001 preamble 豁免（20 §6.5 引导语料纪律：prelude 模块体内旧名
+/// 继续工作——不属用户弃用面，零误报）。
+#[test]
+fn m2_w1001_prelude_exempt() {
+    let o = run_source(
+        "(module user (import kerf-prelude) (define lst (list 1 2 3)) (map (lambda (x) x) lst))",
+        FNAME,
+    )
+    .expect("prelude 注入程序应运行");
+    assert!(
+        o.warnings.is_empty(),
+        "preamble 旧名不触发用户面警告：{:?}",
+        o.warnings
+            .iter()
+            .map(|w| w.message.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+/// W1002 遮蔽注入名警告（22 §3.2 R-N2 第二行：N3 遮蔽 N2 注入名 =
+/// 合法 + W 级警告——可恢复但值得提示）。
+#[test]
+fn m2_w1002_shadow_import_warning() {
+    let o = run_source(
+        "(module m (import kerf-list) ((lambda (length) length) 1))",
+        FNAME,
+    )
+    .expect("参数遮蔽注入名合法（内层胜——R-N2）");
+    assert_eq!(o.warnings.len(), 1);
+    assert!(
+        o.warnings[0]
+            .message
+            .contains("lambda 参数「length」遮蔽了 import 注入名"),
+        "消息：{}",
+        o.warnings[0].message
+    );
+}
+
+/// R-N1 解析全序锚（22 §3.1：N3 → N2 → N1——内层绑定胜出全局名）。
+#[test]
+fn m2_r_n1_resolution_order_local_wins() {
+    // lambda 参数遮蔽全局名：局部绑定胜出（N3 > N1——词法 60 年共识）
+    assert_eq!(
+        common::run_rendered("(module m (import kerf-list) ((lambda (nth) nth) 99))"),
+        "99"
+    );
+}
+
+/// 红线 1 双门分立（22 §5.2：import 不传播授权——import kerf-io 后
+/// 名字可见但未 require 调用仍 E0006）。
+#[test]
+fn m2_redline1_import_does_not_propagate_authority() {
+    expect_compile_err("(module m (import kerf-io) (print 42))", 6, "print");
+    // 授权后通过（双门独立变化——红线 2）
+    let r = run_source(
+        "(require io write) (module m (import kerf-io) (print 42))",
+        FNAME,
+    );
+    assert!(
+        r.is_ok(),
+        "require 授权后 import 面可调用：\n{:?}",
+        r.err().map(|e| e.rendered)
+    );
+}
+
+/// 别名归一 E0014 形态（`str/nonexist` → 诊断携归一模块面信息）。
+#[test]
+fn m2_alias_qualified_e0014_with_normalization() {
+    expect_compile_err(
+        "(module m (import kerf-string as str) (str/nonexist \"a\"))",
+        14,
+        "不导出「nonexist」",
+    );
+}
+
+/// 别名限定名双路径一致（T1 口径——编译期归一在共享 front 段完成）。
+#[test]
+fn m2_alias_dual_path_agrees() {
+    assert!(common::dual_path_agrees(
+        "(module m (import kerf-string as str) (str/append \"a\" \"b\"))"
+    ));
+    assert!(common::dual_path_agrees(
+        "(module m (import kerf-list as l) (l/member 2 (list 1 2 3)))"
+    ));
 }

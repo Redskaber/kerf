@@ -938,7 +938,56 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
             _ => panic!("限定名底层内置未注册：{}/{} → {}", ns, local, underlying),
         };
         let qualified = format!("{}/{}", ns, local);
-        globals.insert(table.intern(&qualified), Value::Builtin(f));
+        // --------------------------------------------------------------
+        // 批次 M 次件 M2（v0.6，r40）——B1/B2 行为契约现代化（20 §4）：
+        // 限定名走**现代契约**（miss→nil）——独立分派体不与底层共享
+        // （「新名新契约、旧名旧契约并存至移除」——20 §4 迁移不变量；
+        // 旧名/扁平新名维持旧契约，r38 parity 锚不动）。B3（io/read-line
+        // 严格 0 参）底层已对齐（FS-4 修复面——20 §4 B3 行实测注记的
+        // R4 修正：纯测试锚，零代码变更）。
+        // --------------------------------------------------------------
+        let contracted: Option<Rc<BuiltinFn>> = match (ns, local) {
+            // B1：string/index-of 未找到 -1 → nil（nil-as-absence——
+            // read-int EOF→nil 先例同型；哨兵值是错误码时代遗产）
+            ("string", "index-of") => {
+                let inner = Rc::clone(&f);
+                Some(BuiltinFn::new(
+                    "string/index-of",
+                    move |heap, args| match inner.call(heap, args) {
+                        Ok(Value::Int(-1)) => Ok(Value::Nil),
+                        other => other,
+                    },
+                ))
+            }
+            // B2：list/member 与 list/assoc 未命中 false → nil（返回类型
+            // 单一化：表-or-nil，不再与 bool 交叠——配合 HM 类型域纯净化）
+            ("list", "member") => {
+                let inner = Rc::clone(&f);
+                Some(BuiltinFn::new(
+                    "list/member",
+                    move |heap, args| match inner.call(heap, args) {
+                        Ok(Value::Bool(false)) => Ok(Value::Nil),
+                        other => other,
+                    },
+                ))
+            }
+            ("list", "assoc") => {
+                let inner = Rc::clone(&f);
+                Some(BuiltinFn::new(
+                    "list/assoc",
+                    move |heap, args| match inner.call(heap, args) {
+                        Ok(Value::Bool(false)) => Ok(Value::Nil),
+                        other => other,
+                    },
+                ))
+            }
+            _ => None,
+        };
+        let value = match contracted {
+            Some(f2) => Value::Builtin(f2),
+            None => Value::Builtin(f),
+        };
+        globals.insert(table.intern(&qualified), value);
     }
     globals
 }

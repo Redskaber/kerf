@@ -1,3 +1,27 @@
+## v0.7.0-r40（2026-09-15）——批次 M 次件 M2：import 注入面/别名 + 组合闭包 + B1/B2 契约 + W 弃用族（61-a/61-b/61-z/61-web——用户指令「深审缺陷面 + 知识搜索补充修正」+「按 sop.md 继续推进」+「同步打包 tar.gz + web page」，806 → 825 + E0013/E0016/E0017/E0018/E0019 + W1001/W1002 落位）
+
+### 交付零：设计深审（61-a——六维度缺陷面扫描 + 四查询实证）
+- 深审裁定 D1-D9（22 §10）：D1 `as` contextual keyword（N4 零改动）/ D2 E0019 未知导入（Clojure require 同型）/ D3 E0018 require 位置纪律 / **D4 P1 缺口当场修复**（`IoRequirements::from_core` 递归入 Module body 把模块内 require 计入程序级授权 = 环境继承反面形态——恰是 WASI「无环境权威」批判的对象；修正为顶层口径：授权获得唯一路径 = 入口顶层声明）/ D5 B1-B3 限定名独享新契约 / D6 W 独立值域 1000+ / D7 过渡期注入可观测语义知悉项 / D8 W1002 编译期交集检测 + preamble 结构豁免 / D9 零配置面维持
+- 知识搜索四查询实证（tool-results/r40-search/）：q1 langdev 导入语义类型学 / q2 滚动弃用与警告失效（HN + Kevin Cox）/ q3 WASI 无环境权威 + ocap 组合 / q4 Clojure refer 冲突逃逸阀
+
+### 交付一：M2 本体（61-b——§3.2 六命令 + 825:0:0）
+- import 注入面/别名（R-N5 三形态）：`collect_import_face` Stx 层收集（非限定/`as` 别名[前瞻解析]/混合）+ `rewrite_alias_refs` 编译期归一（`str/append` → `string/append`——HM/编译/运行全链一致）+ registry stdlib 预 declare（七模块 visit 叶子）+ expander 双镜像（core_forms.rs + expander.krf as 对跳过）
+- 组合闭包（21 §4.4）：`verify_capability_closure` 需求 ⊆ 授权（E0006 **增强形态**先于基础形态——携模块归属与上移指引）+ `module_requirements` 需求元数据 + **D4 修复**（from_core 顶层口径）+ E0018 位置纪律
+- B1/B2 契约：`string/index-of`/`list/member`/`list/assoc` 限定名**独立分派体** miss→nil（旧名/扁平名 parity 不动——20 §4「新名新契约、旧名旧契约并存」迁移不变量）；B3 纯测试锚（底层 FS-4 已对齐——20 §4 行 R4 修正）
+- W 警告族：W1001 弃用（27 旧名每名去重 + 现代名指引 + preamble 结构性豁免）+ W1002 遮蔽（R-N2 第二行）+ `RunOutcome/CheckReport/CompileOutput` 三产物面 warnings + CLI stderr 非阻断渲染
+- 五码落位：E0013 import 冲突（+ as 逃生阀）/ E0016 模块内重复 define / E0017 别名重复 / E0018 require 位置 / E0019 未知导入——stage 统一 Compile（front 管线验证族）
+- §3.2 六命令 clean 起步全绿（clean 2821 files/650.8MiB → build 14.08s 零告警 → check 0/0 → fmt 0 → clippy -D warnings 0 → test 825:0:0：集成 607 + 单元 218）+ 四审计集 EXIT 0 ×4（190 维持——4 case E0019 语义演进同步 + stage_e_code 族扩展）+ CLI 四路径 + import/别名/组合闭包/W 端到端实证
+- 存量语义演进修正（D4 行为锚反转）：architecture_audit require 上移（21 §4.4 语义）+ negative_expander/prelude E0019 断言 + capability 单测反转——三处 + 审计集四处全部按新契约更新（破坏面零残留）
+
+### 交付二：对账八面
+- matrix v0.1.0-r40 + 本节 + pipeline r40（Tier 2 头 588→607）+ 七文档回写（22 v1.3[§10 D1-D9 + §8 M2 状态] + 18 v6.5[七码全落位 + W 段] + 20 v1.5[B1-B3 + M2 注记] + 21[§4.4 落地 + D4 修复登记] + 12 v6.12 + v0.5-roadmap v0.4.0 + 23/09 注记）+ TD 登记册零新事件
+
+### 交付三：r40 tar.gz 包内自举 + web E2E + rec 树（61-z/61-web）
+- r40 tar.gz（§19.3 正序）+ 包内自举（全新解包构建 + 825:0:0 复跑 + 包内四审计集 + CLI 一致 + qbe 在包）+ web 五件面同步 + E2E 双端
+
+### 里程碑
+- **批次 M M2 ✅**（import 面 + 组合闭包 + W 族 + 五码——825:0:0 净 +19）——M3 = 全表对账收口 + 门审（§7.3 ≥30 case）→ 移除轮（与 E5 同窗，23 §2.2 驱动）
+
 ## v0.6.0-r39（2026-09-15）——批次 M 首件 M1：命名空间层限定名可见面（60-a/60-z/60-web——用户指令「按 sop.md 继续推进 + 同步完整打包 tar.gz 并同步完整更新 web page」，788 → 806 + E0014/E0015 落位）
 
 ### 交付一：M1 本体——N2 限定名可见面（22 §8 七行落地）

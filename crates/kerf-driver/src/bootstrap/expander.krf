@@ -1351,10 +1351,18 @@
         (if (not (eq? (node-tag item) 'sym))
             (xperr (str-append kind " 项必须是符号")
                    (node-s item) (node-e item))
-            (let ((r (module-names (cdr fields) kind)))
-              (if (err? r)
-                  r
-                  (cons (sym-name item) r)))))))
+            ; M2（r40）R-N5 as 别名对跳过——镜像 Rust expand_module：
+            ; (import kerf-string as str) 的 as/str 不入 imports（别名
+            ; 信息由 driver Stx 层收集；as 是 contextual 标记非关键字）
+            (if (and (eq? kind "import") (eq? (sym-name item) "as"))
+                (if (null? (cdr fields))
+                    (xperr "import as 别名缺右操作数"
+                           (node-s item) (node-e item))
+                    (module-names (cdr (cdr fields)) kind))
+                (let ((r (module-names (cdr fields) kind)))
+                  (if (err? r)
+                      r
+                      (cons (sym-name item) r))))))))
 
 ; (require io read|write ...)——镜像 expand_require
 (define (expand-require node)

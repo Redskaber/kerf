@@ -136,6 +136,11 @@ fn cmd_run(path: &str) -> i32 {
     };
     match run_source(&src, path) {
         Ok(outcome) => {
+            // M2（r40）W 级诊断渲染（W1001 弃用族/W1002 遮蔽族——
+            // 非阻断；stderr 通道与错误诊断分离——运行结果不受影响）
+            for w in &outcome.warnings {
+                eprintln!("[warning] {}", w.message);
+            }
             // 最终值渲染（⇒ 前缀；print 内置输出已直接写 stdout；堆随值存活）
             println!("⇒ {}", kerf_vm::render_value(&outcome.value, &outcome.heap));
             0

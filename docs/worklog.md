@@ -4785,3 +4785,30 @@ Work Log:
 
 Stage Summary:
 - **批次 M M1 本体交付**：N2 限定名可见面核心落地（47 限定名 + E0014/E0015 + io 双门 + 签名派生 + 遮蔽序局部面）——806:0:0 零回归（净 +18）；R-N4 词法零改动（天然满足如实登记）；M2 = import 注入面/别名 + B1-B3 + W 弃用族 + 冲突三类 + 组合闭包（22 §8 驱动）；60-z 打包 + 60-web web 面随后
+---
+Task ID: 60-z（r39 收尾——打包 + 包内自举 + rec 树）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r39 tar.gz + 包内自举 + rec 树 02_r39 + worklog 双源
+
+Work Log:
+- r39 tar.gz（§19.3 commit-then-package 正序：git cb8483c 先行）：**kerf-stage3-v0.6.0-r39-batchM-m1qualifiednames-806tests.tar.gz（2.10MB / 350 条目）**落 download/；排除 target/.git/download/tool-results
+- **包内自举**（/tmp 全新解包）：build --release **12.88s 零告警** + **test 806:0:0 复跑**（22 套件）+ 包内四审计集 EXIT 0 ×4（190）+ CLI 一致（fib ⇒ 144 / check 负例 E0005 REAL_EXIT 1 / 限定名端到端[ab/2/1/true/true/foo/foo/5]）+ **qbe 在包**
+- rec 树：02_r39_批次M_M1_限定名可见面.md（1:8 压缩）+ 03 层 l 02 行 + root l 未压实区间 r39 终态
+- 遵循：§19.1/§19.3（规则与正序）/ §8.6（worklog 双源）
+
+Stage Summary:
+- r39 打包门达成——M1 验收三门全过（§3.2 全绿[806:0:0] + 包内自举[806 复跑 + 审计 ×4 + CLI 一致 + qbe] + E2E[60-web 承载]）
+---
+Task ID: 60-web（r39 web 面——批次 M M1 收尾）
+Agent: Super Z (main) — web 面交付（REC-A）
+Task: web 面完整同步（kerf-data r39 + footer v7.9 + download README r39 + PACKAGE_CONTENTS r39 + E2E 双端 + lint + git 双仓）
+
+Work Log:
+- kerf-data r39 节点：Status 行「✅ 批次 M 首件 M1——命名空间层限定名可见面 ✅（v0.6.0-r39：47 限定名 + E0014/E0015 + io fail-closed + 签名派生——806:0:0；R-N4 词法零改动）」+ points 头部两条（60-a M1 五件全录 + 60-z/60-web 打包与 web 面）+ HERO_FEATURES +1 徽章（命名空间限定名——七模块 47 名 · E0014 不回落 · v0.6 M1）+ PACKAGE_CONTENTS 三处 r39 口径（806 项[净 +18 详录] + 源码 r39 段 + rec 树 39 条目/03 层 2 rec）
+- footer v7.8→v7.9（五处：版本注释 + 状态行「✅ 批次 M M1 · 命名空间层限定名可见面（47 限定名 + E0014/E0015 + io 双门——806:0:0，r39）」+ r39 详录段[五件 + §3.2 + 端到端 + 对账八面 + 包 350 + rec 02_r39 + 里程碑 M2/M3] + r38 压缩段 + 文档索引行[24 篇 r39 六篇回写 + v0.5-roadmap 批次 M M1 行 + RELEASE v0.6.0-r39 + rec 树 39 条目] + 底部 mono 行「kerf v0.6.0 · ✅ 批次 M M1」）
+- download/README.md r39 节（头部——驱动源/窗 M 入口/交付一五件/§3.2/交付二对账八面/交付三包内自举与 web/里程碑/下一步 M2）
+- **E2E 双端**（agent-browser）：r39 关键词 19/20 命中（批次 M M1/限定名可见面/47 限定名/E0014/E0015/806:0:0/STDLIB_MODULES/io/print/r39/60-a/60-z/命名空间层/R-N3/v0.6.0-r39/350 条目/02_r39/M2/gated_name/窗 M——缺项为字面示例 string/append 非锚定词；补锚 E0006/Lambda 参数遮蔽/fail-closed 三命中）+ 语义结构 main/footer/header + 桌面 1440 footer 贴底（900 = 900 精确，长页 19076 自然下推）+ **移动端 375 零横溢** + 移动 footer 贴底（811.75 ≈ 812）+ 控制台零错误 + stats API r39 包首位（2.00MB/806 tests/64 files）+ download API 200 application/gzip 2098743 bytes + lint EXIT 0 + 双截图（r39-web-desktop/mobile.png）
+- git 双仓：kerf 三 commit（cb8483c 本体 + fbb3d01 收尾 + 本次 web 镜像）+ 主仓本轮 commit
+
+Stage Summary:
+- r39 web 面闭环（五件面齐 + E2E 双端全过 + lint 0）——**批次 M M1 全链交付闭环（60-a/60-z/60-web）：限定名可见面核心落地；下一步批次 M M2（import 注入面/别名 + B1-B3 契约 + W 弃用族 + 冲突三类 + 组合闭包——22 §8 驱动）→ M3 收口门审 → 移除轮（与 E5 同窗）**

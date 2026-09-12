@@ -203,8 +203,10 @@ fn expander_is_sole_stx_to_core_bridge() {
 /// 「两语法同核验证」（02 §8.1 锚点 2 的 Stage 0 前置条件）。
 #[test]
 fn same_surface_source_compiles_to_identical_core() {
+    // M2（r40）组合闭包（21 §4.4）：require 上移程序顶层——模块体内
+    // require = 需求元数据非授权获得（授权唯一来源 = 入口顶层声明）
     let src =
-        "(module m (export main)\n(require io write)\n(define (main) (begin (print 1) 42)))\n";
+        "(require io write)\n(module m (export main)\n(define (main) (begin (print 1) 42)))\n";
     let a = compile_source(src, "a.krf").expect("compile a");
     let b = compile_source(src, "b.krf").expect("compile b");
     assert_eq!(

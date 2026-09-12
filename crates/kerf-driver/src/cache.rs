@@ -351,6 +351,7 @@ mod tests {
         let seed_key = cache_key("(+ 1 2)", "k.krf", CompilerKind::Seed);
         let prod_key = cache_key("(+ 1 2)", "k.krf", CompilerKind::Bootstrap);
         let front = FrontOutput {
+            warnings: Vec::new(),
             core: Vec::new(),
             program: empty_program(),
             source_map: SourceMap::new(),

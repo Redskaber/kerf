@@ -379,11 +379,31 @@ fn expand_module(
             match kw {
                 Some(Keyword::Import) => {
                     let list = items[body_start].datum.as_list().expect("已检查为列表");
-                    for s in &list[1..] {
-                        match s.datum.as_symbol() {
-                            Some(sym) => imports.push(sym),
-                            None => return Err(ExpandError::new("import 项必须是符号", s.span)),
+                    // M2（r40）R-N5 as 别名对跳过：`(import kerf-string as
+                    // str)` 的 as/str 不入 imports（别名信息由 driver Stx
+                    // 层 collect_import_face 承载——选项 C：CoreExpr 冻结
+                    // 面零新字段；as 为 contextual 标记非 N4 关键字）
+                    let mut i = 1;
+                    while i < list.len() {
+                        match list[i].datum.as_symbol() {
+                            Some(sym) => {
+                                if ctx.table.name(sym) == "as" {
+                                    if i + 1 >= list.len() {
+                                        return Err(ExpandError::new(
+                                            "import as 别名缺右操作数",
+                                            list[i].span,
+                                        ));
+                                    }
+                                    i += 2;
+                                    continue;
+                                }
+                                imports.push(sym);
+                            }
+                            None => {
+                                return Err(ExpandError::new("import 项必须是符号", list[i].span))
+                            }
                         }
+                        i += 1;
                     }
                     body_start += 1;
                     continue;

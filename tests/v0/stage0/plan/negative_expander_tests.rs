@@ -450,14 +450,18 @@ fn module_registry_phase_violations() {
 /// 仅 `[expand] 未声明的模块` Display 形态（如实断言当前行为）。
 #[test]
 fn module_import_undeclared_from_source() {
+    // M2（r40）E0019 接管：未知导入模块在 import 面名单校验先行拒绝
+    // （此前 registry.visit 的「未声明的模块」——E0019 携带在册名单
+    // 与 Stage 3 窗口指引，诊断增益；深审 D2 裁定）
     let err = match run_source("(module m (import x) 1)", "neg.krf") {
         Ok(_) => panic!("期望报错，实际 Ok"),
         Err(e) => e,
     };
-    assert_eq!(err.stage, Stage::Expand);
-    assert!(err.to_string().contains("[expand]"), "实际：{}", err);
+    // M2 stage 统一裁定：front 管线编译期验证族挂 Compile（与 M1
+    // verify_qualified_refs 先例一致——expand 后的验证非展开错误）
+    assert_eq!(err.stage, Stage::Compile);
     assert!(
-        err.rendered.contains("未声明的模块"),
+        err.rendered.contains("E0019") && err.rendered.contains("未知导入模块「x」"),
         "实际：{}",
         err.rendered
     );

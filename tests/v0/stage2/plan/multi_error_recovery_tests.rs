@@ -145,7 +145,12 @@ fn driver_recover_rendered_lines_sorted_and_complete() {
     // 渲染面：逐条 + 位置序（E0002 在 E0005 前——源位置）
     let src = "()\n(define x 1)\n(car)\n";
     let report = check_source_recover(src, FNAME).expect("应产出报告");
-    assert_eq!(report.rendered.len(), report.diagnostics.len());
+    // M2（r40）：rendered 含 error 诊断 + W 级警告（非阻断——(car)
+    // 旧名引用触发 W1001 弃用族一条）两通道合计
+    assert_eq!(
+        report.rendered.len(),
+        report.diagnostics.len() + report.warnings.len()
+    );
     // 首条 = 空形式（行 1）→ 消息含「空列表」
     assert!(
         report.rendered[0].contains("空列表"),

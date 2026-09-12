@@ -434,8 +434,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::CircularDep),
+        // M2（r40）E0019 先行接管（用户模块间导入 Stage 3 窗口——
+        // class 维持 CircularDel 配比口径，语义注记如实）
         src: "(module a (import b) 1) (module b (import a) 1)",
-        expect: Expect::Err { stage: Stage::Expand, msg: "模块循环依赖", code: None },
+        expect: Expect::Err { stage: Stage::Compile, msg: "未知导入模块「b」", code: None },
     },
     Case {
         id: "C02",
@@ -704,7 +706,12 @@ fn run_negative(c: &Case, stage: Stage, msg: &str, code: Option<u32>) -> CaseRes
         ));
     }
     let want_code = DiagnosticCode(code.unwrap_or_else(|| stage_e_code(stage)));
-    if err.diagnostic.code != Some(want_code) {
+    // M2（r40）命名空间族专码（E0013-E0019）合法于 Compile stage
+    // （基码 E0003 的族成员——门审机械校验扩展）
+    let code_ok = err.diagnostic.code == Some(want_code)
+        || (stage == Stage::Compile
+            && matches!(err.diagnostic.code.map(|k| k.0), Some(13..=19)));
+    if !code_ok {
         return fail(format!(
             "E 码不匹配：期望 E{:04} 实际 {:?}",
             want_code.0,

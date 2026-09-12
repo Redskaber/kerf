@@ -125,6 +125,8 @@ pub struct CompileOutput {
     pub table: SymbolTable,
     /// 模块注册簿记（declare/visit/instantiate）。
     pub registry: ModuleRegistry,
+    /// W 级诊断（M2——W1001 弃用族/W1002 遮蔽族；非阻断观测面）。
+    pub warnings: Vec<Diagnostic>,
 }
 
 /// 符号渲染（处理编译器哨兵：`u32::MAX-1` = main、`u32::MAX-2` = 匿名原型）。
@@ -172,6 +174,9 @@ impl CompileOutput {
 pub(crate) struct FrontOutput {
     /// 展开后的核心表达式序列。
     pub(crate) core: Vec<Rc<CoreExpr>>,
+    /// W 级诊断（M2——W1001 弃用族/W1002 遮蔽族；非阻断，编译成功
+    /// 路径收集，CLI/CheckReport 观测面渲染）。
+    pub(crate) warnings: Vec<Diagnostic>,
     /// 字节码程序。
     pub(crate) program: BcProgram,
     /// 源映射（诊断渲染）。
@@ -259,6 +264,715 @@ const RESERVED_ALLOW: &[&str] = &[
     "kerf-char",
 ];
 
+// ---------------------------------------------------------------------------
+// 批次 M 次件 M2（v0.6 命名空间层，r40）——import 注入面/别名 +
+// 组合闭包 + 位置纪律 + E0016 + W 弃用/遮蔽族（22 §8 M2 行；
+// 20 §7 批次 M 行；21 §4.4；深审 D1-D9 裁定见 22 v1.3）
+// ---------------------------------------------------------------------------
+
+/// E0013：非限定 import 冲突（两模块同名导出——22 §6 冲突类一）。
+const IMPORT_CONFLICT_CODE: DiagnosticCode = DiagnosticCode(13);
+/// E0016：module 体内同名 define 重复定义（22 §3.2 R-N2 第四行）。
+const MODULE_DUPLICATE_CODE: DiagnosticCode = DiagnosticCode(16);
+/// E0017：别名重复（两 `as` 同名——22 §3.5 R-N5 冲突列）。
+const ALIAS_DUPLICATE_CODE: DiagnosticCode = DiagnosticCode(17);
+/// E0018：require 位置违例（合法位 = 顶层/module 体直接元素——
+/// 深审 D3 裁定：fail-closed 位置纪律）。
+const REQUIRE_POSITION_CODE: DiagnosticCode = DiagnosticCode(18);
+/// E0019：import 未知模块（在册名单外——深审 D2 裁定：Clojure
+/// require 同型，编译期拒绝）。
+const UNKNOWN_IMPORT_CODE: DiagnosticCode = DiagnosticCode(19);
+/// W1001：旧名弃用警告族（27 件——v0.6 弃用期起，v1.0 前夜移除；
+/// 23 §3.4 生命周期四阶段；值域 ≥1000 渲染 W 前缀）。
+const DEPRECATED_NAME_CODE: DiagnosticCode = DiagnosticCode(1001);
+/// W1002：N3 遮蔽 N2 注入名警告（22 §3.2 R-N2 第二行——可恢复但
+/// 值得提示）。
+const SHADOW_IMPORT_CODE: DiagnosticCode = DiagnosticCode(1002);
+
+/// import 面收集结果（Stx 层——与 imports_prelude 同型头部区游走；
+/// 22 §3.5 R-N5 三形态：非限定导入/限定别名/隐式门控注入）。
+#[derive(Debug, Default)]
+pub(crate) struct ImportFace {
+    /// 非限定导入模块的 ns 段集（`kerf-string` → `string`——注入
+    /// export 面；过渡期全局扁平名仍在，注入可观测性 = 冲突/
+    /// 遮蔽/闭包三面——深审 D7 设计知悉项）。
+    pub(crate) unqualified: Vec<String>,
+    /// 限定别名映射（别名 → ns 段——`(import kerf-string as str)` →
+    /// `str` → `string`；别名是局部绑定 N3 语义位——22 §3.5）。
+    pub(crate) aliases: Vec<(String, String)>,
+    /// 非限定注入面（各导入模块 export 本地名的并集——E0013 冲突
+    /// 检测与 W1002 遮蔽检测的数据面）。
+    pub(crate) injected_names: Vec<String>,
+}
+
+/// Stx 层 import 面收集（module 头部区游走——镜像 expand_module
+/// 头部解析；`as` 为 contextual 标记非 N4 关键字——深审 D1 裁定：
+/// 02 词法架构零改动，Rust `use as`/Python `import as` 2026 惯例同型）。
+///
+/// 形态：`(import kerf-string)`（非限定）｜`(import kerf-string as str)`
+///（限定别名）｜混列 `(import a as x b)`（别名对 + 非限定并存）。
+/// `as` 在 import 列表内恒为别名标记（contextual 语义的边界代价——
+/// 用户模块名不可在 import 列表内叫 `as`，限定名引用不受影响）。
+fn collect_import_face(forms: &[Stx], table: &SymbolTable) -> ImportFace {
+    let mut face = ImportFace::default();
+    for f in forms {
+        let items = match f.datum.as_list() {
+            Some(l) if !l.is_empty() => l,
+            // _ 臂理由：非列表/空列表不参与 import 扫描
+            _ => continue,
+        };
+        let head = match items[0].datum.as_symbol() {
+            Some(s) => s,
+            None => continue,
+        };
+        if table.name(head) != "module" {
+            continue;
+        }
+        // 头部区游走（import/export 依序、体前终止）
+        for item in items.iter().skip(2) {
+            let sub = match item.datum.as_list() {
+                Some(l) if !l.is_empty() => l,
+                // _ 臂理由：非列表头部项 = 体形式——头部区终止
+                _ => break,
+            };
+            let h = match sub[0].datum.as_symbol() {
+                Some(s) => s,
+                None => break,
+            };
+            if table.name(h) != "import" {
+                // export 头与体形式：头部区游走终止条件（import 面
+                // 只在连续 import/export 头内收集）
+                if table.name(h) == "export" {
+                    continue;
+                }
+                break;
+            }
+            // import 项序列解析（前瞻 as 形态感知——`(模块名 as 别名)`
+            // 是别名限定导入：只登记别名对，**不注入非限定名**[22 §3.5
+            // 别名是局部绑定的限定引用形态；as 形态模块入 unqualified
+            // 会与同 export 名的另一非限定导入误报 E0013——前瞻解析
+            // 从源头分立两形态]）
+            let mut i = 1;
+            while i < sub.len() {
+                let sym = match sub[i].datum.as_symbol() {
+                    Some(s) => s,
+                    // _ 臂理由：非符号项交给 E0019 名单校验阶段报错
+                    None => {
+                        i += 1;
+                        continue;
+                    }
+                };
+                let name = table.name(sym).to_string();
+                // 前瞻两符号：次位 as + 三位别名 → 别名对登记跳三位
+                if i + 2 < sub.len() {
+                    let next_is_as = sub[i + 1]
+                        .datum
+                        .as_symbol()
+                        .map(|s| table.name(s) == "as")
+                        .unwrap_or(false);
+                    if next_is_as {
+                        if let Some(alias_sym) = sub[i + 2].datum.as_symbol() {
+                            face.aliases
+                                .push((table.name(alias_sym).to_string(), import_target_ns(&name)));
+                        }
+                        i += 3;
+                        continue;
+                    }
+                }
+                // 非限定导入：注入 export 面（E0013 冲突检测面）
+                face.unqualified.push(import_target_ns(&name));
+                i += 1;
+            }
+        }
+    }
+    // 注入面派生：各导入模块 export 本地名并集（STDLIB_MODULES 单源）
+    for ns in &face.unqualified {
+        for &(m, local, _) in STDLIB_MODULES {
+            if m == ns {
+                face.injected_names.push(local.to_string());
+            }
+        }
+    }
+    face
+}
+
+/// import 目标名 → ns 段归一（`kerf-string` → `string`；`kerf-prelude`
+/// 无导出面——零注入，仅闭包/名单核对）。
+fn import_target_ns(name: &str) -> String {
+    name.strip_prefix("kerf-").unwrap_or(name).to_string()
+}
+
+/// import 面验证（E0013 冲突 / E0017 别名重复 / E0019 未知模块——
+/// 22 §5.4/§6 + 深审 D2 裁定；fail-closed 首违阻断，与 R9 同口径）。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同入口约定
+fn verify_import_face(
+    face: &ImportFace,
+    table: &SymbolTable,
+    sm: &SourceMap,
+    import_spans: &[(String, Span)],
+) -> Result<(), DriverError> {
+    // E0019 未知模块：全部 import 目标 ∈ 在册名单（七模块 + prelude）
+    for (name, span) in import_spans {
+        if !RESERVED_ALLOW.contains(&name.as_str()) {
+            let diag = Diagnostic::error(
+                Some(UNKNOWN_IMPORT_CODE),
+                format!(
+                    "未知导入模块「{}」（在册名单：{}——import 仅接标准库模块，用户模块间导入属 Stage 3 编译单元窗口）",
+                    name,
+                    RESERVED_ALLOW.join(" / ")
+                ),
+                *span,
+            );
+            return Err(face_err(diag, sm));
+        }
+    }
+    // E0013 非限定冲突：两导入模块 export 面同名 → 显式错误
+    // （22 §6 冲突类一：逃生阀 = 限定导入 as 别名）
+    for ia in 0..face.unqualified.len() {
+        for ib in (ia + 1)..face.unqualified.len() {
+            let (ma, mb) = (&face.unqualified[ia], &face.unqualified[ib]);
+            if ma == mb || ma == "prelude" || mb == "prelude" {
+                continue;
+            }
+            let mut clashes: Vec<&str> = Vec::new();
+            for &(nsa, la, _) in STDLIB_MODULES {
+                if nsa != ma {
+                    continue;
+                }
+                for &(nsb, lb, _) in STDLIB_MODULES {
+                    if nsb == mb && la == lb {
+                        clashes.push(la);
+                    }
+                }
+            }
+            if let Some(local) = clashes.first() {
+                let diag = Diagnostic::error(
+                    Some(IMPORT_CONFLICT_CODE),
+                    format!(
+                        "import 冲突：「{}」来自 kerf-{} 与 kerf-{}（两模块同名导出——显式错误非静默遮蔽；逃生阀 = 限定导入 (import kerf-{} as 别名)）",
+                        local, ma, mb, ma
+                    ),
+                    // 定位：import 面首个 span（头部区）——精确度受
+                    // collect 时机限制，诊断消息已携带双方模块名
+                    import_spans
+                        .first()
+                        .map(|(_, s)| *s)
+                        .unwrap_or_else(Span::dummy),
+                );
+                return Err(face_err(diag, sm));
+            }
+        }
+    }
+    // E0017 别名重复：两 as 同名别名（22 §3.5：别名重复定义错误）
+    let mut seen: std::collections::HashSet<&String> = std::collections::HashSet::new();
+    for (alias, _) in &face.aliases {
+        if !seen.insert(alias) {
+            let diag = Diagnostic::error(
+                Some(ALIAS_DUPLICATE_CODE),
+                format!(
+                    "别名重复：「{}」被多次绑定（别名是模块体内局部绑定——同名重复属重复定义错误；22 §3.5 R-N5）",
+                    alias
+                ),
+                import_spans
+                    .first()
+                    .map(|(_, s)| *s)
+                    .unwrap_or_else(Span::dummy),
+            );
+            return Err(face_err(diag, sm));
+        }
+    }
+    let _ = (table, sm); // （本函数当前仅消费 spans/名单——参数面对齐保留）
+    Ok(())
+}
+
+/// import 面错误包装（DriverError 构造助手）。
+fn face_err(diag: Diagnostic, sm: &SourceMap) -> DriverError {
+    // Compile stage（与 M1 verify_qualified_refs 先例一致：expand 后的
+    // front 管线编译期验证族——语义归属验证非展开）
+    DriverError {
+        stage: Stage::Compile,
+        rendered: render_diagnostic(&diag, sm),
+        diagnostic: diag,
+    }
+}
+
+/// import 目标收集（名 + Span——E0019 定位用；与 collect_import_face
+/// 同游走但保留原始目标名——kerf- 形）。
+fn collect_import_targets(forms: &[Stx], table: &SymbolTable) -> Vec<(String, Span)> {
+    let mut out = Vec::new();
+    for f in forms {
+        let items = match f.datum.as_list() {
+            Some(l) if !l.is_empty() => l,
+            _ => continue,
+        };
+        let head = match items[0].datum.as_symbol() {
+            Some(s) => s,
+            None => continue,
+        };
+        if table.name(head) != "module" {
+            continue;
+        }
+        for item in items.iter().skip(2) {
+            let sub = match item.datum.as_list() {
+                Some(l) if !l.is_empty() => l,
+                _ => break,
+            };
+            let h = match sub[0].datum.as_symbol() {
+                Some(s) => s,
+                None => break,
+            };
+            match table.name(h) {
+                "import" => {
+                    let mut i = 1;
+                    while i < sub.len() {
+                        if let Some(sym) = sub[i].datum.as_symbol() {
+                            let name = table.name(sym).to_string();
+                            if name == "as" {
+                                i += 2;
+                                continue;
+                            }
+                            out.push((name, sub[i].span));
+                        }
+                        i += 1;
+                    }
+                    continue;
+                }
+                "export" => continue,
+                _ => break,
+            }
+        }
+    }
+    out
+}
+
+/// E0016：module 体内同名 define 重复定义检测（22 §3.2 R-N2 第四行
+/// 及 09 v6.2 既有裁定「显式报重复定义」的 M2 落位：每 module 直接
+/// `body` 的 Define 名面查重，嵌套 module 各自独立检测）。
+#[allow(clippy::result_large_err)]
+fn verify_module_define_duplicates(
+    core: &[Rc<CoreExpr>],
+    table: &SymbolTable,
+    sm: &SourceMap,
+) -> Result<(), DriverError> {
+    for e in core {
+        if let Some(diag) = module_dup_diag(e, table) {
+            return Err(face_err(diag, sm));
+        }
+    }
+    Ok(())
+}
+
+fn module_dup_diag(e: &CoreExpr, table: &SymbolTable) -> Option<Diagnostic> {
+    match e {
+        CoreExpr::Module {
+            name, body, span, ..
+        } => {
+            let module_name = table.name(*name).to_string();
+            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for item in body {
+                if let CoreExpr::Define {
+                    name: d,
+                    span: dspan,
+                    ..
+                } = item.as_ref()
+                {
+                    let dn = table.name(*d).to_string();
+                    if !seen.insert(dn.clone()) {
+                        return Some(Diagnostic::error(
+                            Some(MODULE_DUPLICATE_CODE),
+                            format!(
+                                "重复定义：模块「{}」内 define「{}」重复（09 v6.2 既有裁定——显式报重复定义非静默遮蔽）",
+                                module_name, dn
+                            ),
+                            *dspan,
+                        ));
+                    }
+                }
+                if let Some(d) = module_dup_diag(item, table) {
+                    return Some(d);
+                }
+            }
+            let _ = span;
+            None
+        }
+        CoreExpr::Begin { body, .. } => body.iter().find_map(|i| module_dup_diag(i, table)),
+        _ => None,
+    }
+}
+
+/// E0018：require 位置纪律（深审 D3 裁定：合法位 = 程序顶层序列直接
+/// 元素 + module 体直接元素；表达式子树内（lambda/let 脱糖后 Lambda/
+/// If/App/Begin 嵌套层）出现 = 位置错误——fail-closed 位置纪律，
+/// Clojure require 限定 ns 顶层同型）。
+#[allow(clippy::result_large_err)]
+fn verify_require_positions(
+    core: &[Rc<CoreExpr>],
+    _table: &SymbolTable,
+    sm: &SourceMap,
+) -> Result<(), DriverError> {
+    for e in core {
+        if let Some(diag) = require_pos_diag(e, true) {
+            return Err(face_err(diag, sm));
+        }
+    }
+    Ok(())
+}
+
+/// require 位置递归（top 位 = 序列直接元素合法；容器子树内非法）。
+fn require_pos_diag(e: &CoreExpr, top: bool) -> Option<Diagnostic> {
+    match e {
+        CoreExpr::Require { span, .. } => {
+            if top {
+                None
+            } else {
+                Some(Diagnostic::error(
+                    Some(REQUIRE_POSITION_CODE),
+                    "require 位置违例：require 合法位 = 程序顶层或 module 体直接元素（当前位置为表达式子树内——require 是声明非表达式；深审 D3 裁定".to_string(),
+                    *span,
+                ))
+            }
+        }
+        CoreExpr::Module { body, .. } => body.iter().find_map(|item| require_pos_diag(item, true)),
+        CoreExpr::Lambda { body, .. } => require_pos_diag(body, false),
+        CoreExpr::App { fn_expr, args, .. } => require_pos_diag(fn_expr, false)
+            .or_else(|| args.iter().find_map(|a| require_pos_diag(a, false))),
+        CoreExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => require_pos_diag(cond, false)
+            .or_else(|| require_pos_diag(then_branch, false))
+            .or_else(|| require_pos_diag(else_branch, false)),
+        CoreExpr::SetBang { value, .. } | CoreExpr::Define { value, .. } => {
+            require_pos_diag(value, false)
+        }
+        CoreExpr::Begin { body, .. } => {
+            if top {
+                // 顶层/module 体 Begin：序列形态内的 require 视同合法
+                // （begin 是序形式非表达式嵌套——零误报优先裁定）
+                body.iter().find_map(|i| require_pos_diag(i, true))
+            } else {
+                body.iter().find_map(|i| require_pos_diag(i, false))
+            }
+        }
+        CoreExpr::Perform { effect, .. } => require_pos_diag(effect, false),
+        CoreExpr::Handle {
+            handler_body, body, ..
+        } => require_pos_diag(handler_body, false).or_else(|| require_pos_diag(body, false)),
+        CoreExpr::VarRef { .. } | CoreExpr::Literal { .. } => None,
+    }
+}
+
+/// W 警告收集（W1001 旧名弃用族 + W1002 遮蔽注入名族——非阻断；
+/// 22 §3.2 R-N2 第二行 + 20 §7 批次 M 行 + 23 §3.4 弃用期 v0.6 起）。
+/// 每名去重首现一条（诊断聚合——消息携现代名指引）。
+fn collect_warnings(
+    core: &[Rc<CoreExpr>],
+    table: &SymbolTable,
+    face: &ImportFace,
+    sm: &SourceMap,
+) -> Vec<Diagnostic> {
+    let mut out: Vec<Diagnostic> = Vec::new();
+    let mut deprecated_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut shadow_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for e in core {
+        warn_diag(
+            e,
+            table,
+            face,
+            sm,
+            &mut deprecated_seen,
+            &mut shadow_seen,
+            &mut out,
+        );
+    }
+    out
+}
+
+fn warn_diag(
+    e: &CoreExpr,
+    table: &SymbolTable,
+    face: &ImportFace,
+    sm: &SourceMap,
+    deprecated_seen: &mut std::collections::HashSet<String>,
+    shadow_seen: &mut std::collections::HashSet<String>,
+    out: &mut Vec<Diagnostic>,
+) {
+    match e {
+        CoreExpr::VarRef { name, span, .. } => {
+            let raw = table.name(*name);
+            let base = hygienic_base(raw);
+            // W1001 旧名弃用（27 件 BUILTIN_ALIASES 旧名列——v0.6
+            // 弃用期起，v1.0 前夜移除；每名一条去重）。
+            // preamble 豁免（20 §6.5 引导语料纪律：prelude 私有名
+            // 继续以旧名工作——不属用户弃用面，零误报）
+            let in_prelude = sm
+                .file(span.file_id)
+                .map(|f| f.name == PREAMBLE_FILENAME)
+                .unwrap_or(false);
+            if let Some(&(modern, _)) = crate::builtins::BUILTIN_ALIASES
+                .iter()
+                .find(|&&(_, old_name)| old_name == base)
+            {
+                if in_prelude {
+                    // 引导语料豁免——零误报纪律
+                } else if deprecated_seen.insert(base.to_string()) {
+                    out.push(Diagnostic::warning(
+                        Some(DEPRECATED_NAME_CODE),
+                        format!(
+                            "旧名「{}」已弃用——现代名「{}」（v0.6 弃用期；v1.0 前夜移除——20 §7 迁移计划；限定名形 kerf 域亦可用）",
+                            base, modern
+                        ),
+                        *span,
+                    ));
+                }
+            }
+        }
+        CoreExpr::Module { name, body, .. } => {
+            let module_name = table.name(*name).to_string();
+            // preamble 结构性豁免（20 §6.5 引导语料纪律：prelude 模块体
+            // 内旧名引用不属用户弃用面——展开后 Span 的 file 传递经
+            // 自举桥重建不可依赖，按模块名结构豁免零误报）
+            if module_name == PRELUDE_MODULE {
+                return;
+            }
+            // W1002 define 遮蔽注入名（R-N2 第二行：N3 遮蔽 N2 注入名
+            // = 合法 + W 级警告——多半是命名事故，可恢复但值得提示）
+            for item in body {
+                if let CoreExpr::Define { name: d, span, .. } = item.as_ref() {
+                    let dn = hygienic_base(table.name(*d));
+                    if face.injected_names.contains(&dn.to_string())
+                        && shadow_seen.insert(dn.to_string())
+                    {
+                        out.push(Diagnostic::warning(
+                            Some(SHADOW_IMPORT_CODE),
+                            format!(
+                                "模块「{}」define「{}」遮蔽了 import 注入名（R-N2：合法但多半是命名事故——改名或改用限定名可消除歧义）",
+                                module_name, dn
+                            ),
+                            *span,
+                        ));
+                    }
+                }
+                warn_diag(item, table, face, sm, deprecated_seen, shadow_seen, out);
+            }
+        }
+        CoreExpr::Lambda { params, body, .. } => {
+            // 参数遮蔽注入名：R-N2 第二行同型警告（内层胜合法）
+            for p in params {
+                let pn = hygienic_base(table.name(*p));
+                if face.injected_names.contains(&pn.to_string())
+                    && shadow_seen.insert(pn.to_string())
+                {
+                    out.push(Diagnostic::warning(
+                        Some(SHADOW_IMPORT_CODE),
+                        format!(
+                            "lambda 参数「{}」遮蔽了 import 注入名（R-N2：合法但多半是命名事故）",
+                            pn
+                        ),
+                        e.span(),
+                    ));
+                }
+            }
+            warn_diag(body, table, face, sm, deprecated_seen, shadow_seen, out);
+        }
+        CoreExpr::App { fn_expr, args, .. } => {
+            warn_diag(fn_expr, table, face, sm, deprecated_seen, shadow_seen, out);
+            for a in args {
+                warn_diag(a, table, face, sm, deprecated_seen, shadow_seen, out);
+            }
+        }
+        CoreExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            warn_diag(cond, table, face, sm, deprecated_seen, shadow_seen, out);
+            warn_diag(
+                then_branch,
+                table,
+                face,
+                sm,
+                deprecated_seen,
+                shadow_seen,
+                out,
+            );
+            warn_diag(
+                else_branch,
+                table,
+                face,
+                sm,
+                deprecated_seen,
+                shadow_seen,
+                out,
+            );
+        }
+        CoreExpr::SetBang { value, .. } | CoreExpr::Define { value, .. } => {
+            warn_diag(value, table, face, sm, deprecated_seen, shadow_seen, out)
+        }
+        CoreExpr::Begin { body, .. } => {
+            for item in body {
+                warn_diag(item, table, face, sm, deprecated_seen, shadow_seen, out);
+            }
+        }
+        CoreExpr::Perform { effect, .. } => {
+            warn_diag(effect, table, face, sm, deprecated_seen, shadow_seen, out)
+        }
+        CoreExpr::Handle {
+            handler_body, body, ..
+        } => {
+            warn_diag(
+                handler_body,
+                table,
+                face,
+                sm,
+                deprecated_seen,
+                shadow_seen,
+                out,
+            );
+            warn_diag(body, table, face, sm, deprecated_seen, shadow_seen, out);
+        }
+        CoreExpr::Require { .. } | CoreExpr::Literal { .. } => {}
+    }
+}
+
+/// M2 别名限定名编译期归一（22 §3.5 R-N5「别名是局部绑定」的机制面
+/// 实现：`(import kerf-string as str)` 后 `str/append` 的 VarRef 重写为
+/// `string/append`——HM 签名/字节码编译/运行面全链消费归一名，零运行
+/// 时别名感知；T1 双路径共享 front_from_core 段天然 parity）。
+/// 别名集为空时原样返回（零重写开销——无别名程序零成本）。
+fn rewrite_alias_refs(
+    core: Vec<Rc<CoreExpr>>,
+    face: &ImportFace,
+    table: &mut SymbolTable,
+) -> Vec<Rc<CoreExpr>> {
+    if face.aliases.is_empty() {
+        return core;
+    }
+    core.into_iter()
+        .map(|e| rewrite_alias_expr(e, face, table))
+        .collect()
+}
+
+fn rewrite_alias_expr(e: Rc<CoreExpr>, face: &ImportFace, table: &mut SymbolTable) -> Rc<CoreExpr> {
+    match e.as_ref() {
+        CoreExpr::VarRef { name, scopes, span } => {
+            let raw = table.name(*name);
+            let base = hygienic_base(raw);
+            if let Some((ns, local)) = base.split_once('/') {
+                if let Some((_, module)) = face.aliases.iter().find(|(a, _)| a == ns) {
+                    let new_name = format!("{}/{}", module, local);
+                    return Rc::new(CoreExpr::VarRef {
+                        name: table.intern(&new_name),
+                        scopes: scopes.clone(),
+                        span: *span,
+                    });
+                }
+            }
+            Rc::new(e.as_ref().clone())
+        }
+        CoreExpr::Lambda {
+            params,
+            param_scopes,
+            body,
+            span,
+        } => Rc::new(CoreExpr::Lambda {
+            params: params.clone(),
+            param_scopes: param_scopes.clone(),
+            body: rewrite_alias_expr(Rc::clone(body), face, table),
+            span: *span,
+        }),
+        CoreExpr::App {
+            fn_expr,
+            args,
+            span,
+        } => Rc::new(CoreExpr::App {
+            fn_expr: rewrite_alias_expr(Rc::clone(fn_expr), face, table),
+            args: args
+                .iter()
+                .map(|a| rewrite_alias_expr(Rc::clone(a), face, table))
+                .collect(),
+            span: *span,
+        }),
+        CoreExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            span,
+        } => Rc::new(CoreExpr::If {
+            cond: rewrite_alias_expr(Rc::clone(cond), face, table),
+            then_branch: rewrite_alias_expr(Rc::clone(then_branch), face, table),
+            else_branch: rewrite_alias_expr(Rc::clone(else_branch), face, table),
+            span: *span,
+        }),
+        CoreExpr::SetBang {
+            name,
+            scopes,
+            value,
+            span,
+        } => Rc::new(CoreExpr::SetBang {
+            name: *name,
+            scopes: scopes.clone(),
+            value: rewrite_alias_expr(Rc::clone(value), face, table),
+            span: *span,
+        }),
+        CoreExpr::Define { name, value, span } => Rc::new(CoreExpr::Define {
+            name: *name,
+            value: rewrite_alias_expr(Rc::clone(value), face, table),
+            span: *span,
+        }),
+        CoreExpr::Begin { body, span } => Rc::new(CoreExpr::Begin {
+            body: body
+                .iter()
+                .map(|i| rewrite_alias_expr(Rc::clone(i), face, table))
+                .collect(),
+            span: *span,
+        }),
+        CoreExpr::Module {
+            name,
+            imports,
+            exports,
+            body,
+            span,
+        } => Rc::new(CoreExpr::Module {
+            name: *name,
+            imports: imports.clone(),
+            exports: exports.clone(),
+            body: body
+                .iter()
+                .map(|i| rewrite_alias_expr(Rc::clone(i), face, table))
+                .collect(),
+            span: *span,
+        }),
+        CoreExpr::Require { .. } | CoreExpr::Literal { .. } => Rc::clone(&e),
+        CoreExpr::Perform { effect, span } => Rc::new(CoreExpr::Perform {
+            effect: rewrite_alias_expr(Rc::clone(effect), face, table),
+            span: *span,
+        }),
+        CoreExpr::Handle {
+            tag,
+            payload_var,
+            payload_scopes,
+            resume_var,
+            resume_scopes,
+            handler_body,
+            body,
+            span,
+        } => Rc::new(CoreExpr::Handle {
+            tag: Rc::clone(tag),
+            payload_var: *payload_var,
+            payload_scopes: payload_scopes.clone(),
+            resume_var: *resume_var,
+            resume_scopes: resume_scopes.clone(),
+            handler_body: rewrite_alias_expr(Rc::clone(handler_body), face, table),
+            body: rewrite_alias_expr(Rc::clone(body), face, table),
+            span: *span,
+        }),
+    }
+}
+
 /// 限定名引用验证（R-N3 不回落——22 §8 表 R-N3 行）：含 `/` 的
 /// VarRef 名仅查 stdlib 七模块 export 面 + 程序接管豁免（define/set!
 /// 同名——零误报纪律与 R9 同口径）；未命中 → E0014「不导出」而非
@@ -269,6 +983,7 @@ const RESERVED_ALLOW: &[&str] = &[
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同入口约定
 fn verify_qualified_refs(
     core: &[Rc<CoreExpr>],
+    face: &ImportFace,
     table: &SymbolTable,
     sm: &SourceMap,
 ) -> Result<(), DriverError> {
@@ -278,7 +993,7 @@ fn verify_qualified_refs(
     }
     let shadowed: std::collections::HashSet<String> = std::collections::HashSet::new();
     for e in core {
-        if let Some(diag) = qualified_ref_diag(e, &takeover, &shadowed, table) {
+        if let Some(diag) = qualified_ref_diag(e, &takeover, &shadowed, face, table) {
             return Err(DriverError {
                 stage: Stage::Compile,
                 rendered: render_diagnostic(&diag, sm),
@@ -299,6 +1014,7 @@ fn qualified_ref_diag(
     e: &CoreExpr,
     takeover: &std::collections::HashSet<String>,
     shadowed: &std::collections::HashSet<String>,
+    face: &ImportFace,
     table: &SymbolTable,
 ) -> Option<Diagnostic> {
     match e {
@@ -317,19 +1033,29 @@ fn qualified_ref_diag(
                 return None;
             }
             let (ns, local) = base.split_once('/')?;
+            // M2 别名归一（22 §3.5 R-N5：`str/append` 的 ns 段先查别名
+            // 映射——别名是局部绑定的限定引用形态，归一后按 R-N3 查
+            // 模块 export 面；非别名 ns 原样查询）
+            let alias_of = face
+                .aliases
+                .iter()
+                .find(|(a, _)| a == ns)
+                .map(|(_, m)| m.clone());
+            let resolved_ns = alias_of.clone().unwrap_or_else(|| ns.to_string());
             // R-N3 不回落：仅查 N2 export 面（stdlib 七模块；用户接管
             // 已豁免——用户模块 export 限定名 = M2 import 面）
             let known = STDLIB_MODULES
                 .iter()
-                .any(|&(module, local_name, _)| module == ns && local_name == local);
+                .any(|&(module, local_name, _)| module == resolved_ns && local_name == local);
             if known {
                 return None;
             }
             Some(Diagnostic::error(
                 Some(QUALIFIED_NOT_EXPORTED_CODE),
                 format!(
-                    "「{}」不导出「{}」（限定名无回落——R-N3：仅查模块 export 面，不查全局/局部/其他模块）",
-                    ns, local
+                    "「{}」不导出「{}」（限定名无回落——R-N3：仅查模块 export 面，不查全局/局部/其他模块{}）",
+                    resolved_ns, local,
+                    alias_of.map(|m| format!("（别名 {} → kerf-{}）", ns, m)).unwrap_or_default()
                 ),
                 *span,
             ))
@@ -350,7 +1076,7 @@ fn qualified_ref_diag(
                 ));
             }
             body.iter()
-                .find_map(|item| qualified_ref_diag(item, takeover, shadowed, table))
+                .find_map(|item| qualified_ref_diag(item, takeover, shadowed, face, table))
         }
         CoreExpr::Lambda { params, body, .. } => {
             // R-N1：参数是 N3 局部绑定——并入遮蔽集再递归体（let 系已
@@ -359,12 +1085,12 @@ fn qualified_ref_diag(
             for p in params {
                 inner.insert(table.name(*p).to_string());
             }
-            qualified_ref_diag(body, takeover, &inner, table)
+            qualified_ref_diag(body, takeover, &inner, face, table)
         }
         CoreExpr::App { fn_expr, args, .. } => {
-            qualified_ref_diag(fn_expr, takeover, shadowed, table).or_else(|| {
+            qualified_ref_diag(fn_expr, takeover, shadowed, face, table).or_else(|| {
                 args.iter()
-                    .find_map(|a| qualified_ref_diag(a, takeover, shadowed, table))
+                    .find_map(|a| qualified_ref_diag(a, takeover, shadowed, face, table))
             })
         }
         CoreExpr::If {
@@ -372,18 +1098,24 @@ fn qualified_ref_diag(
             then_branch,
             else_branch,
             ..
-        } => qualified_ref_diag(cond, takeover, shadowed, table)
-            .or_else(|| qualified_ref_diag(then_branch, takeover, shadowed, table))
-            .or_else(|| qualified_ref_diag(else_branch, takeover, shadowed, table)),
-        CoreExpr::SetBang { value, .. } => qualified_ref_diag(value, takeover, shadowed, table),
-        CoreExpr::Define { value, .. } => qualified_ref_diag(value, takeover, shadowed, table),
-        CoreExpr::Begin { body, .. } => qualified_ref_seq(body, takeover, shadowed, table),
+        } => qualified_ref_diag(cond, takeover, shadowed, face, table)
+            .or_else(|| qualified_ref_diag(then_branch, takeover, shadowed, face, table))
+            .or_else(|| qualified_ref_diag(else_branch, takeover, shadowed, face, table)),
+        CoreExpr::SetBang { value, .. } => {
+            qualified_ref_diag(value, takeover, shadowed, face, table)
+        }
+        CoreExpr::Define { value, .. } => {
+            qualified_ref_diag(value, takeover, shadowed, face, table)
+        }
+        CoreExpr::Begin { body, .. } => qualified_ref_seq(body, takeover, shadowed, face, table),
         CoreExpr::Require { .. } | CoreExpr::Literal { .. } => None,
-        CoreExpr::Perform { effect, .. } => qualified_ref_diag(effect, takeover, shadowed, table),
+        CoreExpr::Perform { effect, .. } => {
+            qualified_ref_diag(effect, takeover, shadowed, face, table)
+        }
         CoreExpr::Handle {
             handler_body, body, ..
-        } => qualified_ref_diag(handler_body, takeover, shadowed, table)
-            .or_else(|| qualified_ref_diag(body, takeover, shadowed, table)),
+        } => qualified_ref_diag(handler_body, takeover, shadowed, face, table)
+            .or_else(|| qualified_ref_diag(body, takeover, shadowed, face, table)),
     }
 }
 
@@ -392,10 +1124,11 @@ fn qualified_ref_seq(
     body: &[Rc<CoreExpr>],
     takeover: &std::collections::HashSet<String>,
     shadowed: &std::collections::HashSet<String>,
+    face: &ImportFace,
     table: &SymbolTable,
 ) -> Option<Diagnostic> {
     body.iter()
-        .find_map(|item| qualified_ref_diag(item, takeover, shadowed, table))
+        .find_map(|item| qualified_ref_diag(item, takeover, shadowed, face, table))
 }
 
 /// prelude 注入（TD-021）：声明 import 的程序 → 读入 preamble 形式并
@@ -532,6 +1265,12 @@ fn front_from_forms(
     // forms 级合并，单一编译单元；Span 指向 preamble.krf（独立 file））
     let forms = resolve_prelude_imports(forms, &mut table, &mut sm)?;
 
+    // 1.6 批次 M 次件 M2（r40）import 面收集（Stx 层头部区游走——
+    // expand 前的声明面：模块名/别名对/注入名；expand 后 CoreExpr 不
+    // 携带别名信息，此面是 R-N5 别名归一与 E0013/E0019 的唯一数据源）
+    let face = collect_import_face(&forms, &table);
+    let import_targets = collect_import_targets(&forms, &table);
+
     // 2. Expander：Stx → CoreExpr（visit = 变换器注册完成）
     let core = match expander {
         ExpanderKind::Bootstrap => {
@@ -550,7 +1289,16 @@ fn front_from_forms(
         }
     };
 
-    front_from_core(core, table, sm, main_sym, file_id, compiler)
+    front_from_core(
+        core,
+        face,
+        import_targets,
+        table,
+        sm,
+        main_sym,
+        file_id,
+        compiler,
+    )
 }
 
 /// 前段核心段（expand 之后：R9 验证 → 相位簿记 → 字节码——
@@ -558,28 +1306,62 @@ fn front_from_forms(
 /// 共享：部分产物（恢复跳过错误形式后的 core）与完整产物走同一
 /// 后续管线，行为单一实现（§12 最优>最小）。
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
+#[allow(clippy::too_many_arguments)] // front 管线共享段（两入口汇聚——参数面即管线段清单）
 fn front_from_core(
     core: Vec<Rc<CoreExpr>>,
+    face: ImportFace,
+    import_targets: Vec<(String, Span)>,
     mut table: SymbolTable,
     sm: SourceMap,
     main_sym: Symbol,
     file_id: FileId,
     compiler: CompilerKind,
 ) -> Result<FrontOutput, DriverError> {
-    // 2.5 R9 能力权限验证（r8——13 §3.1.3 条款 3「编译期错误」：
+    // 2.5 批次 M 次件 M2（r40）——组合闭包**先行**（21 §4.4：需求 ⊆
+    // 授权——E0006 增强形态先于 R9 基础形态：模块需求违规先报[携带
+    // 模块归属与上移指引]，纯程序级缺声明才走基础形态）+
+    // import 面验证（E0013 冲突/E0017 别名重复/E0019 未知模块）+
+    // E0016 模块内重复 define + E0018 require 位置纪律（fail-closed
+    // 全链阻断——与 R9 同口径；front 管线全路径生效）
+    crate::capability::verify_capability_closure(&core, &table, &sm)?;
+    verify_import_face(&face, &table, &sm, &import_targets)?;
+    verify_module_define_duplicates(&core, &table, &sm)?;
+    verify_require_positions(&core, &table, &sm)?;
+
+    // 2.55 R9 能力权限验证（r8——13 §3.1.3 条款 3「编译期错误」：
     // front 管线全路径生效 run/check/compile；首个违规即阻断
     // fail-closed；E0006 家族与 E0005 静态检查分离）
     verify_io_capabilities(&core, &table, &sm)?;
 
     // 2.6 批次 M 首件 M1（r39）限定名验证（22 §3.3 R-N3 不回落 +
-    // §7 保留域——E0014/E0015；front 管线全路径同 R9 生效）
-    verify_qualified_refs(&core, &table, &sm)?;
+    // §7 保留域——E0014/E0015；front 管线全路径同 R9 生效）+
+    // M2 别名归一验证（face.aliases——诊断携原始名+归一面）
+    verify_qualified_refs(&core, &face, &table, &sm)?;
+
+    // 2.7 M2 别名限定名编译期归一（verify 后重写——E0014 诊断用原始
+    // 名；重写后 registry/compile/HM/运行全链消费归一限定名）
+    let core = rewrite_alias_refs(core, &face, &mut table);
 
     // 3. 相位簿记：declare + visit（§8.9——TD-021 多模块：全部 module
     // 形式按出现序 declare（prelude 注入在前、用户模块在后），visit 主
     // 模块（最后一个 module 形式——import 边传递依赖 visit；无 module
     // 程序行为与单模块时代一致：find_map 兜底 main）
     let mut registry = ModuleRegistry::new();
+    // M2 stdlib 预 declare（import 边合法化——stdlib 七模块是 Rust
+    // 内置模块（M1 形态：限定名直接注册），非程序内 module 形式；程序
+    // 模块 `(import kerf-string)` 的 visit 传递依赖检查需要它们在
+    // registry 在场。预置 visited = true（stdlib 无 import 边——visit
+    // 叶子；语义 = N2 标准库面在相位簿记中恒在场）。**kerf-prelude
+    // 除外**：preamble 注入时自带 `(module kerf-prelude ...)` 形式
+    // （正常 declare 路径——预声明会与之重复冲突）
+    for stdlib_name in RESERVED_ALLOW {
+        if *stdlib_name == "kerf-prelude" {
+            continue;
+        }
+        let sym = table.intern(stdlib_name);
+        let _ = registry.declare(sym, vec![], vec![]);
+        let _ = registry.visit(sym);
+    }
     let mut main_module_span = Span::dummy();
     for e in core.iter() {
         if let CoreExpr::Module {
@@ -658,8 +1440,13 @@ fn front_from_core(
     }
     .map_err(|e| DriverError::from_compile(&e, &sm))?;
 
+    // 5. M2 W 警告收集（编译成功路径——非阻断；Stx 层 import 面 +
+    // core 树双数据源）
+    let warnings = collect_warnings(&core, &table, &face, &sm);
+
     Ok(FrontOutput {
         core,
+        warnings,
         program,
         source_map: sm,
         table,
@@ -714,6 +1501,8 @@ pub struct CheckReport {
     pub global_ref_count: usize,
     /// 指令总数。
     pub instruction_count: usize,
+    /// W 级诊断（M2——非阻断；渲染面与 error 诊断同通道）。
+    pub warnings: Vec<Diagnostic>,
 }
 
 /// 静态检查源文本：read → expand → compile（缓存路径）→ HM 推断
@@ -736,10 +1525,17 @@ pub fn check_source(source: &str, filename: &str) -> Result<CheckReport, DriverE
     let mut table = front.table;
     let sigs = builtin_sigs(&mut table);
     let diagnostics = kerf_compiler::hm::hm_check_program(&front.core, &sigs, &table).diags;
-    let rendered = diagnostics
+    let rendered: Vec<String> = diagnostics
         .iter()
         .map(|d| render_diagnostic(d, &front.source_map))
         .collect();
+    let warnings = front.warnings;
+    let warnings_rendered: Vec<String> = warnings
+        .iter()
+        .map(|d| render_diagnostic(d, &front.source_map))
+        .collect();
+    let mut rendered = rendered;
+    rendered.extend(warnings_rendered);
     Ok(CheckReport {
         proto_count: front.program.proto_count(),
         const_count: front.program.consts.len(),
@@ -749,6 +1545,7 @@ pub fn check_source(source: &str, filename: &str) -> Result<CheckReport, DriverE
         io_write: io_req.write,
         diagnostics,
         rendered,
+        warnings,
         cache_hit,
     })
 }
@@ -783,6 +1580,9 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
         .map_err(|e| DriverError::from_read(&e, &sm))?;
     // 1.5 prelude 注入（与 front_from_forms 同序：read 后、expand 前）
     let forms = resolve_prelude_imports(forms, &mut table, &mut sm)?;
+    // 1.6 M2 import 面收集（与 front_from_forms 同序）
+    let face = collect_import_face(&forms, &table);
+    let import_targets = collect_import_targets(&forms, &table);
     // 2. 恢复展开（自举桥——逐形式；with_expander 加载失败仍致命 Err）
     let recovered = crate::bootstrap_expander::expand_program_recover(&forms, file_id, &mut table)
         .map_err(|e| DriverError::from_expand(&e, &sm))?;
@@ -791,7 +1591,16 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
     // 3. 部分产物 → 后续管线（R9 fail-closed + 簿记 + 字节码——共享
     // front_from_core：短路边界如上文档；编译段 = 生产口径（自举
     // Compiler——check 为生产子命令面））
-    let front = front_from_core(core, table, sm, main_sym, file_id, CompilerKind::Bootstrap)?;
+    let front = front_from_core(
+        core,
+        face,
+        import_targets,
+        table,
+        sm,
+        main_sym,
+        file_id,
+        CompilerKind::Bootstrap,
+    )?;
     // 4. 类型检查（部分产物）+ 诊断合并 + 排序
     let io_req = IoRequirements::from_core(&front.core);
     let mut table = front.table;
@@ -811,10 +1620,17 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
             .then(a.primary_span.start.cmp(&b.primary_span.start))
             .then(a.primary_span.end.cmp(&b.primary_span.end))
     });
-    let rendered = diagnostics
+    let rendered: Vec<String> = diagnostics
         .iter()
         .map(|d| render_diagnostic(d, &front.source_map))
         .collect();
+    let warnings = front.warnings;
+    let warnings_rendered: Vec<String> = warnings
+        .iter()
+        .map(|d| render_diagnostic(d, &front.source_map))
+        .collect();
+    let mut rendered = rendered;
+    rendered.extend(warnings_rendered);
     Ok(CheckReport {
         proto_count: front.program.proto_count(),
         const_count: front.program.consts.len(),
@@ -824,6 +1640,7 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
         io_write: io_req.write,
         diagnostics,
         rendered,
+        warnings,
         cache_hit: false, // 恢复路径不缓存（裁定见函数文档）
     })
     .map(|mut r| {
@@ -862,6 +1679,7 @@ pub fn compile_source(source: &str, filename: &str) -> Result<CompileOutput, Dri
         source_map: front.source_map,
         table: front.table,
         registry: front.registry,
+        warnings: front.warnings,
     })
 }
 
@@ -880,6 +1698,7 @@ pub fn compile_source_seed(source: &str, filename: &str) -> Result<CompileOutput
         source_map: front.source_map,
         table: front.table,
         registry: front.registry,
+        warnings: front.warnings,
     })
 }
 
@@ -889,6 +1708,8 @@ pub struct RunOutcome {
     pub value: Value,
     /// 执行后的堆（GC 统计与值渲染使用）。
     pub heap: Heap,
+    /// W 级诊断（M2——W1001 弃用族/W1002 遮蔽族；CLI/测试观测面）。
+    pub warnings: Vec<Diagnostic>,
 }
 
 impl std::fmt::Debug for RunOutcome {
@@ -896,6 +1717,7 @@ impl std::fmt::Debug for RunOutcome {
         f.debug_struct("RunOutcome")
             .field("value", &self.value.type_name())
             .field("heap_slots", &self.heap.slot_count())
+            .field("warnings", &self.warnings.len())
             .finish()
     }
 }
@@ -930,6 +1752,7 @@ pub fn run_source_seed(source: &str, filename: &str) -> Result<RunOutcome, Drive
 #[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同上入口约定
 fn run_front(front: FrontOutput) -> Result<RunOutcome, DriverError> {
     let mut table = front.table;
+    let warnings = front.warnings;
     let grant = IoGrant::from_requirements(IoRequirements::from_core(&front.core));
     let mut globals = register_globals(&mut table, &grant);
     let program = front.program;
@@ -940,7 +1763,11 @@ fn run_front(front: FrontOutput) -> Result<RunOutcome, DriverError> {
     // instantiate 簿记（Phase 0 执行）
     instantiate_registry(front.registry);
     run_program(&program, &mut globals, &mut heap)
-        .map(|value| RunOutcome { value, heap })
+        .map(|value| RunOutcome {
+            value,
+            heap,
+            warnings,
+        })
         .map_err(|e| DriverError::from_vm(&e, &source_map, &table))
 }
 

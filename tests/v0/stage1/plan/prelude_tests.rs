@@ -84,11 +84,13 @@ fn prelude_name_capture_fails_explicitly() {
 
 #[test]
 fn prelude_import_unknown_module_errors() {
-    // 未知 import → 相位簿记显式报错（未声明的模块——registry.visit）
+    // M2（r40）E0019 接管：未知 import 在 import 面名单校验先行拒绝
+    // （诊断增益：消息携带在册名单 + Stage 3 窗口指引；深审 D2 裁定）
     let src = "(module user (import nonexistent-module) 1)";
     let err = run_source(src, "unknown.krf").expect_err("未知导入应报错");
     assert!(
-        err.rendered.contains("未声明的模块"),
+        err.rendered.contains("E0019")
+            && err.rendered.contains("未知导入模块「nonexistent-module」"),
         "实际：{}",
         err.rendered
     );

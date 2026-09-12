@@ -15,7 +15,9 @@
 >
 > **r16 增量**（2026-09-11，批次 F / Stage 1 深审收尾环）：零测试变更（纯审查 + 文档 + 注释轮——**553 零断言修改逐一等价复跑**：探针临时部署/移除各一次全绿验证）；本行 + 表体两行对账（bootstrap_expander_tests 19→36 的 r15 尾差 + prelude_tests 行补录——31-e 起 header 增量与表体同步义务的漏网，36-d 发现）。
 > **r15 增量**（2026-09-11，批次 E / E1-β 宏收口 + 生产切换 + TD-021）：+24 集成（bootstrap_expander_tests 19→36：宏 parity 17——define-syntax/syntax-rules/卫生 α 重命名/省略号（零/多段/复合）/字面量/多子句/糖覆盖/深度上限/向量模式 + prelude_tests 7——TD-021 hofs 用户面/组合管道/双路径/opt-in/显式失败/未知导入）+ +1 单元（driver 生产切换守护 production_expander_is_bootstrap——独立线程活性探针 + 展开代次标记）——528 → **553**。
-> **Version**: v0.1.0-r39
+> **Version**: v0.1.0-r40
+
+r40 增量行（2026-09-15，批次 M 次件 M2 / import 注入面与组合闭包（会话 Task 61-a/61-b/61-z/61-web）：**806 → 825（净 +19）**——集成 +19（namespace_tests M2 组 19 case：R-N5 三形态 + E0013/E0016/E0017/E0018/E0019 五码负例 + 组合闭包 E0006 增强 ×3 + B1/B2/B3 契约组 + W1001/W1002 警告族 + R-N1 全序 + 红线 1 双门 + 别名归一 + 双路径一致 ×2）+ 单元断言反转（D4 组合闭包行为锚）；生产代码 = builtins/capability/driver/core_forms 四面 + expander.krf 镜像；深审 D1-D9 裁定（22 §10——四查询实证 tool-results/r40-search/）；**D4 P1 缺口当场修复**（from_core 顶层口径）+ 三处存量测试语义演进修正 + 审计集 4 case E0019 同步；§3.2 全绿 + 四审计集 190 + CLI 四路径 + import 端到端；对账八面；TD 零新事件）。
 
 r39 增量行（2026-09-15，批次 M 首件 M1 / 命名空间层限定名可见面（会话 Task 60-a/60-z/60-web）：**788 → 806（净 +18）**——集成 +17（namespace_tests 新文件：七模块限定名正路全覆盖 + R-N3 E0014 不回落[已知 ns 未知名/未知 ns/嵌套深度] + E0015 保留域[顶层 + 嵌套 module] + io 限定名双门[未授权 E0006 携「io/print」限定形态 ×4 + 授权正路] + R-N4 除法/R-N7 运算符永驻/R-N8 符号值豁免三机制锚 + 接管豁免 + Lambda 参数遮蔽[R-N1 N3 胜出——开发实录：初版漏遮蔽集实测发现修复] + 静态面派生签名 E0005 + 双路径一致 ×4）+ 单元 +1（builtins 模块表闭合守卫：47 行 + 分面计数 14/3/9/11/2/6/2 + 131/119 计数锚 + 双注册 + 派生签名 + io fail-closed）；生产代码三面：builtins.rs[STDLIB_MODULES + 限定名注册 + 签名派生] + capability.rs[gated_name 归一化] + driver.rs[verify_qualified_refs E0014/E0015]；**R-N4 词法零改动实录**（`/` 已在 ID 域——双路径天然满足）；§3.2 六命令全绿 + 四审计集 190 维持 + CLI 限定名端到端；对账八面（本行 + RELEASE + pipeline + 六文档[18/20/22/12/23/09] + v0.5-roadmap + rec 树 02_r39）；TD 零新事件。**里程碑：批次 M M1 ✅（限定名可见面核心）——M2 = import 注入面/别名 + B1-B3 + W 弃用族（22 §8 驱动）**）。
 

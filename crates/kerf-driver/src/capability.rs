@@ -80,11 +80,23 @@ pub struct IoRequirements {
 }
 
 impl IoRequirements {
-    /// 从核心表达式序列提取（Require 形式全量收集——幂等集合语义）。
+    /// 从核心表达式序列提取**程序入口声明面**（授权获得——21 §4.4
+    /// 组合闭包红线的 M2 修正：**仅顶层序列直接 Require 元素**计数，
+    /// 模块体内 Require 不再计入——模块需求 = 元数据非授权获得，
+    /// 授权唯一来源 = 入口程序顶层声明[此前实现递归入 Module body
+    /// 构成环境继承模式，恰是 WASI「无环境权威」批判的反面形态，
+    /// 依据 §8.4.5/R1 实测发现当场修复]）。
     pub fn from_core(core: &[Rc<CoreExpr>]) -> Self {
         let mut req = IoRequirements::default();
         for e in core {
-            collect_requirements(e, &mut req);
+            if let CoreExpr::Require { caps, .. } = e.as_ref() {
+                for c in caps {
+                    match c {
+                        Capability::IoRead => req.read = true,
+                        Capability::IoWrite => req.write = true,
+                    }
+                }
+            }
         }
         req
     }
@@ -108,6 +120,95 @@ impl IoRequirements {
         } else {
             parts.join(" ")
         }
+    }
+
+    /// 本需求集是否覆盖另一需求集（组合闭包核对：需求 ⊆ 授权）。
+    fn covers(self, needs: Self) -> bool {
+        (!needs.read || self.read) && (!needs.write || self.write)
+    }
+
+    /// 非空分项渲染（模块需求提示——「read」「write」「read、write」）。
+    fn render_items(self) -> String {
+        let mut parts = Vec::new();
+        if self.read {
+            parts.push("read");
+        }
+        if self.write {
+            parts.push("write");
+        }
+        parts.join("、")
+    }
+}
+
+/// 批次 M 次件 M2（r40）——模块授权需求收集（21 §4.4：模块体 require
+/// = 需求元数据声明，供编译期组合闭包核对；**不是授权获得**——获得
+/// 只有入口顶层声明一条路）。
+///
+/// 返回 (模块名 → 需求集合) 序列；模块体全树宽松收集（位置纪律
+/// E0018 由 verify_require_positions 独立承载——需求面宁全勿漏）。
+pub(crate) fn module_requirements(
+    core: &[Rc<CoreExpr>],
+    table: &SymbolTable,
+) -> Vec<(String, IoRequirements, Span)> {
+    let mut out = Vec::new();
+    for e in core {
+        collect_module_needs(e, table, &mut out);
+    }
+    out
+}
+
+/// 模块需求子树递归（Module 体内部 Require 全量收集）。  
+fn collect_module_needs(
+    e: &CoreExpr,
+    table: &SymbolTable,
+    out: &mut Vec<(String, IoRequirements, Span)>,
+) {
+    match e {
+        CoreExpr::Module {
+            name, body, span, ..
+        } => {
+            let module_name = table.name(*name).to_string();
+            let mut needs = IoRequirements::default();
+            for item in body {
+                collect_requirements(item, &mut needs);
+            }
+            if !needs.is_empty() {
+                out.push((module_name, needs, *span));
+            }
+        }
+        CoreExpr::Lambda { body, .. } => collect_module_needs(body, table, out),
+        CoreExpr::App { fn_expr, args, .. } => {
+            collect_module_needs(fn_expr, table, out);
+            for a in args {
+                collect_module_needs(a, table, out);
+            }
+        }
+        CoreExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_module_needs(cond, table, out);
+            collect_module_needs(then_branch, table, out);
+            collect_module_needs(else_branch, table, out);
+        }
+        CoreExpr::SetBang { value, .. } | CoreExpr::Define { value, .. } => {
+            collect_module_needs(value, table, out)
+        }
+        CoreExpr::Begin { body, .. } => {
+            for item in body {
+                collect_module_needs(item, table, out);
+            }
+        }
+        CoreExpr::Perform { effect, .. } => collect_module_needs(effect, table, out),
+        CoreExpr::Handle {
+            handler_body, body, ..
+        } => {
+            collect_module_needs(handler_body, table, out);
+            collect_module_needs(body, table, out);
+        }
+        CoreExpr::VarRef { .. } | CoreExpr::Literal { .. } | CoreExpr::Require { .. } => {}
     }
 }
 
@@ -318,6 +419,43 @@ pub(crate) fn verify_io_capabilities(
     }
     Ok(())
 }
+/// 批次 M 次件 M2（r40）——授权组合闭包编译期核对（21 §4.4：
+/// `授权面(程序) ⊇ ⋃ 授权需求(导入闭包)`——授权责任上移入口；
+/// WASI「能力由嵌入者授予、组件只能声明需求」同构，kerf 入口程序 =
+/// 嵌入者、模块 = 组件）。违规 → E0006 **增强形态**（携带缺失需求
+/// 与模块归属——诊断增益：缺失原因可定位到模块；与基础形态的分工
+/// = 组合面先核对，消息携模块需求提示）。fail-closed 单条阻断。
+#[allow(clippy::result_large_err)] // 错误路径（含完整诊断结构）——同入口约定
+pub(crate) fn verify_capability_closure(
+    core: &[Rc<CoreExpr>],
+    table: &SymbolTable,
+    sm: &SourceMap,
+) -> Result<(), DriverError> {
+    let declared = IoRequirements::from_core(core);
+    for (module_name, needs, span) in module_requirements(core, table) {
+        if !declared.covers(needs) {
+            let missing = IoRequirements {
+                read: needs.read && !declared.read,
+                write: needs.write && !declared.write,
+            };
+            let items = missing.render_items();
+            let diag = Diagnostic::error(
+                Some(IO_PERMISSION_CODE),
+                format!(
+                    "能力权限不足：模块「{}」声明需要 io {}（模块需求元数据——21 §4.4 组合闭包），入口程序未声明——请上移至程序顶层 (require io {})（import 不传播授权，授权获得只有入口声明一条路）",
+                    module_name, items, items
+                ),
+                span,
+            );
+            return Err(DriverError {
+                stage: Stage::Compile,
+                rendered: render_diagnostic(&diag, sm),
+                diagnostic: diag,
+            });
+        }
+    }
+    Ok(())
+}
 
 /// 引用遍历验证（返回首个违规诊断）。
 fn verify_refs(
@@ -472,8 +610,13 @@ mod tests {
 
     #[test]
     fn requirements_nested_in_module() {
+        // M2（r40）组合闭包修正（21 §4.4）：模块体内 require = 需求
+        // 元数据**非授权获得**——from_core 顶层口径不含模块内 require
+        // （旧行为递归入 Module body = 环境继承模式，恰是 WASI「无
+        // 环境权威」批判的反面形态；深审 D4 修复的行为锚反转）
+        let mut table = SymbolTable::new();
         let core = vec![Rc::new(CoreExpr::Module {
-            name: SymbolTable::new().intern("m"),
+            name: table.intern("m"),
             imports: vec![],
             exports: vec![],
             body: vec![Rc::new(CoreExpr::Require {
@@ -483,7 +626,15 @@ mod tests {
             span: Span::dummy(),
         })];
         let req = IoRequirements::from_core(&core);
-        assert!(req.read && req.write);
+        assert!(
+            !req.read && !req.write,
+            "模块内 require 不构成授权（组合闭包）"
+        );
+        // 需求元数据面：module_requirements 收集到模块 m 的需求
+        let needs = module_requirements(&core, &table);
+        assert_eq!(needs.len(), 1);
+        assert_eq!(needs[0].0, "m");
+        assert!(needs[0].1.read && needs[0].1.write);
     }
 
     #[test]

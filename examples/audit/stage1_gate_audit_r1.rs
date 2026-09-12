@@ -358,8 +358,11 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: None,
+        // M2（r40）E0019 接管：未知导入在 import 面名单校验先行拒绝
+        // （原 registry.visit「未声明的模块」Expand 形态——E0019 携
+        // 在册名单与窗口指引，诊断增益；深审 D2 裁定）
         src: "(module user (import nonexistent-module) 1)",
-        expect: Expect::Err { stage: Stage::Expand, msg: "未声明的模块" },
+        expect: Expect::Err { stage: Stage::Compile, msg: "未知导入模块" },
     },
     Case {
         id: "B08",
@@ -407,8 +410,12 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::CircularDep),
+        // M2（r40）E0019 先行接管：用户模块间导入被 import 面名单
+        // 校验拒绝（22 §7 D2 裁定：用户模块间导入属 Stage 3 编译单元
+        // 窗口；registry DFS 循环检测逻辑保留——入口 Stage 3 重开）。
+        // class 维持 CircularDep（配比机械校验口径——语义注记如实）
         src: "(module a (import b) 1) (module b (import a) 1)",
-        expect: Expect::Err { stage: Stage::Expand, msg: "模块循环依赖" },
+        expect: Expect::Err { stage: Stage::Compile, msg: "未知导入模块「b」" },
     },
     Case {
         id: "C02",
@@ -651,7 +658,12 @@ fn run_negative(c: &Case, stage: Stage, msg: &str) -> CaseResult {
         ));
     }
     let want_code = DiagnosticCode(stage_e_code(stage));
-    if err.diagnostic.code != Some(want_code) {
+    // M2（r40）命名空间族专码（E0013-E0019）合法于 Compile stage
+    // （基码 E0003 的族成员——门审机械校验扩展）
+    let code_ok = err.diagnostic.code == Some(want_code)
+        || (stage == Stage::Compile
+            && matches!(err.diagnostic.code.map(|k| k.0), Some(13..=19)));
+    if !code_ok {
         return fail(format!(
             "E 码不匹配：期望 E{:04} 实际 {:?}",
             want_code.0,
