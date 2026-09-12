@@ -268,8 +268,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(car 5)",
-        expect: Expect::Err { stage: Stage::Run, msg: "car 需要 pair", code: None },
+        src: "(head 5)",
+        expect: Expect::Err { stage: Stage::Run, msg: "head 需要 pair", code: None },
     },
     Case {
         id: "A06",
@@ -324,8 +324,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(str-append \"a\" 5)",
-        expect: Expect::Err { stage: Stage::Run, msg: "str-append 需要 2 个字符串", code: None },
+        src: "(string-append \"a\" 5)",
+        expect: Expect::Err { stage: Stage::Run, msg: "string-append 需要 2 个字符串", code: None },
     },
     // ---- B 桶：多语句/多函数负向（糖/module/require/宏/门控集成面，12）----
     Case {
@@ -477,8 +477,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(define (f n) (if (= n 0) (car n) (f (- n 1)))) (f 100)",
-        expect: Expect::Err { stage: Stage::Run, msg: "car 需要 pair", code: None },
+        src: "(define (f n) (if (= n 0) (head n) (f (- n 1)))) (f 100)",
+        expect: Expect::Err { stage: Stage::Run, msg: "head 需要 pair", code: None },
     },
     Case {
         id: "C07",
@@ -504,8 +504,8 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // 分配压力（万级 cons）后错误路径仍正确归因（GC 压力 × 类型错）
-        src: "(define (mk n) (if (= n 0) (car 5) (cons n (mk (- n 1))))) (mk 20000)",
-        expect: Expect::Err { stage: Stage::Run, msg: "car 需要 pair", code: None },
+        src: "(define (mk n) (if (= n 0) (head 5) (cons n (mk (- n 1))))) (mk 20000)",
+        expect: Expect::Err { stage: Stage::Run, msg: "head 需要 pair", code: None },
     },
     Case {
         id: "C10",
@@ -513,8 +513,8 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // module 体 inline 执行（42-c 语义）中的运行期类型错
-        src: "(module m (define (f x) (car x)) (f 5))",
-        expect: Expect::Err { stage: Stage::Run, msg: "car 需要 pair", code: None },
+        src: "(module m (define (f x) (head x)) (f 5))",
+        expect: Expect::Err { stage: Stage::Run, msg: "head 需要 pair", code: None },
     },
     // ---- D 桶：错误恢复（6——Custom 探针）----
     Case {

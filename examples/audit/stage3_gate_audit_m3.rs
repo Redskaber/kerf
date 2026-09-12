@@ -546,7 +546,8 @@ const CASES: &[Case] = &[
         bucket: Bucket::Positive,
         polarity: Polarity::Positive,
         class: None,
-        // 计数锚：84 注册 + 47 限定名 + 27 别名（守卫函数复证）
+        // 计数锚（r42/S1 移除轮后口径）：57 扁平 + 47 限定名 + 27 退役
+        //（守卫函数复证——旧名 E0021 拒绝面为移除轮新增锚）
         src: "-",
         expect: Expect::Custom(probe_count_anchors),
     },
@@ -854,7 +855,7 @@ fn probe_b1_b2_contract_parity() -> CaseResult {
         }
         Err(e) => return fail(format!("限定名正路 Err：{}", first_line(&e.rendered))),
     }
-    let old_face = run_source("(str-index-of \"abc\" \"z\")", FNAME);
+    let old_face = run_source("(string-index-of \"abc\" \"z\")", FNAME);
     match old_face {
         Ok(o) => {
             let v = render_value(&o.value, &o.heap);
@@ -979,26 +980,36 @@ fn probe_e2e_full_import_paths() -> CaseResult {
     }
 }
 
-/// P07：计数锚（84 注册 + 27 别名 + 47 限定名——守卫函数复证）。
+/// P07：计数锚（r42/S1 移除轮后——57 扁平 + 47 限定名 + 27 退役；
+/// 守卫函数复证 + 旧名 E0021 拒绝面新锚）。
 fn probe_count_anchors() -> CaseResult {
-    // 限定名计数（builtins 守卫同源断言——46 值 + 27 别名 = 不等式锚）
+    // 限定名计数（builtins 守卫同源断言——47 限定名不等式锚）
     let ok_str = run_source("(string/append \"a\" \"b\")", FNAME).is_ok();
-    let ok_alias = run_source("(head (cons 1 2))", FNAME).is_ok();
-    let ok_legacy = run_source("(car (cons 1 2))", FNAME).is_ok();
-    let w_report = check_source("(car (cons 1 2))", FNAME);
-    let has_w1001 = match w_report {
+    // 现代名（扁平 57 面活证）
+    let ok_modern = run_source("(head (cons 1 2))", FNAME).is_ok();
+    // 旧名退役（r42/S1：E0021 编译期拒绝——移除轮行为锚）
+    let legacy_rejected = match run_source("(car (cons 1 2))", FNAME) {
+        Err(e) => e.rendered.contains("[E0021]"),
+        Ok(_) => false,
+    };
+    // W1003 宏名遮蔽（W 面现状——W1001 已随旧名退役收窄）
+    let w_report = check_source(
+        "(module m (define-syntax head (syntax-rules () ((_ x) 99))) (head (list 1 2)))",
+        FNAME,
+    );
+    let has_w1003 = match w_report {
         Ok(r) => r
             .warnings
             .iter()
-            .any(|d| d.code == Some(DiagnosticCode(1001))),
+            .any(|d| d.code == Some(DiagnosticCode(1003))),
         Err(_) => false,
     };
-    if ok_str && ok_alias && ok_legacy && has_w1001 {
-        pass("计数锚活证：限定名/别名/旧名三面 + W1001 弃用警告在位".to_string())
+    if ok_str && ok_modern && legacy_rejected && has_w1003 {
+        pass("计数锚活证：限定名/现代名/旧名退役 E0021 + W1003 W 面在位".to_string())
     } else {
         fail(format!(
-            "锚不全：限定 {} / 别名 {} / 旧名 {} / W1001 {}",
-            ok_str, ok_alias, ok_legacy, has_w1001
+            "锚不全：限定 {} / 现代名 {} / 旧名退役 E0021 {} / W1003 {}",
+            ok_str, ok_modern, legacy_rejected, has_w1003
         ))
     }
 }

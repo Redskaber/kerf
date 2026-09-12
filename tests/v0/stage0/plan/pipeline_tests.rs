@@ -32,7 +32,7 @@ fn span_propagates_through_all_stages() {
         assert_eq!(proto.code.len(), proto.debug_spans.len());
     }
     // 4. 运行时错误反查（错误路径的 Span 链路）
-    let err = run_source("(+ 1 (car 2))", "err.krf").unwrap_err();
+    let err = run_source("(+ 1 (head 2))", "err.krf").unwrap_err();
     assert_eq!(err.stage, Stage::Run);
     assert!(err.rendered.contains("err.krf"));
 }
@@ -92,7 +92,7 @@ fn diagnostics_render_per_stage() {
     let e2 = run_source("(if)", "d2.krf").unwrap_err();
     assert_eq!(e2.stage, Stage::Expand);
     // Run 阶段
-    let e3 = run_source("(car 3)", "d3.krf").unwrap_err();
+    let e3 = run_source("(head 3)", "d3.krf").unwrap_err();
     assert_eq!(e3.stage, Stage::Run);
     assert!(e3.rendered.contains("d3.krf"));
 }
@@ -123,17 +123,17 @@ fn builtin_library_registered() {
         ("(<= 2 2)", "true"),
         ("(>= 1 2)", "false"),
         ("(cons 1 2)", "(1 . 2)"),
-        ("(car (quote (9 8)))", "9"),
-        ("(cdr (quote (9 8)))", "(8)"),
+        ("(head (quote (9 8)))", "9"),
+        ("(tail (quote (9 8)))", "(8)"),
         ("(list 1 2 3)", "(1 2 3)"),
-        ("(null? nil)", "true"),
-        ("(pair? (cons 1 2))", "true"),
-        ("(int? 5)", "true"),
-        ("(bool? true)", "true"),
-        ("(procedure? car)", "true"),
-        ("(eq? 1 1)", "true"),
+        ("(is-nil nil)", "true"),
+        ("(is-pair (cons 1 2))", "true"),
+        ("(is-int 5)", "true"),
+        ("(is-bool true)", "true"),
+        ("(is-procedure head)", "true"),
+        ("(eq 1 1)", "true"),
         ("(not false)", "true"),
-        ("(str-append \"foo\" \"bar\")", "foobar"),
+        ("(string-append \"foo\" \"bar\")", "foobar"),
     ];
     for (src, expected) in cases {
         assert_eq!(common::run_rendered(src), expected, "内置 {}", src);

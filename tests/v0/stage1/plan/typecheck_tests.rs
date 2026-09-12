@@ -116,21 +116,21 @@ fn dynamic_programs_clean() {
     // 数值塔混合（Int/Float 并集 = Num 合法域）
     expect_clean("(+ 1 2.5)");
     expect_clean("(< 1 2.0)");
-    // 引用列表的 car（quote 字面量 → Pair）
-    expect_clean("(car '(1 2 3))");
+    // 引用列表的 head（quote 字面量 → Pair）
+    expect_clean("(head '(1 2 3))");
     // 内置遮蔽（用户定义遮蔽内置——按用户类型走）
-    expect_clean("(define (car x) 42) (car 5)");
+    expect_clean("(define (head x) 42) (head 5)");
     // set!/begin/if 分支混合
     expect_clean(
-        "(require io write) (define x 1) (set! x (+ x 1)) (begin (print x) (if (null? nil) x 2))",
+        "(require io write) (define x 1) (set! x (+ x 1)) (begin (print x) (if (is-nil nil) x 2))",
     );
     // 谓词结果作 if 条件（结果类型 Bool 推断）
-    expect_clean("(if (null? nil) 1 2)");
-    expect_clean("(if (eq? 'a 'a) 1 2)");
+    expect_clean("(if (is-nil nil) 1 2)");
+    expect_clean("(if (eq 'a 'a) 1 2)");
     // 字符串族正确用法
-    expect_clean("(str-append \"a\" \"b\")");
-    expect_clean("(string->symbol \"foo\")");
-    expect_clean("(symbol->string 'foo)");
+    expect_clean("(string-append \"a\" \"b\")");
+    expect_clean("(string-to-symbol \"foo\")");
+    expect_clean("(symbol-to-string 'foo)");
     // 全字符串等值比较（= 的字符串相等）
     expect_clean("(= \"a\" \"b\")");
 }
@@ -257,16 +257,16 @@ fn r4_not_non_bool() {
 /// R5 car/cdr 非序对（6 case + 反向锚）。
 #[test]
 fn r5_car_cdr_non_pair() {
-    expect_diag("(car 5)", "car 需要 pair，实际 int");
-    expect_diag("(cdr 5)", "cdr 需要 pair，实际 int");
-    expect_diag("(car \"s\")", "car 需要 pair，实际 str");
-    expect_diag("(car 'sym)", "car 需要 pair，实际 symbol");
-    expect_diag("(cdr true)", "cdr 需要 pair，实际 bool");
-    expect_diag("(car nil)", "car 需要 pair，实际 nil");
+    expect_diag("(head 5)", "head 需要 pair，实际 int");
+    expect_diag("(tail 5)", "tail 需要 pair，实际 int");
+    expect_diag("(head \"s\")", "head 需要 pair，实际 str");
+    expect_diag("(head 'sym)", "head 需要 pair，实际 symbol");
+    expect_diag("(tail true)", "tail 需要 pair，实际 bool");
+    expect_diag("(head nil)", "head 需要 pair，实际 nil");
     // 引用点对字面量合法（零误报锚）
-    expect_clean("(car '(1 2))");
-    expect_clean("(cdr '(1 2))");
-    static_error_is_runtime_error("(car 5)");
+    expect_clean("(head '(1 2))");
+    expect_clean("(tail '(1 2))");
+    static_error_is_runtime_error("(head 5)");
 }
 
 // ---------------------------------------------------------------------------
@@ -302,12 +302,15 @@ fn r7_lambda_arity() {
 /// 实际 n」——语义/定位与 R1-R8 专用措辞一致）。
 #[test]
 fn r7_builtin_arity() {
-    expect_diag("(car 1 2)", "过程参数数量不匹配：期望 1..1 实际 2");
+    expect_diag("(head 1 2)", "过程参数数量不匹配：期望 1..1 实际 2");
     expect_diag("(cons 1)", "过程参数数量不匹配：期望 2..2 实际 1");
     expect_diag("(not 1 2)", "过程参数数量不匹配：期望 1..1 实际 2");
-    expect_diag("(str-append \"a\")", "过程参数数量不匹配：期望 2..2 实际 1");
+    expect_diag(
+        "(string-append \"a\")",
+        "过程参数数量不匹配：期望 2..2 实际 1",
+    );
     expect_diag("(< 1)", "过程参数数量不匹配：期望 ≥2 实际 1");
-    static_error_is_runtime_error("(car 1 2)");
+    static_error_is_runtime_error("(head 1 2)");
 }
 
 /// R7 用户定义闭包元数（define → Callable 推断）。
@@ -328,28 +331,34 @@ fn r7_defined_closure_arity() {
 /// R8 字符串族（4 case + 反向锚）。
 #[test]
 fn r8_string_family_type() {
-    expect_diag("(str-length 5)", "str-length 需要 str，实际 int");
-    expect_diag("(str-upcase 'sym)", "str-upcase 需要 str，实际 symbol");
+    expect_diag("(string-length 5)", "string-length 需要 str，实际 int");
     expect_diag(
-        "(str-contains? 1 \"a\")",
-        "str-contains? 需要 str，实际 int",
+        "(string-to-upper 'sym)",
+        "string-to-upper 需要 str，实际 symbol",
     );
     expect_diag(
-        "(string->symbol true)",
-        "string->symbol 需要 str，实际 bool",
+        "(string-contains 1 \"a\")",
+        "string-contains 需要 str，实际 int",
     );
-    static_error_is_runtime_error("(str-length 5)");
+    expect_diag(
+        "(string-to-symbol true)",
+        "string-to-symbol 需要 str，实际 bool",
+    );
+    static_error_is_runtime_error("(string-length 5)");
 }
 
 /// R8 符号转换（2 case）。
 #[test]
 fn r8_symbol_conversion() {
-    expect_diag("(symbol->string 5)", "symbol->string 需要 symbol，实际 int");
     expect_diag(
-        "(symbol->string \"s\")",
-        "symbol->string 需要 symbol，实际 str",
+        "(symbol-to-string 5)",
+        "symbol-to-string 需要 symbol，实际 int",
     );
-    static_error_is_runtime_error("(symbol->string 5)");
+    expect_diag(
+        "(symbol-to-string \"s\")",
+        "symbol-to-string 需要 symbol，实际 str",
+    );
+    static_error_is_runtime_error("(symbol-to-string 5)");
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +403,7 @@ fn multi_error_continues_after_error() {
 /// 多形式程序：逐形式收集（define 后续形式仍检查）。
 #[test]
 fn multi_error_across_forms() {
-    expect_diag_count("(define x 1) (if nil 2 3) (+ x \"a\") (car 5)", 3);
+    expect_diag_count("(define x 1) (if nil 2 3) (+ x \"a\") (head 5)", 3);
 }
 
 // ---------------------------------------------------------------------------
@@ -476,8 +485,8 @@ fn flag_period_dual_face_fix_anchors() {
     //    臂 PoC 旧口径曾误报——修复锚）
     expect_clean("(< \"a\" \"b\")");
     expect_clean("(>= \"b\" \"a\")");
-    // ② (car nil) 检出（hm.rs car 臂 Nil 曾误入保守跳过——漏检修复锚；
+    // ② (head nil) 检出（hm.rs head 臂 Nil 曾误入保守跳过——漏检修复锚；
     //    运行期确定性 E5 → 双向锚维持）
-    expect_diag("(car nil)", "car 需要 pair，实际 nil");
-    static_error_is_runtime_error("(car nil)");
+    expect_diag("(head nil)", "head 需要 pair，实际 nil");
+    static_error_is_runtime_error("(head nil)");
 }

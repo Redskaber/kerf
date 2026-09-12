@@ -81,9 +81,9 @@ fn gate_g4_vm_executes_opcode_groups() {
         (define acc 0)
         (list
           (add5 10)
-          (if (null? nil) 1 2)
-          (pair? lst)
-          (eq? (car lst) 1)
+          (if (is-nil nil) 1 2)
+          (is-pair lst)
+          (eq (head lst) 1)
           (mod 7 3)
           (begin (set! acc 1) acc))
     "#;

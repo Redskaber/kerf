@@ -80,7 +80,7 @@ fn tail_position_through_let_sugar() {
 /// 内建函数尾调用：结果即返回值（隐式 RET 路径）。
 #[test]
 fn builtin_tail_call_returns_value() {
-    common::assert_int("(define (f p) (car p)) (f (cons 5 nil))", 5);
+    common::assert_int("(define (f p) (head p)) (f (cons 5 nil))", 5);
     common::assert_int("(define (f a b) (+ a b)) (f 40 2)", 42);
 }
 

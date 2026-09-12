@@ -114,8 +114,8 @@ fn begin_and_multiple_top_level_forms() {
 
 #[test]
 fn not_and_eq_prim_arithmetic_domain() {
-    // not（ceql x 0 翻译）+ eq? 整数域 + 嵌套
-    let src = "(if (not (eq? 3 4)) 77 88)\n";
+    // not（ceql x 0 翻译）+ eq 整数域 + 嵌套
+    let src = "(if (not (eq 3 4)) 77 88)\n";
     assert_eq!(native_exit_of(src, "t_not"), 77);
 }
 

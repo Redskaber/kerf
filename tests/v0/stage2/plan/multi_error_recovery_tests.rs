@@ -112,12 +112,12 @@ fn clean_program_recovers_nothing() {
 
 #[test]
 fn driver_recover_report_merges_expand_and_type_diagnostics() {
-    // 混合面：expand 错（E0002 空形式）+ typecheck 错（E0005 car 元数）
+    // 混合面：expand 错（E0002 空形式）+ typecheck 错（E0005 head 元数）
     // 同报 + 位置序
-    let src = "(define x 1)\n()\n(car)\n";
+    let src = "(define x 1)\n()\n(head)\n";
     let report = check_source_recover(src, FNAME).expect("恢复路径应产出报告");
     assert_eq!(report.diagnostics.len(), 2, "E0002 + E0005 各一");
-    // 次序：空形式（行 2）在 car（行 3）前
+    // 次序：空形式（行 2）在 head（行 3）前
     assert!(report.diagnostics[0].primary_span.start < report.diagnostics[1].primary_span.start);
     // 产物：x 的 define 进入编译（部分产物继续走全管线）
     assert!(report.proto_count >= 1, "部分产物应编译出原型");
@@ -143,10 +143,10 @@ fn driver_recover_partial_product_contains_later_defines() {
 #[test]
 fn driver_recover_rendered_lines_sorted_and_complete() {
     // 渲染面：逐条 + 位置序（E0002 在 E0005 前——源位置）
-    let src = "()\n(define x 1)\n(car)\n";
+    let src = "()\n(define x 1)\n(head)\n";
     let report = check_source_recover(src, FNAME).expect("应产出报告");
-    // M2（r40）：rendered 含 error 诊断 + W 级警告（非阻断——(car)
-    // 旧名引用触发 W1001 弃用族一条）两通道合计
+    // rendered 含 error 诊断 + W 级警告两通道合计（r42/S1 后 W 面 =
+    // W1002/W1003；本例 (head) 元数错入 error 通道）
     assert_eq!(
         report.rendered.len(),
         report.diagnostics.len() + report.warnings.len()
@@ -158,7 +158,7 @@ fn driver_recover_rendered_lines_sorted_and_complete() {
         report.rendered[0]
     );
     assert!(
-        report.rendered[1].contains("car"),
+        report.rendered[1].contains("head"),
         "次条：{}",
         report.rendered[1]
     );
@@ -191,7 +191,7 @@ fn legacy_check_source_single_error_semantics_unchanged() {
 fn legacy_typecheck_multi_error_still_works_via_recover() {
     // 既有 typecheck 多错误面（r7 设计 §5 首个消费面）经恢复入口延续：
     // 三个 E0005 全报
-    let src = "(car)\n(cdr)\n(+ 1 \"s\")\n";
+    let src = "(head)\n(tail)\n(+ 1 \"s\")\n";
     let report = check_source_recover(src, FNAME).expect("应产出报告");
     assert_eq!(report.diagnostics.len(), 3, "三 typecheck 错全报");
 }

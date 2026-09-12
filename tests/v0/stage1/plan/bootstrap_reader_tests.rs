@@ -179,7 +179,7 @@ fn parity_forms_positive() {
         "",
         "   \n; 仅注释\n",
         "(begin 1)",
-        "(define (make-adder n) (lambda (x) (+ x n)))\n(define add5 (make-adder 5))\n(list (add5 10) (if (null? nil) 1 2))",
+        "(define (make-adder n) (lambda (x) (+ x n)))\n(define add5 (make-adder 5))\n(list (add5 10) (if (is-nil nil) 1 2))",
         "'é",
         "'λx",
     ];

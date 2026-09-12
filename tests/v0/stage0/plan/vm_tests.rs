@@ -65,9 +65,9 @@ fn closures_share_mutable_captures() {
 fn higher_order_functions() {
     let src = r#"
         (define (map f lst)
-          (if (null? lst)
+          (if (is-nil lst)
               nil
-              (cons (f (car lst)) (map f (cdr lst)))))
+              (cons (f (head lst)) (map f (tail lst)))))
         (map (lambda (x) (* x x)) (quote (1 2 3 4 5)))
     "#;
     assert_eq!(common::run_rendered(src), "(1 4 9 16 25)");
@@ -83,9 +83,9 @@ fn truthy_requires_bool() {
 /// 运行时错误捕获含堆栈追踪（§8.12）。
 #[test]
 fn runtime_error_has_trace() {
-    let src = "(define (inner) (car 5)) (define (outer) (inner)) (outer)";
+    let src = "(define (inner) (head 5)) (define (outer) (inner)) (outer)";
     let err = common::run(src).unwrap_err();
-    assert!(err.contains("car") || err.contains("pair"));
+    assert!(err.contains("head") || err.contains("pair"));
 }
 
 /// 未绑定变量错误。
@@ -120,7 +120,7 @@ fn dual_execution_paths_cross_validate() {
         "(letrec ((even? (lambda (n) (if (= n 0) true (odd? (- n 1))))) (odd? (lambda (n) (if (= n 0) false (even? (- n 1)))))) (even? 10))",
         "(cond ((< 1 0) 1) ((> 1 0) 2) (else 3))",
         "(define (make-counter) (let ((n 0)) (lambda () (set! n (+ n 1)) n))) (define c (make-counter)) (c) (c) (c)",
-        "(car (quote (1 2 3)))",
+        "(head (quote (1 2 3)))",
         "((lambda (x y) (cons x y)) 1 2)",
     ];
     for src in programs {
@@ -133,9 +133,9 @@ fn dual_execution_paths_cross_validate() {
 fn pair_construction_and_traversal() {
     assert_eq!(common::run_rendered("(cons 1 2)"), "(1 . 2)");
     assert_eq!(common::run_rendered("(quote (1 2 3))"), "(1 2 3)");
-    assert_eq!(common::run_rendered("(cdr (quote (1 2 3)))"), "(2 3)");
-    assert_eq!(common::run_rendered("(car (cdr (quote (1 2 3))))"), "2");
-    assert_eq!(common::run_rendered("(null? (quote ()))"), "true");
+    assert_eq!(common::run_rendered("(tail (quote (1 2 3)))"), "(2 3)");
+    assert_eq!(common::run_rendered("(head (tail (quote (1 2 3))))"), "2");
+    assert_eq!(common::run_rendered("(is-nil (quote ()))"), "true");
 }
 
 /// T1 对账（[06-操作语义 §2 R6/D1]）：Define 返回值为被定义值——
@@ -219,7 +219,7 @@ fn app_evaluation_order_fn_first_dual_path() {
 // TD-002 符号值（quote 符号 datum → Value::Symbol）：VM 语义 + 双路径
 // ---------------------------------------------------------------------------
 
-/// 符号值基础语义：quote 符号 / 符号列表 / 混合列表 / eq? 按名相等。
+/// 符号值基础语义：quote 符号 / 符号列表 / 混合列表 / eq 按名相等。
 #[test]
 fn quote_symbol_value_semantics() {
     assert_eq!(common::run_rendered("(quote sym)"), "sym");
@@ -228,21 +228,21 @@ fn quote_symbol_value_semantics() {
     assert_eq!(common::run_rendered("'(a b c)"), "(a b c)");
     // 混合 datum 列表（VM 渲染层 Str 不带引号——render_value 语义）
     assert_eq!(common::run_rendered("'(a 1 \"s\")"), "(a 1 s)");
-    // eq? 按名相等（值语义）
-    assert_eq!(common::run_rendered("(eq? 'a 'a)"), "true");
-    assert_eq!(common::run_rendered("(eq? 'a 'b)"), "false");
+    // eq 按名相等（值语义）
+    assert_eq!(common::run_rendered("(eq 'a 'a)"), "true");
+    assert_eq!(common::run_rendered("(eq 'a 'b)"), "false");
     // 符号 ≠ 字符串（类型严格）
-    assert_eq!(common::run_rendered("(eq? 'a \"a\")"), "false");
+    assert_eq!(common::run_rendered("(eq 'a \"a\")"), "false");
 }
 
-/// 符号值构造路径：cons/list 内置装箱符号 + car 取回。
+/// 符号值构造路径：cons/list 内置装箱符号 + head 取回。
 #[test]
 fn symbol_construction_and_extraction() {
     assert_eq!(common::run_rendered("(cons 'a '(b))"), "(a b)");
     assert_eq!(common::run_rendered("(list 'a 'b)"), "(a b)");
-    // car 取回符号（堆槽 → Value::Symbol 往返）
-    assert_eq!(common::run_rendered("(car '(a b))"), "a");
-    assert_eq!(common::run_rendered("(car (cdr '(a b)))"), "b");
+    // head 取回符号（堆槽 → Value::Symbol 往返）
+    assert_eq!(common::run_rendered("(head '(a b))"), "a");
+    assert_eq!(common::run_rendered("(head (tail '(a b)))"), "b");
 }
 
 /// 符号值双路径一致（T1：VM 与 eval 渲染等价——TD-002 触点双路径覆盖）。
@@ -250,7 +250,7 @@ fn symbol_construction_and_extraction() {
 fn quote_symbol_dual_path_agreement() {
     assert!(dual_path_agrees("'sym"));
     assert!(dual_path_agrees("'(a b c)"));
-    assert!(dual_path_agrees("(eq? 'a 'a)"));
+    assert!(dual_path_agrees("(eq 'a 'a)"));
     assert!(dual_path_agrees("(cons 'x '(y))"));
-    assert!(dual_path_agrees("(car '(a b))"));
+    assert!(dual_path_agrees("(head '(a b))"));
 }

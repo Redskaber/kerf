@@ -240,7 +240,7 @@ fn negative_perform_non_symbol_tag() {
 #[test]
 fn gc_payload_survives_alloc_pressure() {
     assert_int(
-        "(define (mk n) (if (= n 0) nil (cons n (mk (- n 1))))) (handle t ((p k) (begin (mk 50000) (resume k (+ (car p) 1)))) (+ 0 (perform (cons 't (cons 41 0)))))",
+        "(define (mk n) (if (= n 0) nil (cons n (mk (- n 1))))) (handle t ((p k) (begin (mk 50000) (resume k (+ (head p) 1)))) (+ 0 (perform (cons 't (cons 41 0)))))",
         42,
     );
 }
@@ -250,7 +250,7 @@ fn gc_payload_survives_alloc_pressure() {
 #[test]
 fn gc_continuation_boxed_survives_alloc_pressure() {
     assert_int(
-        "(define (mk n) (if (= n 0) nil (cons n (mk (- n 1))))) (define box nil) (handle t ((p k) (begin (set! box (cons k 41)) (mk 60000) (resume (car box) (+ (cdr box) 1)))) (+ 0 (perform (cons 't 0))))",
+        "(define (mk n) (if (= n 0) nil (cons n (mk (- n 1))))) (define box nil) (handle t ((p k) (begin (set! box (cons k 41)) (mk 60000) (resume (head box) (+ (tail box) 1)))) (+ 0 (perform (cons 't 0))))",
         42,
     );
 }
@@ -324,8 +324,8 @@ fn static_perform_effect_value_violations() {
 /// Handle handler 体静态违例（R5——子句体入检出域）。
 #[test]
 fn static_handler_body_violations() {
-    both_detect("(handle t ((p k) (car 42)) 1)", "car 需要 pair");
-    both_detect("(handle t ((p k) (cdr \"s\")) 1)", "cdr 需要 pair");
+    both_detect("(handle t ((p k) (head 42)) 1)", "head 需要 pair");
+    both_detect("(handle t ((p k) (tail \"s\")) 1)", "tail 需要 pair");
 }
 
 /// Handle 体静态违例（R1——被保护计算入检出域）+ 双体多错误收集。
@@ -357,7 +357,7 @@ fn static_effect_zero_false_positive() {
         "(define n 0) (define (bump) (begin (set! n (+ n 1)) n)) (handle t ((p k) (resume k (+ p n))) (+ 0 (perform (cons 't (bump)))))",
         "(define (spin n) (if (= n 0) (perform (cons 's 99)) (spin (- n 1)))) (handle s ((p k) (resume k (+ p 1))) (spin 100000))",
         // 绑定器动态用点（payload Unknown/Dynamic 的算术与点对——零误报）
-        "(handle t ((p k) (resume k (cons (car p) (cdr p)))) (perform (cons 't 1)))",
+        "(handle t ((p k) (resume k (cons (head p) (tail p)))) (perform (cons 't 1)))",
         "(handle t ((p k) (+ p 0)) (perform (cons 't 1)))",
     ];
     for (i, src) in corpus.iter().enumerate() {

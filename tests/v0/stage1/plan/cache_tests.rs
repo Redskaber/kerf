@@ -169,7 +169,7 @@ fn pipeline_disabled_bypasses_cache() {
 #[test]
 fn pipeline_compile_errors_not_cached() {
     cache_reset();
-    let src = "(car"; // Read 阶段错误（括号未闭合）
+    let src = "(head"; // Read 阶段错误（括号未闭合）
     assert!(run_source(src, "cache-e.krf").is_err());
     assert!(run_source(src, "cache-e.krf").is_err());
     assert_eq!(cache_stats().misses, 2, "编译错误两次均应未中");

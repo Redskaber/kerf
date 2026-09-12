@@ -1,8 +1,8 @@
 //! 内置函数注册（stage0.md §9 stdlib：语言核心零内置——全部经 driver 注入）。
 //!
-//! 算术（+ - * / mod）· 比较（= < > <= >=）· 序对（cons car cdr list）·
-//! 谓词（null? pair? int? bool? procedure? eq?）· 逻辑（not）·
-//! I/O（print read-line）· 字符串（str-append）。
+//! 算术（+ - * / mod）· 比较（= < > <= >=）· 序对（cons head tail list）·
+//! 谓词（is-nil is-pair is-int is-bool is-procedure eq）· 逻辑（not）·
+//! I/O（print read-line）· 字符串（string-append）。
 //!
 //! 数值塔：Int×Int → Int（溢出检查）；任一 Float → Float。
 //! 比较：链式（(= a b c) 全相等）。
@@ -55,38 +55,38 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         "cons",
         BuiltinFn::new("cons", |heap, args| {
             two_args("cons", &args)?;
-            let car = box_value(&args[0], heap);
-            let cdr = box_value(&args[1], heap);
-            Ok(Value::Pair(heap.alloc_pair(car, cdr)))
+            let head = box_value(&args[0], heap);
+            let tail = box_value(&args[1], heap);
+            Ok(Value::Pair(heap.alloc_pair(head, tail)))
         }),
     ));
     defs.push((
-        "car",
-        BuiltinFn::new("car", |heap, args| {
-            one_arg("car", &args)?;
+        "head",
+        BuiltinFn::new("head", |heap, args| {
+            one_arg("head", &args)?;
             match &args[0] {
                 Value::Pair(r) => match heap.get_pair(*r) {
-                    Some((car, _)) => Ok(unbox_slot(car, heap)),
-                    None => Err(RuntimeError::new("car 应用于非序对堆槽")),
+                    Some((head, _)) => Ok(unbox_slot(head, heap)),
+                    None => Err(RuntimeError::new("head 应用于非序对堆槽")),
                 },
                 other => Err(RuntimeError::new(kerf_vm::err_pair_op(
-                    "car",
+                    "head",
                     other.type_name(),
                 ))),
             }
         }),
     ));
     defs.push((
-        "cdr",
-        BuiltinFn::new("cdr", |heap, args| {
-            one_arg("cdr", &args)?;
+        "tail",
+        BuiltinFn::new("tail", |heap, args| {
+            one_arg("tail", &args)?;
             match &args[0] {
                 Value::Pair(r) => match heap.get_pair(*r) {
-                    Some((_, cdr)) => Ok(unbox_slot(cdr, heap)),
-                    None => Err(RuntimeError::new("cdr 应用于非序对堆槽")),
+                    Some((_, tail)) => Ok(unbox_slot(tail, heap)),
+                    None => Err(RuntimeError::new("tail 应用于非序对堆槽")),
                 },
                 other => Err(RuntimeError::new(kerf_vm::err_pair_op(
-                    "cdr",
+                    "tail",
                     other.type_name(),
                 ))),
             }
@@ -108,37 +108,37 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "null?",
-        BuiltinFn::new("null?", |_, args| {
-            one_arg("null?", &args)?;
+        "is-nil",
+        BuiltinFn::new("is-nil", |_, args| {
+            one_arg("is-nil", &args)?;
             Ok(Value::Bool(matches!(args[0], Value::Nil)))
         }),
     ));
     defs.push((
-        "pair?",
-        BuiltinFn::new("pair?", |_, args| {
-            one_arg("pair?", &args)?;
+        "is-pair",
+        BuiltinFn::new("is-pair", |_, args| {
+            one_arg("is-pair", &args)?;
             Ok(Value::Bool(matches!(args[0], Value::Pair(_))))
         }),
     ));
     defs.push((
-        "int?",
-        BuiltinFn::new("int?", |_, args| {
-            one_arg("int?", &args)?;
+        "is-int",
+        BuiltinFn::new("is-int", |_, args| {
+            one_arg("is-int", &args)?;
             Ok(Value::Bool(matches!(args[0], Value::Int(_))))
         }),
     ));
     defs.push((
-        "bool?",
-        BuiltinFn::new("bool?", |_, args| {
-            one_arg("bool?", &args)?;
+        "is-bool",
+        BuiltinFn::new("is-bool", |_, args| {
+            one_arg("is-bool", &args)?;
             Ok(Value::Bool(matches!(args[0], Value::Bool(_))))
         }),
     ));
     defs.push((
-        "procedure?",
-        BuiltinFn::new("procedure?", |_, args| {
-            one_arg("procedure?", &args)?;
+        "is-procedure",
+        BuiltinFn::new("is-procedure", |_, args| {
+            one_arg("is-procedure", &args)?;
             Ok(Value::Bool(matches!(
                 args[0],
                 Value::Closure(_) | Value::Builtin(_)
@@ -147,30 +147,30 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
     ));
     // ---- 类型谓词完备面（r24 / 42-e stdlib 缺口补齐：Value 变体判别）----
     defs.push((
-        "string?",
-        BuiltinFn::new("string?", |_, args| {
-            one_arg("string?", &args)?;
+        "is-string",
+        BuiltinFn::new("is-string", |_, args| {
+            one_arg("is-string", &args)?;
             Ok(Value::Bool(matches!(args[0], Value::Str(_))))
         }),
     ));
     defs.push((
-        "symbol?",
-        BuiltinFn::new("symbol?", |_, args| {
-            one_arg("symbol?", &args)?;
+        "is-symbol",
+        BuiltinFn::new("is-symbol", |_, args| {
+            one_arg("is-symbol", &args)?;
             Ok(Value::Bool(matches!(args[0], Value::Symbol(_))))
         }),
     ));
     defs.push((
-        "float?",
-        BuiltinFn::new("float?", |_, args| {
-            one_arg("float?", &args)?;
+        "is-float",
+        BuiltinFn::new("is-float", |_, args| {
+            one_arg("is-float", &args)?;
             Ok(Value::Bool(matches!(args[0], Value::Float(_))))
         }),
     ));
     defs.push((
-        "number?",
-        BuiltinFn::new("number?", |_, args| {
-            one_arg("number?", &args)?;
+        "is-number",
+        BuiltinFn::new("is-number", |_, args| {
+            one_arg("is-number", &args)?;
             // 数值塔谓词：Int 或 Float（与算术操作数域一致）
             Ok(Value::Bool(matches!(
                 args[0],
@@ -179,11 +179,11 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "list?",
-        BuiltinFn::new("list?", |heap, args| {
-            one_arg("list?", &args)?;
-            // 真表判定：nil 或 cdr 链终止于 nil 的序对链。Floyd 龟兔
-            // 环检测（环 → false：真表的 cdr 链无环；引用 Racket list? 语义）。
+        "is-list",
+        BuiltinFn::new("is-list", |heap, args| {
+            one_arg("is-list", &args)?;
+            // 真表判定：nil 或 tail 链终止于 nil 的序对链。Floyd 龟兔
+            // 环检测（环 → false：真表的 tail 链无环；引用 Racket is-list 语义）。
             match &args[0] {
                 Value::Nil => Ok(Value::Bool(true)),
                 Value::Pair(start) => {
@@ -211,9 +211,9 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "eq?",
-        BuiltinFn::new("eq?", |_, args| {
-            two_args("eq?", &args)?;
+        "eq",
+        BuiltinFn::new("eq", |_, args| {
+            two_args("eq", &args)?;
             Ok(Value::Bool(args[0].eq_value(&args[1])))
         }),
     ));
@@ -232,16 +232,16 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
     // 不注册——fail-closed：无令牌的 I/O 无可达入口）
     register_io_globals(&mut defs, grant);
     defs.push((
-        "str-append",
-        BuiltinFn::new("str-append", |_, args| {
+        "string-append",
+        BuiltinFn::new("string-append", |_, args| {
             if args.len() != 2 {
-                return Err(RuntimeError::new("str-append 需要 2 个参数"));
+                return Err(RuntimeError::new("string-append 需要 2 个参数"));
             }
             match (&args[0], &args[1]) {
                 (Value::Str(a), Value::Str(b)) => {
                     Ok(Value::Str(Rc::from(format!("{}{}", a, b).as_str())))
                 }
-                _ => Err(RuntimeError::new("str-append 需要 2 个字符串")),
+                _ => Err(RuntimeError::new("string-append 需要 2 个字符串")),
             }
         }),
     ));
@@ -262,9 +262,9 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                 match cur {
                     Value::Nil => return Ok(Value::Int(n as i64)),
                     Value::Pair(r) => match heap.get_pair(r) {
-                        Some((_, cdr)) => {
+                        Some((_, tail)) => {
                             n += 1;
-                            cur = unbox_slot(cdr, heap);
+                            cur = unbox_slot(tail, heap);
                         }
                         None => {
                             return Err(RuntimeError::new("length 应用于非序对堆槽"));
@@ -299,9 +299,9 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                     match cur {
                         Value::Nil => break,
                         Value::Pair(r) => match heap.get_pair(r) {
-                            Some((car, cdr)) => {
-                                elems.push(unbox_slot(car, heap));
-                                cur = unbox_slot(cdr, heap);
+                            Some((head, tail)) => {
+                                elems.push(unbox_slot(head, heap));
+                                cur = unbox_slot(tail, heap);
                             }
                             None => {
                                 return Err(RuntimeError::new("append 应用于非序对堆槽"));
@@ -340,11 +340,11 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                 match cur {
                     Value::Nil => return Ok(Value::Pair(acc)),
                     Value::Pair(r) => match heap.get_pair(r) {
-                        Some((car, cdr)) => {
-                            let elem = unbox_slot(car, heap);
+                        Some((head, tail)) => {
+                            let elem = unbox_slot(head, heap);
                             let elem_r = box_value(&elem, heap);
                             acc = heap.alloc_pair(elem_r, acc);
-                            cur = unbox_slot(cdr, heap);
+                            cur = unbox_slot(tail, heap);
                         }
                         None => {
                             return Err(RuntimeError::new("reverse 应用于非序对堆槽"));
@@ -361,20 +361,20 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "list-ref",
-        BuiltinFn::new("list-ref", |heap, args| {
-            two_args("list-ref", &args)?;
+        "nth",
+        BuiltinFn::new("nth", |heap, args| {
+            two_args("nth", &args)?;
             let n = match &args[1] {
                 Value::Int(i) if *i >= 0 => *i as u64,
                 Value::Int(i) => {
                     return Err(RuntimeError::new(format!(
-                        "list-ref 索引需要非负整数，实际 {}",
+                        "nth 索引需要非负整数，实际 {}",
                         i
                     )))
                 }
                 other => {
                     return Err(RuntimeError::new(format!(
-                        "list-ref 索引需要 int，实际 {}",
+                        "nth 索引需要 int，实际 {}",
                         other.type_name()
                     )))
                 }
@@ -384,42 +384,37 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
             loop {
                 match cur {
                     Value::Pair(r) => match heap.get_pair(r) {
-                        Some((car, cdr)) => {
+                        Some((head, tail)) => {
                             if k == 0 {
-                                return Ok(unbox_slot(car, heap));
+                                return Ok(unbox_slot(head, heap));
                             }
                             k -= 1;
-                            cur = unbox_slot(cdr, heap);
+                            cur = unbox_slot(tail, heap);
                         }
                         None => {
-                            return Err(RuntimeError::new("list-ref 应用于非序对堆槽"));
+                            return Err(RuntimeError::new("nth 应用于非序对堆槽"));
                         }
                     },
-                    _ => {
-                        return Err(RuntimeError::new(format!(
-                            "list-ref 索引 {} 超出列表范围",
-                            n
-                        )))
-                    }
+                    _ => return Err(RuntimeError::new(format!("nth 索引 {} 超出列表范围", n))),
                 }
             }
         }),
     ));
     defs.push((
-        "list-tail",
-        BuiltinFn::new("list-tail", |heap, args| {
-            two_args("list-tail", &args)?;
+        "drop",
+        BuiltinFn::new("drop", |heap, args| {
+            two_args("drop", &args)?;
             let n = match &args[1] {
                 Value::Int(i) if *i >= 0 => *i as u64,
                 Value::Int(i) => {
                     return Err(RuntimeError::new(format!(
-                        "list-tail 起始索引需要非负整数，实际 {}",
+                        "drop 起始索引需要非负整数，实际 {}",
                         i
                     )))
                 }
                 other => {
                     return Err(RuntimeError::new(format!(
-                        "list-tail 索引需要 int，实际 {}",
+                        "drop 索引需要 int，实际 {}",
                         other.type_name()
                     )))
                 }
@@ -427,35 +422,32 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
             let mut cur = args[0].clone();
             let mut k = n;
             // 每步校验形态（k=0 时非 list 输入也拒绝——类型严格，
-            // Racket contract 语义：list-tail 输入必须是 list）
+            // Racket contract 语义：drop 输入必须是 list）
             loop {
                 match cur {
                     Value::Nil => {
                         if k == 0 {
                             return Ok(Value::Nil);
                         }
-                        return Err(RuntimeError::new(format!(
-                            "list-tail 索引 {} 超出列表范围",
-                            n
-                        )));
+                        return Err(RuntimeError::new(format!("drop 索引 {} 超出列表范围", n)));
                     }
                     Value::Pair(r) => {
                         if k == 0 {
                             return Ok(Value::Pair(r));
                         }
                         match heap.get_pair(r) {
-                            Some((_, cdr)) => {
+                            Some((_, tail)) => {
                                 k -= 1;
-                                cur = unbox_slot(cdr, heap);
+                                cur = unbox_slot(tail, heap);
                             }
                             None => {
-                                return Err(RuntimeError::new("list-tail 应用于非序对堆槽"));
+                                return Err(RuntimeError::new("drop 应用于非序对堆槽"));
                             }
                         }
                     }
                     other => {
                         return Err(RuntimeError::new(format!(
-                            "list-tail 需要 list，实际 {}",
+                            "drop 需要 list，实际 {}",
                             other.type_name()
                         )))
                     }
@@ -467,18 +459,18 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         "member",
         BuiltinFn::new("member", |heap, args| {
             two_args("member", &args)?;
-            // 按 eq? 逐元素查找；命中返回子表，未命中返回 false
+            // 按 eq 逐元素查找；命中返回子表，未命中返回 false
             let mut cur = args[1].clone();
             loop {
                 match cur {
                     Value::Nil => return Ok(Value::Bool(false)),
                     Value::Pair(r) => match heap.get_pair(r) {
-                        Some((car, cdr)) => {
-                            let elem = unbox_slot(car, heap);
+                        Some((head, tail)) => {
+                            let elem = unbox_slot(head, heap);
                             if elem.eq_value(&args[0]) {
                                 return Ok(Value::Pair(r));
                             }
-                            cur = unbox_slot(cdr, heap);
+                            cur = unbox_slot(tail, heap);
                         }
                         None => {
                             return Err(RuntimeError::new("member 应用于非序对堆槽"));
@@ -498,13 +490,13 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         "assoc",
         BuiltinFn::new("assoc", |heap, args| {
             two_args("assoc", &args)?;
-            // 点对表按键 eq? 查找；命中返回该点对（键值对），未命中 false
+            // 点对表按键 eq 查找；命中返回该点对（键值对），未命中 false
             let mut cur = args[1].clone();
             loop {
                 match cur {
                     Value::Nil => return Ok(Value::Bool(false)),
                     Value::Pair(r) => match heap.get_pair(r) {
-                        Some((entry, cdr)) => {
+                        Some((entry, tail)) => {
                             let entry_v = unbox_slot(entry, heap);
                             match entry_v {
                                 Value::Pair(ep) => match heap.get_pair(ep) {
@@ -513,7 +505,7 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                                         if key_v.eq_value(&args[0]) {
                                             return Ok(Value::Pair(ep));
                                         }
-                                        cur = unbox_slot(cdr, heap);
+                                        cur = unbox_slot(tail, heap);
                                     }
                                     None => {
                                         return Err(RuntimeError::new(
@@ -551,8 +543,8 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
             loop {
                 match cur {
                     Value::Pair(r) => match heap.get_pair(r) {
-                        Some((_, cdr)) => {
-                            let next = unbox_slot(cdr, heap);
+                        Some((_, tail)) => {
+                            let next = unbox_slot(tail, heap);
                             if matches!(next, Value::Nil) {
                                 return Ok(Value::Pair(r));
                             }
@@ -578,29 +570,29 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
 
     // —— 字符串处理（10，含 TD-002 联动互转）——
     defs.push((
-        "str-length",
-        BuiltinFn::new("str-length", |_, args| {
-            one_arg("str-length", &args)?;
+        "string-length",
+        BuiltinFn::new("string-length", |_, args| {
+            one_arg("string-length", &args)?;
             match &args[0] {
                 Value::Str(s) => Ok(Value::Int(s.chars().count() as i64)),
                 other => Err(RuntimeError::new(format!(
-                    "str-length 需要 str，实际 {}",
+                    "string-length 需要 str，实际 {}",
                     other.type_name()
                 ))),
             }
         }),
     ));
     defs.push((
-        "str-substring",
-        BuiltinFn::new("str-substring", |_, args| {
+        "string-substring",
+        BuiltinFn::new("string-substring", |_, args| {
             if args.len() != 3 {
-                return Err(RuntimeError::new("str-substring 需要 3 个参数"));
+                return Err(RuntimeError::new("string-substring 需要 3 个参数"));
             }
             let s = match &args[0] {
                 Value::Str(s) => s.clone(),
                 other => {
                     return Err(RuntimeError::new(format!(
-                        "str-substring 需要 str，实际 {}",
+                        "string-substring 需要 str，实际 {}",
                         other.type_name()
                     )))
                 }
@@ -609,7 +601,7 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                 (Value::Int(a), Value::Int(b)) => (*a, *b),
                 (a, _) => {
                     return Err(RuntimeError::new(format!(
-                        "str-substring 索引需要 int，实际 {}",
+                        "string-substring 索引需要 int，实际 {}",
                         a.type_name()
                     )))
                 }
@@ -617,7 +609,7 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
             let len = s.chars().count() as i64;
             if start < 0 || end < start || end > len {
                 return Err(RuntimeError::new(format!(
-                    "str-substring 索引越界：{}..{}（长度 {}）",
+                    "string-substring 索引越界：{}..{}（长度 {}）",
                     start, end, len
                 )));
             }
@@ -630,9 +622,9 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "str-index-of",
-        BuiltinFn::new("str-index-of", |_, args| {
-            two_args("str-index-of", &args)?;
+        "string-index-of",
+        BuiltinFn::new("string-index-of", |_, args| {
+            two_args("string-index-of", &args)?;
             match (&args[0], &args[1]) {
                 (Value::Str(s), Value::Str(sub)) => {
                     // 字符索引（Unicode 安全：先字节查找再换算字符位）
@@ -643,7 +635,7 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                     Ok(Value::Int(idx))
                 }
                 (a, b) => Err(RuntimeError::new(format!(
-                    "str-index-of 两参都需要 str，实际 {} 与 {}",
+                    "string-index-of 两参都需要 str，实际 {} 与 {}",
                     a.type_name(),
                     b.type_name()
                 ))),
@@ -651,13 +643,13 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "str-contains?",
-        BuiltinFn::new("str-contains?", |_, args| {
-            two_args("str-contains?", &args)?;
+        "string-contains",
+        BuiltinFn::new("string-contains", |_, args| {
+            two_args("string-contains", &args)?;
             match (&args[0], &args[1]) {
                 (Value::Str(s), Value::Str(sub)) => Ok(Value::Bool(s.contains(sub.as_ref()))),
                 (a, b) => Err(RuntimeError::new(format!(
-                    "str-contains? 两参都需要 str，实际 {} 与 {}",
+                    "string-contains 两参都需要 str，实际 {} 与 {}",
                     a.type_name(),
                     b.type_name()
                 ))),
@@ -665,13 +657,13 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "str-prefix?",
-        BuiltinFn::new("str-prefix?", |_, args| {
-            two_args("str-prefix?", &args)?;
+        "string-starts-with",
+        BuiltinFn::new("string-starts-with", |_, args| {
+            two_args("string-starts-with", &args)?;
             match (&args[0], &args[1]) {
                 (Value::Str(s), Value::Str(pre)) => Ok(Value::Bool(s.starts_with(pre.as_ref()))),
                 (a, b) => Err(RuntimeError::new(format!(
-                    "str-prefix? 两参都需要 str，实际 {} 与 {}",
+                    "string-starts-with 两参都需要 str，实际 {} 与 {}",
                     a.type_name(),
                     b.type_name()
                 ))),
@@ -679,13 +671,13 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "str-suffix?",
-        BuiltinFn::new("str-suffix?", |_, args| {
-            two_args("str-suffix?", &args)?;
+        "string-ends-with",
+        BuiltinFn::new("string-ends-with", |_, args| {
+            two_args("string-ends-with", &args)?;
             match (&args[0], &args[1]) {
                 (Value::Str(s), Value::Str(suf)) => Ok(Value::Bool(s.ends_with(suf.as_ref()))),
                 (a, b) => Err(RuntimeError::new(format!(
-                    "str-suffix? 两参都需要 str，实际 {} 与 {}",
+                    "string-ends-with 两参都需要 str，实际 {} 与 {}",
                     a.type_name(),
                     b.type_name()
                 ))),
@@ -693,58 +685,58 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "str-upcase",
-        BuiltinFn::new("str-upcase", |_, args| {
-            one_arg("str-upcase", &args)?;
+        "string-to-upper",
+        BuiltinFn::new("string-to-upper", |_, args| {
+            one_arg("string-to-upper", &args)?;
             match &args[0] {
                 Value::Str(s) => {
                     let out: String = s.chars().flat_map(char::to_uppercase).collect();
                     Ok(Value::Str(Rc::from(out.as_str())))
                 }
                 other => Err(RuntimeError::new(format!(
-                    "str-upcase 需要 str，实际 {}",
+                    "string-to-upper 需要 str，实际 {}",
                     other.type_name()
                 ))),
             }
         }),
     ));
     defs.push((
-        "str-downcase",
-        BuiltinFn::new("str-downcase", |_, args| {
-            one_arg("str-downcase", &args)?;
+        "string-to-lower",
+        BuiltinFn::new("string-to-lower", |_, args| {
+            one_arg("string-to-lower", &args)?;
             match &args[0] {
                 Value::Str(s) => {
                     let out: String = s.chars().flat_map(char::to_lowercase).collect();
                     Ok(Value::Str(Rc::from(out.as_str())))
                 }
                 other => Err(RuntimeError::new(format!(
-                    "str-downcase 需要 str，实际 {}",
+                    "string-to-lower 需要 str，实际 {}",
                     other.type_name()
                 ))),
             }
         }),
     ));
     defs.push((
-        "string->symbol",
-        BuiltinFn::new("string->symbol", |_, args| {
-            one_arg("string->symbol", &args)?;
+        "string-to-symbol",
+        BuiltinFn::new("string-to-symbol", |_, args| {
+            one_arg("string-to-symbol", &args)?;
             match &args[0] {
                 Value::Str(s) => Ok(Value::Symbol(s.clone())),
                 other => Err(RuntimeError::new(format!(
-                    "string->symbol 需要 str，实际 {}",
+                    "string-to-symbol 需要 str，实际 {}",
                     other.type_name()
                 ))),
             }
         }),
     ));
     defs.push((
-        "symbol->string",
-        BuiltinFn::new("symbol->string", |_, args| {
-            one_arg("symbol->string", &args)?;
+        "symbol-to-string",
+        BuiltinFn::new("symbol-to-string", |_, args| {
+            one_arg("symbol-to-string", &args)?;
             match &args[0] {
                 Value::Symbol(s) => Ok(Value::Str(s.clone())),
                 other => Err(RuntimeError::new(format!(
-                    "symbol->string 需要 symbol，实际 {}",
+                    "symbol-to-string 需要 symbol，实际 {}",
                     other.type_name()
                 ))),
             }
@@ -769,9 +761,9 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
                         let mut buf = [0u8; 4];
                         let ch_str = Value::Str(Rc::from(ch.encode_utf8(&mut buf)));
                         let off_val = Value::Int(*off as i64);
-                        let car = box_value(&off_val, heap);
-                        let cdr = box_value(&ch_str, heap);
-                        let elem = heap.alloc_pair(car, cdr);
+                        let head = box_value(&off_val, heap);
+                        let tail = box_value(&ch_str, heap);
+                        let elem = heap.alloc_pair(head, tail);
                         acc = heap.alloc_pair(elem, acc);
                     }
                     if s.is_empty() {
@@ -867,14 +859,14 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
         }),
     ));
     defs.push((
-        "assert-eq?",
-        BuiltinFn::new("assert-eq?", |heap, args| {
-            two_args("assert-eq?", &args)?;
+        "assert-eq",
+        BuiltinFn::new("assert-eq", |heap, args| {
+            two_args("assert-eq", &args)?;
             if args[0].eq_value(&args[1]) {
                 Ok(Value::Bool(true))
             } else {
                 Err(RuntimeError::new(format!(
-                    "assert-eq? 断言失败：{} ≠ {}",
+                    "assert-eq 断言失败：{} ≠ {}",
                     render_value(&args[0], heap),
                     render_value(&args[1], heap)
                 )))
@@ -883,24 +875,13 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
     ));
 
     // ------------------------------------------------------------------
-    // 批次 L（v0.5 别名层，r38）——27 现代扁平名双注册（20 §6.4 ①：
-    // 注册面 57→84）。别名与旧名共享同一 Rc<BuiltinFn> 分派体：新旧名
-    // 同行为同诊断（同一分派即天然 parity——20 §9.3；负例错误消息含
-    // 旧名属设计口径——同诊断即逐字一致）。旧名不动（零破坏——移除
-    // 轮见 20 §7 表/12 §2.10）；开窗依据 23 §2.2 窗 L 入口信号三满足
-    // （K3 交付 r37 + TD-027 在位 + 20 §8 映射表冻结）。
+    // r42 / 63-b 移除轮 S1 表面腿（v0.9）——旧名 27 件退役：批次 L
+    // 别名双注册机制下线（20 §7 移除轮行兑现；注册面 84→57 扁平）。
+    // 旧名引用 → E0021 编译期错误（driver `verify_qualified_refs` 内
+    // REMOVED_BUILTIN_NAMES 单源判定——诊断携现代名指引）；弃用期
+    // 生命周期核对（23 §3.4：W1001 落地 v0.7 → v0.8 一稳定版全绿 →
+    // v0.9 移除，跨两版本）。
     // ------------------------------------------------------------------
-    let by_name: HashMap<&str, Rc<BuiltinFn>> =
-        defs.iter().map(|(n, f)| (*n, Rc::clone(f))).collect();
-    let mut alias_defs: Vec<(&'static str, Rc<BuiltinFn>)> = Vec::new();
-    for &(alias, old) in BUILTIN_ALIASES {
-        let f = by_name
-            .get(old)
-            .cloned() // Rc 共享分派体——别名 parity 的实现形态
-            .unwrap_or_else(|| panic!("批次 L 别名目标未注册：{} → {}", alias, old));
-        alias_defs.push((alias, f));
-    }
-    defs.extend(alias_defs);
 
     let mut globals = HashMap::new();
     for (name, f) in defs {
@@ -992,53 +973,72 @@ pub fn register_globals(table: &mut SymbolTable, grant: &IoGrant) -> HashMap<Sym
     globals
 }
 
-/// 批次 L（v0.5 别名层，r38）双注册表：27 现代扁平名 → 旧名。
+/// r42 / 63-b 移除轮 S1（v0.9）：旧名退役表（27 件——方向 =
+/// (旧名, 现代名)）。
 ///
-/// 单源 = docs/lang-design/20-surface-conventions.md §8（57 项映射表——
-/// `register_globals` 注册、`BUILTIN_SIGS` 双名同步、
-/// stdlib_tests parity 组三方对账锚——漂移守卫
-/// `builtin_aliases_closed_and_parity_typed` 闭合校验）。双注册 =
-/// 别名与旧名共享同一 `Rc<BuiltinFn>`（同行为同诊断——20 §9.3）；
-/// I/O 六门控名（READ_GATED/WRITE_GATED）零新名（门控表零变更——
-/// 20 §6.4 ③，守卫 `builtin_gating_names_subset_of_registered` 实测
-/// 核对）。移除轮（Stage 3——与 E5 关键字切换同窗）删除旧名列；
-/// v0.6 批次 M 在此之上叠加 `kerf/<模块>` 限定名（22-命名空间设计）。
-pub static BUILTIN_ALIASES: &[(&str, &str)] = &[
-    // 访问器（R1：历史访问器 → head/tail）
-    ("head", "car"),
-    ("tail", "cdr"),
-    // 列表（R1 压缩 / 跨语言同名先例）
-    ("nth", "list-ref"),
-    ("drop", "list-tail"),
-    // 谓词族（R2：`命名?` → `is-命名`）
-    ("is-nil", "null?"),
-    ("is-pair", "pair?"),
-    ("is-int", "int?"),
-    ("is-bool", "bool?"),
-    ("is-procedure", "procedure?"),
-    ("is-string", "string?"),
-    ("is-symbol", "symbol?"),
-    ("is-float", "float?"),
-    ("is-number", "number?"),
-    ("is-list", "list?"),
-    // eq（R3：去 `?`——B5 裁定保留恰 2 参）
-    ("eq", "eq?"),
-    // 字符串族（R1 全词化 + R3 动词化）
-    ("string-append", "str-append"),
-    ("string-length", "str-length"),
-    ("string-substring", "str-substring"),
-    ("string-index-of", "str-index-of"),
-    ("string-contains", "str-contains?"),
-    ("string-starts-with", "str-prefix?"),
-    ("string-ends-with", "str-suffix?"),
-    // 转换族（R4：`a->b` → `a-to-b`）
-    ("string-to-upper", "str-upcase"),
-    ("string-to-lower", "str-downcase"),
-    ("string-to-symbol", "string->symbol"),
-    ("symbol-to-string", "symbol->string"),
-    // 断言（R3：断言是动词非谓词）
-    ("assert-eq", "assert-eq?"),
+/// 单源 = docs/lang-design/20-surface-conventions.md §8（57 项映射表
+/// ——r38 起冻结）。旧名引用 → E0021 编译期错误（诊断携现代名指引
+/// ——比裸 E0004 未绑定更 actionable：20 §7「旧名引用 = E00xx 错误」
+/// 兑现）。判定消费方 = driver `verify_qualified_refs`（值位/操作位
+/// 全域——与 E0014 同一 traversal，遮蔽/接管豁免同口径）。闭合守卫
+/// `removed_names_closed_and_modern_registered`（本文件测试）：27
+/// 对双向对账零缺零溢 + 旧名零注册 + 现代名全注册。I/O 六门控名
+/// 零旧名（门控表零变更维持——r38 实测口径）。v0.5-v0.8 双注册期
+/// 终结（批次 L r38 引入 → W1001 弃用 r40 → 移除 r42——23 §3.4
+/// 生命周期四阶段完整走完）。
+pub static REMOVED_BUILTIN_NAMES: &[(&str, &str)] = &[
+    // 访问器（R1：head/tail 终态）
+    ("car", "head"),
+    ("cdr", "tail"),
+    // 列表（nth←list-ref、drop←list-tail）
+    ("list-ref", "nth"),
+    ("list-tail", "drop"),
+    // 谓词族（R2：`is-命名` 终态）
+    ("null?", "is-nil"),
+    ("pair?", "is-pair"),
+    ("int?", "is-int"),
+    ("bool?", "is-bool"),
+    ("procedure?", "is-procedure"),
+    ("string?", "is-string"),
+    ("symbol?", "is-symbol"),
+    ("float?", "is-float"),
+    ("number?", "is-number"),
+    ("list?", "is-list"),
+    // eq（R3：eq 终态——恰 2 参）
+    ("eq?", "eq"),
+    // 字符串族（R1 全词化 + R3 动词化终态）
+    ("str-append", "string-append"),
+    ("str-length", "string-length"),
+    ("str-substring", "string-substring"),
+    ("str-index-of", "string-index-of"),
+    ("str-contains?", "string-contains"),
+    ("str-prefix?", "string-starts-with"),
+    ("str-suffix?", "string-ends-with"),
+    // 转换族（R4：`a-to-b` 终态）
+    ("str-upcase", "string-to-upper"),
+    ("str-downcase", "string-to-lower"),
+    ("string->symbol", "string-to-symbol"),
+    ("symbol->string", "symbol-to-string"),
+    // 断言（R3：断言是动词）
+    ("assert-eq?", "assert-eq"),
 ];
+
+/// W1003 宏名遮蔽判定（r42 / S1——22 §11 D11 排期移除轮同窗兑现）：
+/// 宏名 ∈ 内置注册面（57 扁平 + 47 限定）→ W 级知会。消费方 = driver
+/// `collect_warnings`（Stx 层宏名收集——宏展开后名字从 CoreExpr 消失）。
+/// 数据源 = `BUILTIN_SIGS`（56）+ `read-line`（运行时不检查元数不列
+/// 签名——注册面补全）+ `STDLIB_MODULES` 限定名派生（47）。
+pub(crate) fn builtin_name_exists(name: &str) -> bool {
+    if name == "read-line" {
+        return true; // 57 扁平名补全（SIGS 56 + read-line）
+    }
+    if BUILTIN_SIGS.iter().any(|&(n, _)| n == name) {
+        return true;
+    }
+    STDLIB_MODULES
+        .iter()
+        .any(|&(ns, local, _)| name == format!("{}/{}", ns, local))
+}
 
 /// 批次 M 首件 M1（v0.6 命名空间层，r39）标准库模块表：七模块 export 面。
 ///
@@ -1070,15 +1070,15 @@ pub static STDLIB_MODULES: &[(&str, &str, &str)] = &[
     ("core", "assert-eq", "assert-eq"),
     // kerf/pair（3）——序对域
     ("pair", "cons", "cons"),
-    ("pair", "head", "car"),
-    ("pair", "tail", "cdr"),
+    ("pair", "head", "head"),
+    ("pair", "tail", "tail"),
     // kerf/list（9）——表域（nth←list-ref、drop←list-tail）
     ("list", "list", "list"),
     ("list", "length", "length"),
     ("list", "append", "append"),
     ("list", "reverse", "reverse"),
-    ("list", "nth", "list-ref"),
-    ("list", "drop", "list-tail"),
+    ("list", "nth", "nth"),
+    ("list", "drop", "drop"),
     ("list", "member", "member"),
     ("list", "assoc", "assoc"),
     ("list", "last-pair", "last-pair"),
@@ -1474,29 +1474,38 @@ static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
         "cons",
         BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Pair),
     ),
-    ("car", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
-    ("cdr", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
+    ("head", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
+    ("tail", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
     // list：空参 → nil（结果域 Pair∪Nil → Unknown 保守）
     (
         "list",
         BuiltinSig::variadic(TcParam::Any, TcType::Unknown, 0),
     ),
     // 谓词（结果 Bool——上层 if 条件推断消费）
-    ("null?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("pair?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("int?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("bool?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("string?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("symbol?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("float?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("number?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("list?", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("is-nil", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("is-pair", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("is-int", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    ("is-bool", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
     (
-        "procedure?",
+        "is-string",
         BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
     ),
     (
-        "eq?",
+        "is-symbol",
+        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
+    ),
+    ("is-float", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    (
+        "is-number",
+        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
+    ),
+    ("is-list", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
+    (
+        "is-procedure",
+        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
+    ),
+    (
+        "eq",
         BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
     ),
     // 逻辑
@@ -1525,11 +1534,11 @@ static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
         BuiltinSig::variadic(TcParam::Any, TcType::Unknown, 0),
     ),
     (
-        "list-ref",
+        "nth",
         BuiltinSig::fixed(&[TcParam::List, TcParam::Int], TcType::Unknown),
     ),
     (
-        "list-tail",
+        "drop",
         BuiltinSig::fixed(&[TcParam::List, TcParam::Int], TcType::Unknown),
     ),
     (
@@ -1544,119 +1553,14 @@ static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
         "last-pair",
         BuiltinSig::fixed(&[TcParam::Pair], TcType::Pair),
     ),
-    // 字符串族
+    // 字符串族（r42/S1：全词化/动词化现代名）
     (
-        "str-length",
+        "string-length",
         BuiltinSig::fixed(&[TcParam::Str], TcType::Int),
-    ),
-    (
-        "str-append",
-        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Str),
-    ),
-    (
-        "str-substring",
-        BuiltinSig::fixed(&[TcParam::Str, TcParam::Int, TcParam::Int], TcType::Str),
-    ),
-    (
-        "str-index-of",
-        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Int),
-    ),
-    (
-        "str-contains?",
-        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
-    ),
-    (
-        "str-prefix?",
-        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
-    ),
-    (
-        "str-suffix?",
-        BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Bool),
-    ),
-    (
-        "str-upcase",
-        BuiltinSig::fixed(&[TcParam::Str], TcType::Str),
-    ),
-    (
-        "str-downcase",
-        BuiltinSig::fixed(&[TcParam::Str], TcType::Str),
-    ),
-    (
-        "string->symbol",
-        BuiltinSig::fixed(&[TcParam::Str], TcType::Symbol),
-    ),
-    (
-        "symbol->string",
-        BuiltinSig::fixed(&[TcParam::Symbol], TcType::Str),
-    ),
-    // Reader 原语（B3）
-    (
-        "str->pos-chars",
-        BuiltinSig::fixed(&[TcParam::Str], TcType::Pair),
-    ),
-    (
-        "char-whitespace?",
-        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
-    ),
-    (
-        "char-alphabetic?",
-        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
-    ),
-    (
-        "str-int-valid?",
-        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
-    ),
-    // 断言
-    (
-        "assert-eq?",
-        BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
-    ),
-    // ---- 批次 L（v0.5 别名层，r38）双名同步（20 §6.4 ②——逐字复制
-    // 旧名签名：别名与旧名同分派 → 同静态检查面；check/hm 消费方对新
-    // 名同判。守卫 `builtin_aliases_closed_and_parity_typed` 锚逐项相等）----
-    ("head", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
-    ("tail", BuiltinSig::fixed(&[TcParam::Pair], TcType::Unknown)),
-    (
-        "nth",
-        BuiltinSig::fixed(&[TcParam::List, TcParam::Int], TcType::Unknown),
-    ),
-    (
-        "drop",
-        BuiltinSig::fixed(&[TcParam::List, TcParam::Int], TcType::Unknown),
-    ),
-    ("is-nil", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("is-pair", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("is-int", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    ("is-bool", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    (
-        "is-procedure",
-        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
-    ),
-    (
-        "is-string",
-        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
-    ),
-    (
-        "is-symbol",
-        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
-    ),
-    ("is-float", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    (
-        "is-number",
-        BuiltinSig::fixed(&[TcParam::Any], TcType::Bool),
-    ),
-    ("is-list", BuiltinSig::fixed(&[TcParam::Any], TcType::Bool)),
-    (
-        "eq",
-        BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
     ),
     (
         "string-append",
         BuiltinSig::fixed(&[TcParam::Str, TcParam::Str], TcType::Str),
-    ),
-    (
-        "string-length",
-        BuiltinSig::fixed(&[TcParam::Str], TcType::Int),
     ),
     (
         "string-substring",
@@ -1694,10 +1598,31 @@ static BUILTIN_SIGS: &[(&str, BuiltinSig)] = &[
         "symbol-to-string",
         BuiltinSig::fixed(&[TcParam::Symbol], TcType::Str),
     ),
+    // Reader 原语（B3）
+    (
+        "str->pos-chars",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Pair),
+    ),
+    (
+        "char-whitespace?",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
+    ),
+    (
+        "char-alphabetic?",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
+    ),
+    (
+        "str-int-valid?",
+        BuiltinSig::fixed(&[TcParam::Str], TcType::Bool),
+    ),
+    // 断言（r42/S1：动词化）
     (
         "assert-eq",
         BuiltinSig::fixed(&[TcParam::Any, TcParam::Any], TcType::Bool),
     ),
+    // r42/S1 移除注记：批次 L 双名同步段（27 别名条目）随旧名退役删除
+    // ——主签名区已直接持有现代名（上列各节 r42/S1 注记）；签名面
+    // 56 维持（read-line 不列口径不变——20 §6.4 ② 历史锚）。
     // read-line：运行时不检查元数（忽略多余参数）——签名表不列（不静态断言）
 ];
 
@@ -1812,47 +1737,64 @@ mod tests {
         }
     }
 
-    /// 批次 L 别名闭合守卫（r38——20 §9.4 漂移守卫扩展之一：别名腿）。
-    /// ①表长恰 27（20 §8 映射表单源对账——防静默增删行）；②每别名：
-    /// 旧名已注册 + 别名已注册 + 双方均有静态签名 + 签名逐项相等（同
-    /// 分派 → 同静态检查面——20 §6.4 ②）；③别名表内部零重复 + 新旧
-    /// 名互异 + 别名不得是别表的旧名（链式别名会破坏 ④ 计数锚）；
-    /// ④全授权注册面恰 84（57 基础 + 27 别名——20 §6.4 ① 计数锚，
-    /// 同时拦截「别名撞基础名」的 HashMap 覆写陷阱）。
+    /// r42 / S1 移除轮闭合守卫（20 §7 移除轮行——旧名 27 件退役的结构
+    /// 锚；r38 别名闭合守卫的移除轮演进形态）：①表长 27；②双向对账
+    /// 零重复；③旧名零注册（含零授权面——fail-closed）；④现代名全
+    /// 注册；⑤旧名零签名（HM 静态面对旧名同拒——BUILTIN_SIGS 主区
+    /// 已直接持现代名）；⑥门控面零旧名（r38 实测口径维持）。
     #[test]
-    fn builtin_aliases_closed_and_parity_typed() {
+    fn removed_names_closed_and_modern_registered() {
         let mut t = SymbolTable::new();
         let g = register_globals(&mut t, &full_grant());
         let sigs = builtin_sigs(&mut t);
-        assert_eq!(BUILTIN_ALIASES.len(), 27, "别名表长度应为 27（20 §8）");
-        // r39 M1 计数锚升级：全授权面 84 基础（57+27 别名）+ 47 限定名
-        // （STDLIB_MODULES——r38 时点锚 84 已随模块表注册增量演进）
+        assert_eq!(
+            REMOVED_BUILTIN_NAMES.len(),
+            27,
+            "退役表长度应为 27（20 §8）"
+        );
+        // r42/S1 计数锚：全授权面 104（57 扁平 + 47 限定名）
         assert_eq!(
             g.len(),
-            131,
-            "全授权注册面应为 131（84 基础 + 47 限定——r39 M1）"
+            104,
+            "全授权注册面应为 104（57 扁平 + 47 限定——r42/S1 移除后）"
         );
-        let mut seen: Vec<&str> = Vec::new();
-        for &(alias, old) in BUILTIN_ALIASES {
-            assert!(!seen.contains(&alias), "别名重复：{}", alias);
-            seen.push(alias);
-            assert_ne!(alias, old, "别名不得指向自身：{}", alias);
-            assert!(
-                !BUILTIN_ALIASES.iter().any(|&(_, o)| o == alias),
-                "别名 {} 是另一别名目标（链式别名破坏 84 计数锚）",
-                alias
-            );
-            let a = t.intern(alias);
+        let mut seen_old: Vec<&str> = Vec::new();
+        let mut seen_new: Vec<&str> = Vec::new();
+        for &(old, modern) in REMOVED_BUILTIN_NAMES {
+            assert!(!seen_old.contains(&old), "旧名重复：{}", old);
+            assert!(!seen_new.contains(&modern), "现代名重复：{}", modern);
+            assert_ne!(old, modern, "映射不得指向自身：{}", old);
+            seen_old.push(old);
+            seen_new.push(modern);
+            // ③ 旧名零注册（全授权面）
             let o = t.intern(old);
-            assert!(g.contains_key(&a), "别名未注册：{}", alias);
-            assert!(g.contains_key(&o), "别名目标未注册：{}", old);
-            let sa = sigs
-                .get(&a)
-                .unwrap_or_else(|| panic!("别名缺签名：{}", alias));
-            let so = sigs
-                .get(&o)
-                .unwrap_or_else(|| panic!("旧名缺签名：{}", old));
-            assert_eq!(sa, so, "别名签名应与旧名一致：{} vs {}", alias, old);
+            assert!(!g.contains_key(&o), "旧名已退役不得注册：{}", old);
+            // ⑤ 旧名零签名（静态面同拒）
+            assert!(!sigs.contains_key(&o), "旧名不得持签名：{}", old);
+            // ④ 现代名全注册 + 持签名（read-line 除外——不列口径）
+            let m = t.intern(modern);
+            assert!(g.contains_key(&m), "现代名未注册：{}", modern);
+            if modern != "read-line" {
+                assert!(sigs.contains_key(&m), "现代名缺签名：{}", modern);
+            }
+            // ⑥ 门控零旧名（20 §6.4 ③ 维持）
+            assert!(
+                !crate::capability::READ_GATED.contains(&old)
+                    && !crate::capability::WRITE_GATED.contains(&old),
+                "退役旧名 {} 不应出现在门控面",
+                old
+            );
+        }
+        // ③（续）零授权面旧名同零注册
+        let mut t2 = SymbolTable::new();
+        let none_grant = IoGrant::from_requirements(crate::capability::IoRequirements {
+            read: false,
+            write: false,
+        });
+        let g0 = register_globals(&mut t2, &none_grant);
+        for &(old, _) in REMOVED_BUILTIN_NAMES {
+            let o = t2.intern(old);
+            assert!(!g0.contains_key(&o), "零授权面旧名不得注册：{}", old);
         }
     }
 
@@ -1891,8 +1833,8 @@ mod tests {
                 ns
             );
         }
-        // ② 全授权：双注册 + 计数锚 131
-        assert_eq!(g.len(), 131, "全授权注册面应为 131（84 基础 + 47 限定）");
+        // ② 全授权：双注册 + 计数锚 104（r42/S1：57 扁平 + 47 限定）
+        assert_eq!(g.len(), 104, "全授权注册面应为 104（57 扁平 + 47 限定）");
         for &(ns, local, underlying) in STDLIB_MODULES {
             let q = t.intern(&format!("{}/{}", ns, local));
             assert!(g.contains_key(&q), "限定名未注册：{}/{}", ns, local);
@@ -1920,11 +1862,11 @@ mod tests {
             write: false,
         });
         let g0 = register_globals(&mut t2, &none_grant);
-        // 零授权：基础 51（57 - 6 门控名未注册）+ 27 别名 + 41 非 io 限定 = 119
+        // 零授权：基础 51（57 - 6 门控名未注册）+ 41 非 io 限定 = 92
         assert_eq!(
             g0.len(),
-            119,
-            "零授权面应为 119（51 基础 + 27 别名 + 41 非 io 限定）"
+            92,
+            "零授权面应为 92（51 基础 + 41 非 io 限定——r42/S1）"
         );
         for &(ns, local, _) in STDLIB_MODULES {
             let q = t2.intern(&format!("{}/{}", ns, local));
@@ -1940,9 +1882,10 @@ mod tests {
     }
 
     /// 三方守卫之门控腿（r38——20 §9.4：注册 ⊇ 签名 ⊆ 门控之「门控 ⊆
-    /// 注册」）：R9 数据驱动表六名（READ_GATED/WRITE_GATED）全注册——
-    /// 20 §6.4 ③「I/O 族无新名，门控表零变更」的实测核对面；另锚别名
-    /// 名与门控名零交集（防未来批次无声引入门控别名而不扩门控表）。
+    /// 注册」）：R9 数据驱动表六名（READ_GATED/WRITE_GATED）全注册。
+    /// r42/S1：别名腿随退役下线（旧名零注册已由
+    /// `removed_names_closed_and_modern_registered` ③ 承载）；门控
+    /// 名与退役旧名零交集归同守卫 ⑥。
     #[test]
     fn builtin_gating_names_subset_of_registered() {
         let mut t = SymbolTable::new();
@@ -1953,14 +1896,6 @@ mod tests {
         {
             let sym = t.intern(name);
             assert!(g.contains_key(&sym), "门控内置未注册：{}", name);
-        }
-        for &(alias, _) in BUILTIN_ALIASES {
-            assert!(
-                !crate::capability::READ_GATED.contains(&alias)
-                    && !crate::capability::WRITE_GATED.contains(&alias),
-                "别名 {} 进入门控面而门控表未同步（20 §6.4 ③）",
-                alias
-            );
         }
     }
 
@@ -1983,16 +1918,16 @@ mod tests {
             "<=",
             ">=",
             "cons",
-            "car",
-            "cdr",
+            "head",
+            "tail",
             "not",
-            "eq?",
-            "str-length",
-            "str-append",
-            "string->symbol",
-            "symbol->string",
+            "eq",
+            "string-length",
+            "string-append",
+            "string-to-symbol",
+            "symbol-to-string",
             "length",
-            "assert-eq?",
+            "assert-eq",
         ];
         for name in families {
             let sym = t.intern(name);
@@ -2005,7 +1940,7 @@ mod tests {
     fn globals_have_core_set() {
         let mut t = SymbolTable::new();
         let g = register_globals(&mut t, &full_grant());
-        for name in ["+", "-", "cons", "car", "print", "read-line", "eq?"] {
+        for name in ["+", "-", "cons", "head", "print", "read-line", "eq"] {
             let sym = t.intern(name);
             assert!(g.contains_key(&sym), "缺少内置 {}", name);
         }

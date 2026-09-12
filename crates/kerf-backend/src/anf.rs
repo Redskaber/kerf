@@ -7,7 +7,7 @@
 //!
 //! **PoC 边界裁定（B1 登记——批次 G 范围声明）**：
 //! - 支持：整数域字面量 / VarRef（函数形参）/ 算术与比较原语十项
-//!   （`+ - * / mod = < > <= >=`）+ `not` + `eq?`（整数域视作 `=`）/
+//!   （`+ - * / mod = < > <= >=`）+ `not` + `eq`（整数域视作 `=`）/
 //!   App（被调者为顶层 `define` 函数的直接调用，含静态 arity 校验）/
 //!   If（含值上下文——块参数 merge）/ Begin / 顶层 `define`（值必须为
 //!   Lambda）/ Require（零运行时语义——跳过，与 VM 字节码口径一致）；
@@ -128,7 +128,7 @@ impl APrim {
             "<=" => APrim::Le,
             ">=" => APrim::Ge,
             "not" => APrim::Not,
-            "eq?" => APrim::Eq,
+            "eq" => APrim::Eq,
             _ => return None,
         })
     }

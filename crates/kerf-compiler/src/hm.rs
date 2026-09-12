@@ -867,7 +867,7 @@ impl<'a> Gen<'a> {
             "cons" if n == 2 => {
                 return Rc::new(Ty::Pair(arg_tys[0].clone(), arg_tys[1].clone()));
             }
-            "car" if n == 1 => {
+            "head" if n == 1 => {
                 let a = self.fresh();
                 let b = self.fresh();
                 let arg = arg_tys[0].clone();
@@ -880,20 +880,20 @@ impl<'a> Gen<'a> {
                         }
                         // Dynamic：真未知——保守不诊断；Var：经约束传代
                         // 求解（旗标期 r29/50-a：Nil 从此臂移出一一超集门
-                        // 缺口修复，(car nil) 静态确定运行期 E5，与 R1-R8
+                        // 缺口修复，(head nil) 静态确定运行期 E5，与 R1-R8
                         // R5 负例矩阵对齐）
                         return Rc::new(Ty::Dynamic);
                     }
                     other => {
                         self.diag(
-                            format!("car 需要 pair，实际 {}（静态检查）", other.render()),
+                            format!("head 需要 pair，实际 {}（静态检查）", other.render()),
                             args[0].span(),
                         );
                         return Rc::new(Ty::Dynamic);
                     }
                 }
             }
-            "cdr" if n == 1 => {
+            "tail" if n == 1 => {
                 let b = self.fresh();
                 let arg = arg_tys[0].clone();
                 let ra = self.st.resolve(&arg);
@@ -904,13 +904,13 @@ impl<'a> Gen<'a> {
                             let a = self.fresh();
                             self.constraint(arg, Rc::new(Ty::Pair(a, b)), args[0].span());
                         }
-                        // 同 car 臂：Dynamic 真未知保守；Nil 经 other 臂
+                        // 同 head 臂：Dynamic 真未知保守；Nil 经 other 臂
                         // 诊断（旗标期 r29/50-a 超集门缺口修复同型）
                         return Rc::new(Ty::Dynamic);
                     }
                     other => {
                         self.diag(
-                            format!("cdr 需要 pair，实际 {}（静态检查）", other.render()),
+                            format!("tail 需要 pair，实际 {}（静态检查）", other.render()),
                             args[0].span(),
                         );
                         return Rc::new(Ty::Dynamic);

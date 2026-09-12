@@ -35,31 +35,31 @@
 ; 不做看起来像但不是的强行套用）；lex-scan-with 展示真正的高阶消费点。
 
 (define (map f lst)
-  (if (null? lst)
+  (if (is-nil lst)
       nil
-      (cons (f (car lst)) (map f (cdr lst)))))
+      (cons (f (head lst)) (map f (tail lst)))))
 
 (define (filter pred lst)
-  (cond ((null? lst) nil)
-        ((pred (car lst)) (cons (car lst) (filter pred (cdr lst))))
-        (else (filter pred (cdr lst)))))
+  (cond ((is-nil lst) nil)
+        ((pred (head lst)) (cons (head lst) (filter pred (tail lst))))
+        (else (filter pred (tail lst)))))
 
 (define (foldl f init lst)
-  (if (null? lst)
+  (if (is-nil lst)
       init
-      (foldl f (f init (car lst)) (cdr lst))))
+      (foldl f (f init (head lst)) (tail lst))))
 
 (define (for-each f lst)
-  (if (null? lst)
+  (if (is-nil lst)
       nil
-      (let ((ignored (f (car lst))))
-        (for-each f (cdr lst)))))
+      (let ((ignored (f (head lst))))
+        (for-each f (tail lst)))))
 
 ; ===== 列表访问（Token/结果形态的统一字段序）=====
 
-(define (second x) (car (cdr x)))
-(define (third x) (car (cdr (cdr x))))
-(define (fourth x) (car (cdr (cdr (cdr x)))))
+(define (second x) (head (tail x)))
+(define (third x) (head (tail (tail x))))
+(define (fourth x) (head (tail (tail (tail x)))))
 
 ; ===== 错误与 Token 构造 =====
 
@@ -82,200 +82,200 @@
   (list "+" "-" "*" "/" "mod" "<" ">" "<=" ">=" "="))
 
 (define (digit? c)
-  (pair? (member c DIGITS)))
+  (is-pair (member c DIGITS)))
 
 (define (id-extra? c)
-  (pair? (member c ID-EXTRA)))
+  (is-pair (member c ID-EXTRA)))
 
 (define (id-start? c)
   (or (char-alphabetic? c) (id-extra? c)))
 
 (define (id-continue? c)
-  (or (id-start? c) (digit? c) (eq? c "'")))
+  (or (id-start? c) (digit? c) (eq c "'")))
 
 ; ===== 游标（str->pos-chars 产出：((字节偏移 . 单字符 str) ...)）=====
 
 (define (cur-char cur)
-  (cdr (car cur)))
+  (tail (head cur)))
 
 (define (cur-off cur)
-  (car (car cur)))
+  (head (head cur)))
 
 ; 下一未消费字符的字节偏移（游标为空 = 源末 = blen）
 (define (tok-end cur blen)
-  (if (null? cur)
+  (if (is-nil cur)
       blen
       (cur-off cur)))
 
 ; 当前字符的 UTF-8 字节终止偏移（相邻偏移差分；末字符回退 blen）
 (define (next-off cur blen)
-  (if (null? (cdr cur))
+  (if (is-nil (tail cur))
       blen
-      (cur-off (cdr cur))))
+      (cur-off (tail cur))))
 
 (define (peek2-char cur)
-  (if (null? (cdr cur))
+  (if (is-nil (tail cur))
       nil
-      (cur-char (cdr cur))))
+      (cur-char (tail cur))))
 
 ; ===== 琐碎符号跳过（空白 + 行注释）=====
 
 (define (skip-line-comment cur)
   ; 消费到行尾 '\n'（不含）；行注释到 EOF 合法
-  (cond ((null? cur) nil)
-        ((eq? (cur-char cur) "\n") cur)
-        (else (skip-line-comment (cdr cur)))))
+  (cond ((is-nil cur) nil)
+        ((eq (cur-char cur) "\n") cur)
+        (else (skip-line-comment (tail cur)))))
 
 (define (skip-trivia cur)
-  (cond ((null? cur) nil)
-        ((char-whitespace? (cur-char cur)) (skip-trivia (cdr cur)))
-        ((eq? (cur-char cur) ";")
-         (skip-trivia (skip-line-comment (cdr cur))))
+  (cond ((is-nil cur) nil)
+        ((char-whitespace? (cur-char cur)) (skip-trivia (tail cur)))
+        ((eq (cur-char cur) ";")
+         (skip-trivia (skip-line-comment (tail cur))))
         (else cur)))
 
 ; ===== 块注释（嵌套深度计数）=====
 
 (define (skip-block cur depth start blen)
   ; cur = 已消费 "#|" 之后；depth >= 1；返回 ('ok 游标) | ('err ...)
-  (cond ((null? cur)
+  (cond ((is-nil cur)
          (rderr "块注释 #|...|# 未闭合" start blen))
-        ((and (not (null? (cdr cur)))
-              (eq? (cur-char cur) "#")
-              (eq? (peek2-char cur) "|"))
-         (skip-block (cdr (cdr cur)) (+ depth 1) start blen))
-        ((and (not (null? (cdr cur)))
-              (eq? (cur-char cur) "|")
-              (eq? (peek2-char cur) "#"))
+        ((and (not (is-nil (tail cur)))
+              (eq (cur-char cur) "#")
+              (eq (peek2-char cur) "|"))
+         (skip-block (tail (tail cur)) (+ depth 1) start blen))
+        ((and (not (is-nil (tail cur)))
+              (eq (cur-char cur) "|")
+              (eq (peek2-char cur) "#"))
          (if (= depth 1)
-             (list 'ok (cdr (cdr cur)))
-             (skip-block (cdr (cdr cur)) (- depth 1) start blen)))
-        (else (skip-block (cdr cur) depth start blen))))
+             (list 'ok (tail (tail cur)))
+             (skip-block (tail (tail cur)) (- depth 1) start blen)))
+        (else (skip-block (tail cur) depth start blen))))
 
 ; ===== 字符串字面量（转义解析 + 跨行合法）=====
 
 (define (scan-string cur start blen acc)
   ; cur = 已消费开头引号之后；start = 开头引号偏移；acc = 正序累积内容
-  (cond ((null? cur)
+  (cond ((is-nil cur)
          (rderr "字符串未闭合（文件意外结束）" start blen))
-        ((eq? (cur-char cur) "\"")
-         (list 'ok 3 acc (cdr cur)))
-        ((eq? (cur-char cur) "\\")
-         (scan-escape (cdr cur) (cur-off cur) start blen acc))
+        ((eq (cur-char cur) "\"")
+         (list 'ok 3 acc (tail cur)))
+        ((eq (cur-char cur) "\\")
+         (scan-escape (tail cur) (cur-off cur) start blen acc))
         (else
-         (scan-string (cdr cur) start blen (str-append acc (cur-char cur))))))
+         (scan-string (tail cur) start blen (string-append acc (cur-char cur))))))
 
 (define (scan-escape cur bs-off start blen acc)
   ; cur = 已消费反斜杠之后；bs-off = 反斜杠偏移（错误 Span 左端）
   ; Span 终点 = 转义字符偏移 + 1（与种子字节口径逐字节对齐）
-  (cond ((null? cur)
+  (cond ((is-nil cur)
          (rderr "字符串未闭合（文件意外结束）" start blen))
-        ((eq? (cur-char cur) "n")
-         (scan-string (cdr cur) start blen (str-append acc "\n")))
-        ((eq? (cur-char cur) "t")
-         (scan-string (cdr cur) start blen (str-append acc "\t")))
-        ((eq? (cur-char cur) "r")
-         (scan-string (cdr cur) start blen (str-append acc "\r")))
-        ((eq? (cur-char cur) "\\")
-         (scan-string (cdr cur) start blen (str-append acc "\\")))
-        ((eq? (cur-char cur) "\"")
-         (scan-string (cdr cur) start blen (str-append acc "\"")))
-        ((eq? (cur-char cur) "0")
-         (scan-string (cdr cur) start blen (str-append acc "\0")))
+        ((eq (cur-char cur) "n")
+         (scan-string (tail cur) start blen (string-append acc "\n")))
+        ((eq (cur-char cur) "t")
+         (scan-string (tail cur) start blen (string-append acc "\t")))
+        ((eq (cur-char cur) "r")
+         (scan-string (tail cur) start blen (string-append acc "\r")))
+        ((eq (cur-char cur) "\\")
+         (scan-string (tail cur) start blen (string-append acc "\\")))
+        ((eq (cur-char cur) "\"")
+         (scan-string (tail cur) start blen (string-append acc "\"")))
+        ((eq (cur-char cur) "0")
+         (scan-string (tail cur) start blen (string-append acc "\0")))
         (else
          (rderr
-           (str-append "非法转义字符 '\\"
-                       (str-append (cur-char cur) "'"))
+           (string-append "非法转义字符 '\\"
+                       (string-append (cur-char cur) "'"))
            bs-off (+ (cur-off cur) 1)))))
 
 ; ===== 数字字面量（整数/浮点/科学计数法 + 拒绝贪婪数字 + 溢出前置）=====
 
 (define (scan-number cur blen)
   ; cur = 首字符处（数字，或带符号数的符号位）
-  (num-scan (cdr cur) blen (cur-off cur) (cur-char cur) false false))
+  (num-scan (tail cur) blen (cur-off cur) (cur-char cur) false false))
 
 (define (num-scan cur blen start text is-float has-exp)
-  (cond ((null? cur)
+  (cond ((is-nil cur)
          (num-finish cur blen start text is-float))
         ((digit? (cur-char cur))
-         (num-scan (cdr cur) blen start
-                   (str-append text (cur-char cur)) is-float has-exp))
-        ((and (eq? (cur-char cur) ".")
+         (num-scan (tail cur) blen start
+                   (string-append text (cur-char cur)) is-float has-exp))
+        ((and (eq (cur-char cur) ".")
               (not is-float)
               (not has-exp)
               (digit? (peek2-char cur)))
-         (num-scan (cdr cur) blen start (str-append text ".") true has-exp))
-        ((and (or (eq? (cur-char cur) "e") (eq? (cur-char cur) "E"))
+         (num-scan (tail cur) blen start (string-append text ".") true has-exp))
+        ((and (or (eq (cur-char cur) "e") (eq (cur-char cur) "E"))
               (not has-exp))
-         (num-exp (cdr cur) blen start (str-append text "e")))
+         (num-exp (tail cur) blen start (string-append text "e")))
         (else
          (num-finish cur blen start text is-float))))
 
 (define (num-exp cur blen start text)
   ; cur = 已消费 e/E 之后；可选符号；随后必须紧跟数字
-  (if (and (not (null? cur))
-           (or (eq? (cur-char cur) "-") (eq? (cur-char cur) "+")))
-      (num-exp-digit (cdr cur) blen start (str-append text (cur-char cur)))
+  (if (and (not (is-nil cur))
+           (or (eq (cur-char cur) "-") (eq (cur-char cur) "+")))
+      (num-exp-digit (tail cur) blen start (string-append text (cur-char cur)))
       (num-exp-digit cur blen start text)))
 
 (define (num-exp-digit cur blen start text)
-  (if (and (not (null? cur)) (digit? (cur-char cur)))
+  (if (and (not (is-nil cur)) (digit? (cur-char cur)))
       (num-scan cur blen start text true true)
-      (rderr (str-append "非法数字字面量 '"
-                         (str-append text "'（指数缺少数字）"))
+      (rderr (string-append "非法数字字面量 '"
+                         (string-append text "'（指数缺少数字）"))
              start (tok-end cur blen))))
 
 (define (num-finish cur blen start text is-float)
   ; 次序契约：贪婪数字拒绝 → 整数溢出前置校验 → Token
-  (if (and (not (null? cur)) (id-start? (cur-char cur)))
+  (if (and (not (is-nil cur)) (id-start? (cur-char cur)))
       (rderr
-        (str-append "数字 '"
-          (str-append text
-            (str-append "' 后紧跟标识符字符 '"
-              (str-append (cur-char cur) "'（应为独立 Token）"))))
+        (string-append "数字 '"
+          (string-append text
+            (string-append "' 后紧跟标识符字符 '"
+              (string-append (cur-char cur) "'（应为独立 Token）"))))
         (cur-off cur) (next-off cur blen))
       (if is-float
           (list 'ok 2 text cur)
           (if (str-int-valid? text)
               (list 'ok 1 text cur)
-              (rderr (str-append "整数超出范围 '"
-                                 (str-append text "'"))
+              (rderr (string-append "整数超出范围 '"
+                                 (string-append text "'"))
                      start (tok-end cur blen))))))
 
 ; ===== 标识符（省略号族 + 常规 + 纯查表分类）=====
 
 (define (scan-ident cur blen)
   ; 常规路径：首字符为 id_start（blen 保留签名一致性——扫描器协议）
-  (ident-loop (cdr cur) (cur-off cur) (cur-char cur)))
+  (ident-loop (tail cur) (cur-off cur) (cur-char cur)))
 
 (define (scan-dots cur blen)
   ; 省略号族路径：首字符 '.' 且次字符 '.'
-  (ident-dots (cdr cur) (cur-off cur) "."))
+  (ident-dots (tail cur) (cur-off cur) "."))
 
 (define (ident-dots cur start text)
   ; 连续 '.' 贪婪收集；非 3 个（".." / "...."）→ 直接分类；
   ; 恰 3 个（"..."）→ 继续 id 续字符（"...abc" 合法标识符）
-  (if (and (not (null? cur)) (eq? (cur-char cur) "."))
-      (ident-dots (cdr cur) start (str-append text "."))
-      (if (= (str-length text) 3)
+  (if (and (not (is-nil cur)) (eq (cur-char cur) "."))
+      (ident-dots (tail cur) start (string-append text "."))
+      (if (= (string-length text) 3)
           (ident-loop cur start text)
           (finish-ident cur start text))))
 
 (define (ident-loop cur start text)
-  (if (and (not (null? cur)) (id-continue? (cur-char cur)))
-      (ident-loop (cdr cur) start (str-append text (cur-char cur)))
+  (if (and (not (is-nil cur)) (id-continue? (cur-char cur)))
+      (ident-loop (tail cur) start (string-append text (cur-char cur)))
       (finish-ident cur start text)))
 
 (define (finish-ident cur start text)
   (let ((classified (classify-word text)))
-    (list 'ok (car classified) (second classified) cur)))
+    (list 'ok (head classified) (second classified) cur)))
 
 (define (classify-word text)
   ; 纯查表（词法层零语义）：关键字 → 运算符 → true/false/nil → 标识符
-  (cond ((pair? (member text KEYWORDS)) (list 8 text))
-        ((pair? (member text OPERATORS)) (list 9 text))
-        ((eq? text "true") (list 4 text))
-        ((eq? text "false") (list 5 text))
-        ((eq? text "nil") (list 6 text))
+  (cond ((is-pair (member text KEYWORDS)) (list 8 text))
+        ((is-pair (member text OPERATORS)) (list 9 text))
+        ((eq text "true") (list 4 text))
+        ((eq text "false") (list 5 text))
+        ((eq text "nil") (list 6 text))
         (else (list 7 text))))
 
 ; ===== 词法主循环 =====
@@ -283,46 +283,46 @@
 (define (lex-loop cur blen acc)
   ; acc = 逆序 Token 累积；返回正序 Token 列表或 ('err ...)
   (let ((cur2 (skip-trivia cur)))
-    (cond ((null? cur2)
+    (cond ((is-nil cur2)
            (reverse (cons (tok 0 blen blen nil) acc)))
           (else
            (let ((c (cur-char cur2)) (o (cur-off cur2)))
-             (cond ((eq? c "(")
-                    (lex-loop (cdr cur2) blen
-                      (cons (tok 11 o (tok-end (cdr cur2) blen) nil) acc)))
-                   ((eq? c ")")
-                    (lex-loop (cdr cur2) blen
-                      (cons (tok 12 o (tok-end (cdr cur2) blen) nil) acc)))
-                   ((eq? c "[")
-                    (lex-loop (cdr cur2) blen
-                      (cons (tok 13 o (tok-end (cdr cur2) blen) nil) acc)))
-                   ((eq? c "]")
-                    (lex-loop (cdr cur2) blen
-                      (cons (tok 14 o (tok-end (cdr cur2) blen) nil) acc)))
-                   ((eq? c "'")
-                    (lex-loop (cdr cur2) blen
-                      (cons (tok 10 o (tok-end (cdr cur2) blen) nil) acc)))
-                   ((eq? c "\"") (lex-string cur2 blen acc))
-                   ((and (eq? c ".") (eq? (peek2-char cur2) "."))
+             (cond ((eq c "(")
+                    (lex-loop (tail cur2) blen
+                      (cons (tok 11 o (tok-end (tail cur2) blen) nil) acc)))
+                   ((eq c ")")
+                    (lex-loop (tail cur2) blen
+                      (cons (tok 12 o (tok-end (tail cur2) blen) nil) acc)))
+                   ((eq c "[")
+                    (lex-loop (tail cur2) blen
+                      (cons (tok 13 o (tok-end (tail cur2) blen) nil) acc)))
+                   ((eq c "]")
+                    (lex-loop (tail cur2) blen
+                      (cons (tok 14 o (tok-end (tail cur2) blen) nil) acc)))
+                   ((eq c "'")
+                    (lex-loop (tail cur2) blen
+                      (cons (tok 10 o (tok-end (tail cur2) blen) nil) acc)))
+                   ((eq c "\"") (lex-string cur2 blen acc))
+                   ((and (eq c ".") (eq (peek2-char cur2) "."))
                     (lex-scan-with scan-dots cur2 blen acc))
                    ((or (digit? c)
-                        (and (or (eq? c "-") (eq? c "+"))
+                        (and (or (eq c "-") (eq c "+"))
                              (digit? (peek2-char cur2))))
                     (lex-scan-with scan-number cur2 blen acc))
                    ((id-start? c)
                     (lex-scan-with scan-ident cur2 blen acc))
-                   ((and (eq? c "#") (eq? (peek2-char cur2) "|"))
+                   ((and (eq c "#") (eq (peek2-char cur2) "|"))
                     (lex-block cur2 blen acc))
                    (else
-                    (rderr (str-append "非法字符 '"
-                                       (str-append c "'"))
+                    (rderr (string-append "非法字符 '"
+                                       (string-append c "'"))
                            o (next-off cur2 blen)))))))))
 
 ; 通用扫描续接（高阶消费点：scan 为 scan-ident/scan-dots/scan-number 之一，
 ; 返回 ('ok kind 文本 余游标)）——函数值经全局引用传入
 (define (lex-scan-with scan cur blen acc)
   (let ((r (scan cur blen)))
-    (if (eq? (car r) 'err)
+    (if (eq (head r) 'err)
         r
         (let ((kind (second r))
               (text (third r))
@@ -332,8 +332,8 @@
                           acc))))))
 
 (define (lex-string cur blen acc)
-  (let ((r (scan-string (cdr cur) (cur-off cur) blen "")))
-    (if (eq? (car r) 'err)
+  (let ((r (scan-string (tail cur) (cur-off cur) blen "")))
+    (if (eq (head r) 'err)
         r
         (let ((content (third r))
               (after (fourth r)))
@@ -342,8 +342,8 @@
                           acc))))))
 
 (define (lex-block cur blen acc)
-  (let ((r (skip-block (cdr (cdr cur)) 1 (cur-off cur) blen)))
-    (if (eq? (car r) 'err)
+  (let ((r (skip-block (tail (tail cur)) 1 (cur-off cur) blen)))
+    (if (eq (head r) 'err)
         r
         (lex-loop (second r) blen acc))))
 
@@ -353,7 +353,7 @@
 
 ; ===== 语法（递归下降；'x → (quote x)）=====
 
-(define (token-kind t) (car t))
+(define (token-kind t) (head t))
 (define (token-start t) (second t))
 (define (token-end t) (third t))
 (define (token-payload t) (fourth t))
@@ -376,49 +376,49 @@
 
 (define (parse-program toks acc)
   ; 程序 = 顶层形式* EOF；acc = 逆序节点累积
-  (if (= (token-kind (car toks)) 0)
+  (if (= (token-kind (head toks)) 0)
       (reverse acc)
       (let ((r (parse-datum toks 0)))
-        (if (eq? (car r) 'err)
+        (if (eq (head r) 'err)
             r
             (parse-program (third r) (cons (second r) acc))))))
 
 (define (parse-datum toks depth)
   ; 返回 ('ok 节点 余 Token) | ('err ...)
-  (let ((t (car toks)))
+  (let ((t (head toks)))
     (let ((k (token-kind t))
           (s (token-start t))
           (e (token-end t)))
       (cond ((= k 1)
-             (list 'ok (list 'int s e (token-payload t)) (cdr toks)))
+             (list 'ok (list 'int s e (token-payload t)) (tail toks)))
             ((= k 2)
-             (list 'ok (list 'float s e (token-payload t)) (cdr toks)))
+             (list 'ok (list 'float s e (token-payload t)) (tail toks)))
             ((= k 3)
-             (list 'ok (list 'str s e (token-payload t)) (cdr toks)))
+             (list 'ok (list 'str s e (token-payload t)) (tail toks)))
             ((= k 4)
              ; 注意：'true/'false/'nil 引用后是**字面量 datum**（TD-002），
-             ; 不是符号——tag 经 string->symbol 构造符号值
-             (list 'ok (list (string->symbol "true") s e) (cdr toks)))
+             ; 不是符号——tag 经 string-to-symbol 构造符号值
+             (list 'ok (list (string-to-symbol "true") s e) (tail toks)))
             ((= k 5)
-             (list 'ok (list (string->symbol "false") s e) (cdr toks)))
+             (list 'ok (list (string-to-symbol "false") s e) (tail toks)))
             ((= k 6)
-             (list 'ok (list (string->symbol "nil") s e) (cdr toks)))
+             (list 'ok (list (string-to-symbol "nil") s e) (tail toks)))
             ((or (= k 7) (= k 8) (= k 9))
-             (list 'ok (list 'sym s e (token-payload t)) (cdr toks)))
+             (list 'ok (list 'sym s e (token-payload t)) (tail toks)))
             ((= k 10) (parse-quote toks depth))
             ((or (= k 11) (= k 13)) (parse-list toks depth))
             ((or (= k 12) (= k 14))
-             (rderr (str-append "多余的关闭括号：'"
-                                (str-append (delim-char k) "'"))
+             (rderr (string-append "多余的关闭括号：'"
+                                (string-append (delim-char k) "'"))
                     s e))
             (else
              (rderr "意外的文件结束（期望表达式）" s e))))))
 
 (define (parse-quote toks depth)
   ; 'x → ('list 起 合 (quote 头符号) x)；头符号 Span = 引号字符本身
-  (let ((t (car toks)))
-    (let ((r (parse-datum (cdr toks) depth)))
-      (if (eq? (car r) 'err)
+  (let ((t (head toks)))
+    (let ((r (parse-datum (tail toks) depth)))
+      (if (eq (head r) 'err)
           r
           (let ((quoted (second r))
                 (after (third r)))
@@ -432,40 +432,40 @@
 
 (define (parse-list toks depth)
   ; 列表/向量：深度上限 256（防御性栈保护——与种子一致）
-  (let ((t (car toks)))
+  (let ((t (head toks)))
     (let ((k (token-kind t))
           (os (token-start t))
           (oe (token-end t)))
       (if (> (+ depth 1) 256)
           (rderr "嵌套深度超过上限 256" os oe)
-          (list-items (cdr toks) (+ depth 1) k os oe nil)))))
+          (list-items (tail toks) (+ depth 1) k os oe nil)))))
 
 (define (list-items toks depth open-k open-s open-e acc)
-  (let ((t (car toks)))
+  (let ((t (head toks)))
     (let ((k (token-kind t)))
       (cond ((= k 0)
              (rderr
-               (str-append "括号未闭合：缺少 '"
-                           (str-append (delim-char (close-of open-k)) "'"))
+               (string-append "括号未闭合：缺少 '"
+                           (string-append (delim-char (close-of open-k)) "'"))
                open-s open-e))
             ((or (= k 12) (= k 14))
              (if (not (= k (close-of open-k)))
                  (rderr
-                   (str-append "括号不匹配：'"
-                     (str-append (delim-char open-k)
-                       (str-append "' 应以 '"
-                         (str-append (delim-char (close-of open-k))
-                           (str-append "' 关闭，实际 '"
-                             (str-append (delim-char k) "'"))))))
+                   (string-append "括号不匹配：'"
+                     (string-append (delim-char open-k)
+                       (string-append "' 应以 '"
+                         (string-append (delim-char (close-of open-k))
+                           (string-append "' 关闭，实际 '"
+                             (string-append (delim-char k) "'"))))))
                    (token-start t) (token-end t))
                  (list 'ok
                        (cons (if (= open-k 13) 'vec 'list)
                              (cons open-s
                                    (cons (token-end t) (reverse acc))))
-                       (cdr toks))))
+                       (tail toks))))
             (else
              (let ((r (parse-datum toks depth)))
-               (if (eq? (car r) 'err)
+               (if (eq (head r) 'err)
                    r
                    (list-items (third r) depth open-k open-s open-e
                                (cons (second r) acc)))))))))

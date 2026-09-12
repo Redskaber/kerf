@@ -112,16 +112,16 @@ fn dynamic_boundary_corpus_clean() {
     assert_clean("(require io write) (define x 42) (print x)");
     assert_clean("(+ 1 2.5)");
     assert_clean("(< 1 2.0)");
-    assert_clean("(car '(1 2 3))");
-    assert_clean("(define (car x) 42) (car 5)");
+    assert_clean("(head '(1 2 3))");
+    assert_clean("(define (head x) 42) (head 5)");
     assert_clean(
-        "(require io write) (define x 1) (set! x (+ x 1)) (begin (print x) (if (null? nil) x 2))",
+        "(require io write) (define x 1) (set! x (+ x 1)) (begin (print x) (if (is-nil nil) x 2))",
     );
-    assert_clean("(if (null? nil) 1 2)");
-    assert_clean("(if (eq? 'a 'a) 1 2)");
-    assert_clean("(str-append \"a\" \"b\")");
-    assert_clean("(string->symbol \"foo\")");
-    assert_clean("(symbol->string 'foo)");
+    assert_clean("(if (is-nil nil) 1 2)");
+    assert_clean("(if (eq 'a 'a) 1 2)");
+    assert_clean("(string-append \"a\" \"b\")");
+    assert_clean("(string-to-symbol \"foo\")");
+    assert_clean("(symbol-to-string 'foo)");
     assert_clean("(= \"a\" \"b\")");
 }
 
@@ -132,7 +132,7 @@ fn numeric_tower_and_set_join_clean() {
     assert_clean("(- 2.5 1)");
     assert_clean("(* 1.5 2.0 3)");
     // D3 join 保守契约：异型赋值 → Dynamic 降级零诊断
-    assert_clean("(define x 1) (set! x \"foo\") (str-append x \"!\")");
+    assert_clean("(define x 1) (set! x \"foo\") (string-append x \"!\")");
     assert_clean("(define x 1) (set! x 2.5) (+ x 1)");
 }
 
@@ -198,19 +198,19 @@ fn superset_gate_r1_to_r8() {
         "(not 1)",
         "(not \"s\")",
         // R5（car/cdr 非 pair）
-        "(car 5)",
-        "(cdr \"s\")",
+        "(head 5)",
+        "(tail \"s\")",
         // R6（不可调用）
         "(1 2 3)",
         "(\"s\" 1)",
         // R7（元数）
         "((lambda (x) x) 1 2)",
         "((lambda (x y) x) 1)",
-        "(car 1 2)",
+        "(head 1 2)",
         // R8（串/符号族）
-        "(str-append 1 \"a\")",
-        "(string->symbol 5)",
-        "(symbol->string 7)",
+        "(string-append 1 \"a\")",
+        "(string-to-symbol 5)",
+        "(symbol-to-string 7)",
     ];
     for src in corpus {
         let r_count = r18(src);
@@ -239,18 +239,18 @@ fn gap1_user_lambda_arg_type_error_detected() {
 
 #[test]
 fn gap2_car_element_type_inferred() {
-    // 缺口②：car 元素类型（Pair(τ,τ) 构造子推断——元素 Bool 入算术位）
-    let src = "(define x (car (cons true nil))) (+ x 1)";
+    // 缺口②：head 元素类型（Pair(τ,τ) 构造子推断——元素 Bool 入算术位）
+    let src = "(define x (head (cons true nil))) (+ x 1)";
     assert_diag(src, "需要数值");
     // 正例：数值元素参与算术零诊断
-    assert_clean("(define x (car (cons 1 nil))) (+ x 1)");
+    assert_clean("(define x (head (cons 1 nil))) (+ x 1)");
 }
 
 #[test]
 fn gap3_branch_disagreement_detected() {
     // 缺口③：分支类型分歧（变元参与 → 约束合一）
     // f 返回 if 分支两支（变元路径）：一支数值域约束，一支字符串
-    let src = "(define (f c) (if c (+ 1 c) (str-append c \"\"))) (f 1)";
+    let src = "(define (f c) (if c (+ 1 c) (string-append c \"\"))) (f 1)";
     assert_diag(src, "类型不一致");
 }
 
@@ -261,10 +261,10 @@ fn gap4_recursive_arity_and_domain_detected() {
         "(define (fib n) (if (< n 2) n (+ (fib (- n 1) 1) (fib (- n 2)))))",
         "参数数量不匹配",
     );
-    // 递归域错：自引用参数传非数值（n 经 < 数值锚 ~Num 与 str-append
+    // 递归域错：自引用参数传非数值（n 经 < 数值锚 ~Num 与 string-append
     // Str 域约束冲突 → 类型不一致）
     assert_diag(
-        "(define (g n) (if (< n 2) n (g (str-append n \"x\"))))",
+        "(define (g n) (if (< n 2) n (g (string-append n \"x\"))))",
         "类型不一致",
     );
 }
@@ -289,9 +289,9 @@ fn occurs_check_negatives() {
 
 #[test]
 fn value_restriction_negatives() {
-    // ① App 结果不泛化：car 的元素类型 Mono 共享——两用点异型报错
+    // ① App 结果不泛化：head 的元素类型 Mono 共享——两用点异型报错
     assert_diag(
-        "(define f (car (cons (lambda (x) x) nil))) (f 1) (f true)",
+        "(define f (head (cons (lambda (x) x) nil))) (f 1) (f true)",
         "类型不一致",
     );
     // ② set! 目标弱单态：Poly 绑定经 set! 后永久单态——两用点异型报错
@@ -327,7 +327,7 @@ fn let_shape_generalization() {
 
 #[test]
 fn multi_error_collection_span_order() {
-    let src = "(+ 1 \"a\") (if 2 1 3) (car 5) (str-append 1 \"b\")";
+    let src = "(+ 1 \"a\") (if 2 1 3) (head 5) (string-append 1 \"b\")";
     let r = hm(src);
     assert!(
         r.diags.len() >= 4,
@@ -355,7 +355,7 @@ fn multi_error_collection_span_order() {
 #[test]
 fn dynamic_escape_not_forced() {
     // 未绑定引用（卫生符号/动态风格）不被推断面强制——零诊断
-    assert_clean("(define (f x) (car x))");
+    assert_clean("(define (f x) (head x))");
     assert_clean("(print-unregistered-thing 1 2 3)");
     // 混型 set! 后降级 Dynamic：下游零约束
     assert_clean("(define x 1) (set! x true) (if x 1 2)");

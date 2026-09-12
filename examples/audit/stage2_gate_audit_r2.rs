@@ -268,16 +268,16 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(car 5)",
-        expect: Expect::StaticErr { msg: "car 需要 pair，实际 int", min_diags: 1 },
+        src: "(head 5)",
+        expect: Expect::StaticErr { msg: "head 需要 pair，实际 int", min_diags: 1 },
     },
     Case {
         id: "A04",
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(cdr \"s\")",
-        expect: Expect::StaticErr { msg: "cdr 需要 pair，实际 str", min_diags: 1 },
+        src: "(tail \"s\")",
+        expect: Expect::StaticErr { msg: "tail 需要 pair，实际 str", min_diags: 1 },
     },
     Case {
         id: "A05",
@@ -300,15 +300,15 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(str-append \"a\" 5)",
-        expect: Expect::StaticErr { msg: "str-append 需要 str，实际 int", min_diags: 1 },
+        src: "(string-append \"a\" 5)",
+        expect: Expect::StaticErr { msg: "string-append 需要 str，实际 int", min_diags: 1 },
     },
     Case {
         id: "A08",
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Arity),
-        src: "(car 1 2)",
+        src: "(head 1 2)",
         expect: Expect::StaticErr { msg: "参数数量不匹配", min_diags: 1 },
     },
     Case {
@@ -336,7 +336,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // 分支类型分歧（hm 缺口 ③——变元参与约束合一）
-        src: "(define (f c) (if c (+ 1 c) (str-append c \"\"))) (f 1)",
+        src: "(define (f c) (if c (+ 1 c) (string-append c \"\"))) (f 1)",
         expect: Expect::StaticErr { msg: "类型不一致", min_diags: 1 },
     },
     Case {
@@ -381,8 +381,8 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // r28 效应臂收敛：handler 子句体入检出域
-        src: "(handle t ((p k) (car 42)) 1)",
-        expect: Expect::StaticErr { msg: "car 需要 pair，实际 int", min_diags: 1 },
+        src: "(handle t ((p k) (head 42)) 1)",
+        expect: Expect::StaticErr { msg: "head 需要 pair，实际 int", min_diags: 1 },
     },
     Case {
         id: "B07",
@@ -418,7 +418,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // 用户函数形参类型传播进内置域（str 域约束经调用位合一冲突）
-        src: "(define (g x) (str-append x \"s\")) (g 5)",
+        src: "(define (g x) (string-append x \"s\")) (g 5)",
         expect: Expect::StaticErr { msg: "类型不一致", min_diags: 1 },
     },
     // ---- C 桶：复杂程序负向（7）----
@@ -465,9 +465,9 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        // 深递归静态检出（递归约束传播——car 与 num 域约束合一冲突；
+        // 深递归静态检出（递归约束传播——head 与 num 域约束合一冲突；
         // r1 C06 为同程序运行期）
-        src: "(define (h n) (if (= n 0) (car n) (h (- n 1)))) (h 50)",
+        src: "(define (h n) (if (= n 0) (head n) (h (- n 1)))) (h 50)",
         expect: Expect::StaticErr { msg: "类型不一致", min_diags: 1 },
     },
     Case {
@@ -564,7 +564,7 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // r29（48-c）：car/cdr Nil 漏检归零（超集门缺口修复）
-        src: "(car nil) / (cdr nil)",
+        src: "(head nil) / (tail nil)",
         expect: Expect::Custom(probe_r29_nil_pair_gate),
     },
     Case {
@@ -825,10 +825,10 @@ fn stage_e_code(stage: Stage) -> u32 {
 // D 桶恢复探针
 // ---------------------------------------------------------------------------
 
-/// D01：恢复模式合并报告（E0002 空形式 + E0005 car 元数——位置序 +
+/// D01：恢复模式合并报告（E0002 空形式 + E0005 head 元数——位置序 +
 /// 部分产物继续走全管线）。
 fn probe_recover_merged() -> CaseResult {
-    let src = "(define x 1)\n()\n(car)\n";
+    let src = "(define x 1)\n()\n(head)\n";
     let report = match check_source_recover(src, FNAME) {
         Ok(r) => r,
         Err(e) => return fail(format!("恢复路径应产出报告：{}", first_line(&e.rendered))),
@@ -1043,28 +1043,28 @@ fn probe_r29_string_ordering() -> CaseResult {
 }
 
 /// E04（r29/50-a 修复面）：car/cdr Nil 漏检归零——Nil 从保守跳过臂
-/// 移出（旗标期超集门缺口修复：`(car nil)` 静态确定运行期错误）。
+/// 移出（旗标期超集门缺口修复：`(head nil)` 静态确定运行期错误）。
 fn probe_r29_nil_pair_gate() -> CaseResult {
-    let car = match check_source("(car nil)", FNAME) {
+    let head = match check_source("(head nil)", FNAME) {
         Ok(r) => r,
-        Err(e) => return fail(format!("(car nil) 应报诊断：{}", first_line(&e.rendered))),
+        Err(e) => return fail(format!("(head nil) 应报诊断：{}", first_line(&e.rendered))),
     };
-    let cdr = match check_source("(cdr nil)", FNAME) {
+    let tail = match check_source("(tail nil)", FNAME) {
         Ok(r) => r,
-        Err(e) => return fail(format!("(cdr nil) 应报诊断：{}", first_line(&e.rendered))),
+        Err(e) => return fail(format!("(tail nil) 应报诊断：{}", first_line(&e.rendered))),
     };
-    let car_hit = car
+    let car_hit = head
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("car 需要 pair，实际 nil"));
-    let cdr_hit = cdr
+        .any(|d| d.message.contains("head 需要 pair，实际 nil"));
+    let cdr_hit = tail
         .diagnostics
         .iter()
-        .any(|d| d.message.contains("cdr 需要 pair，实际 nil"));
+        .any(|d| d.message.contains("tail 需要 pair，实际 nil"));
     if !car_hit || !cdr_hit {
         return fail(format!("Nil 漏检归零失败：car={} cdr={}", car_hit, cdr_hit));
     }
-    pass("r29 边界：(car nil)/(cdr nil) 静态检出（Nil 跳出保守臂）".to_string())
+    pass("r29 边界：(head nil)/(tail nil) 静态检出（Nil 跳出保守臂）".to_string())
 }
 
 /// E05（r29/50-a 修复面）：E0005 生产定位面——文件名 + 行:列 +

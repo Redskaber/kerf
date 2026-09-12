@@ -75,7 +75,7 @@ fn arithmetic_non_numeric_operands() {
         "nil",
         "(cons 1 2)",
         "(lambda (x) x)",
-        "car",
+        "head",
     ];
     for op in ops {
         for b in bad {
@@ -199,7 +199,7 @@ fn comparison_arity_floor() {
 }
 
 // ---------------------------------------------------------------------------
-// 序对（cons car cdr）
+// 序对（cons head tail）
 // ---------------------------------------------------------------------------
 
 /// cons 元数（3 case）：恰好 2 参。
@@ -213,10 +213,10 @@ fn cons_arity() {
 /// car/cdr 元数（4 case）：恰好 1 参（元数检查先于类型检查）。
 #[test]
 fn car_cdr_arity() {
-    expect_run_err("(car)", "car 需要 1 个参数，实际 0");
-    expect_run_err("(cdr)", "cdr 需要 1 个参数，实际 0");
-    expect_run_err("(car 5 6)", "car 需要 1 个参数，实际 2");
-    expect_run_err("(cdr 5 6)", "cdr 需要 1 个参数，实际 2");
+    expect_run_err("(head)", "head 需要 1 个参数，实际 0");
+    expect_run_err("(tail)", "tail 需要 1 个参数，实际 0");
+    expect_run_err("(head 5 6)", "head 需要 1 个参数，实际 2");
+    expect_run_err("(tail 5 6)", "tail 需要 1 个参数，实际 2");
 }
 
 /// car/cdr 非序对 ×7 类型 ×2 算子（14 case）：消息含 type_name。
@@ -229,9 +229,9 @@ fn car_cdr_non_pair_operands() {
         ("true", "bool"),
         ("nil", "nil"),
         ("(lambda (x) x)", "procedure"),
-        ("car", "builtin-procedure"),
+        ("head", "builtin-procedure"),
     ];
-    for op in ["car", "cdr"] {
+    for op in ["head", "tail"] {
         for (operand, type_name) in bad {
             let src = format!("({} {})", op, operand);
             expect_run_err(&src, &format!("{} 需要 pair，实际 {}", op, type_name));
@@ -240,13 +240,13 @@ fn car_cdr_non_pair_operands() {
 }
 
 // ---------------------------------------------------------------------------
-// 谓词（null? pair? int? bool? procedure? eq?）
+// 谓词（is-nil is-pair is-int is-bool is-procedure eq）
 // ---------------------------------------------------------------------------
 
 /// 一元谓词元数（10 case）：0 参 / 2 参。
 #[test]
 fn unary_predicate_arity() {
-    let preds = ["null?", "pair?", "int?", "bool?", "procedure?"];
+    let preds = ["is-nil", "is-pair", "is-int", "is-bool", "is-procedure"];
     for p in preds {
         expect_run_err(&format!("({})", p), &format!("{} 需要 1 个参数，实际 0", p));
         expect_run_err(
@@ -256,12 +256,12 @@ fn unary_predicate_arity() {
     }
 }
 
-/// eq? 元数（3 case）：恰好 2 参（对照链式 = ——eq? 不可链）。
+/// eq 元数（3 case）：恰好 2 参（对照链式 = ——eq 不可链）。
 #[test]
 fn eq_arity() {
-    expect_run_err("(eq?)", "eq? 需要 2 个参数，实际 0");
-    expect_run_err("(eq? 1)", "eq? 需要 2 个参数，实际 1");
-    expect_run_err("(eq? 1 2 3)", "eq? 需要 2 个参数，实际 3");
+    expect_run_err("(eq)", "eq 需要 2 个参数，实际 0");
+    expect_run_err("(eq 1)", "eq 需要 2 个参数，实际 1");
+    expect_run_err("(eq 1 2 3)", "eq 需要 2 个参数，实际 3");
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ fn not_requires_bool() {
         ("nil", "nil"),
         ("(cons 1 2)", "pair"),
         ("(lambda (x) x)", "procedure"),
-        ("car", "builtin-procedure"),
+        ("head", "builtin-procedure"),
     ];
     for (operand, type_name) in bad {
         expect_run_err(
@@ -308,10 +308,10 @@ fn read_line_arity() {
 }
 
 // ---------------------------------------------------------------------------
-// 字符串（str-append）
+// 字符串（string-append）
 // ---------------------------------------------------------------------------
 
-/// str-append 非字符串 ×7 类型 ×2 位置（14 case）。
+/// string-append 非字符串 ×7 类型 ×2 位置（14 case）。
 #[test]
 fn str_append_requires_strings() {
     let bad = [
@@ -321,25 +321,28 @@ fn str_append_requires_strings() {
         "nil",
         "(cons 1 2)",
         "(lambda (x) x)",
-        "car",
+        "head",
     ];
     for b in bad {
         expect_run_err(
-            &format!("(str-append {} \"b\")", b),
-            "str-append 需要 2 个字符串",
+            &format!("(string-append {} \"b\")", b),
+            "string-append 需要 2 个字符串",
         );
         expect_run_err(
-            &format!("(str-append \"a\" {})", b),
-            "str-append 需要 2 个字符串",
+            &format!("(string-append \"a\" {})", b),
+            "string-append 需要 2 个字符串",
         );
     }
 }
 
-/// str-append 元数（2 case）：恰好 2 参。
+/// string-append 元数（2 case）：恰好 2 参。
 #[test]
 fn str_append_arity() {
-    expect_run_err("(str-append \"a\")", "str-append 需要 2 个参数");
-    expect_run_err("(str-append \"a\" \"b\" \"c\")", "str-append 需要 2 个参数");
+    expect_run_err("(string-append \"a\")", "string-append 需要 2 个参数");
+    expect_run_err(
+        "(string-append \"a\" \"b\" \"c\")",
+        "string-append 需要 2 个参数",
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -429,7 +432,7 @@ fn vm_error_code_is_e0004() {
         Some(kerf_span::DiagnosticCode(4)),
         "Run 错误必须编号为 E0004"
     );
-    let err2 = expect_run_err("(car nil)", "car 需要 pair，实际 nil");
+    let err2 = expect_run_err("(head nil)", "head 需要 pair，实际 nil");
     // Call 指令的调试 Span = 整个应用形式（1:1）——错误定位到调用位
     assert!(err2.rendered.contains("--> neg.krf:1:1"));
     let err3 = expect_run_err(
@@ -500,7 +503,7 @@ fn dual_path_agrees_on_error_programs() {
         "(mod 5 0)",
         "(+ 9223372036854775807 1)",
         // E1：内置类型错误
-        "(car 5)",
+        "(head 5)",
         "(+ \"s\" 1)",
         "(mod 5 2.0)",
         "(not 5)",
@@ -539,7 +542,7 @@ fn symbol_value_misuse() {
         ("(- 'a 'b)", "- 需要 int"),
         ("(* 'a 2)", "* 需要 int"),
         ("(if 'a 1 2)", "if 条件需要 bool，实际 symbol"),
-        ("(car 'a)", "car 需要 pair，实际 symbol"),
+        ("(head 'a)", "head 需要 pair，实际 symbol"),
         ("(= 'a 1)", "= 需要数值"),
     ];
     for (src, msg) in cases {

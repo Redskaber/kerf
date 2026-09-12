@@ -369,7 +369,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: None,
-        src: "(module user (import kerf-prelude) (define (map f l) l) (map car (list 1)))",
+        src: "(module user (import kerf-prelude) (define (map f l) l) (map head (list 1)))",
         expect: Expect::Err { stage: Stage::Run, msg: "重复定义" },
     },
     Case {

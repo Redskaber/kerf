@@ -22,27 +22,27 @@
   (import)
   (export map filter foldl foldr for-each)
   (define (map f lst)
-    (if (null? lst)
+    (if (is-nil lst)
         nil
-        (cons (f (car lst)) (map f (cdr lst)))))
+        (cons (f (head lst)) (map f (tail lst)))))
   (define (filter pred lst)
-    (if (null? lst)
+    (if (is-nil lst)
         nil
-        (if (pred (car lst))
-            (cons (car lst) (filter pred (cdr lst)))
-            (filter pred (cdr lst)))))
+        (if (pred (head lst))
+            (cons (head lst) (filter pred (tail lst)))
+            (filter pred (tail lst)))))
   (define (foldl f init lst)
-    (if (null? lst)
+    (if (is-nil lst)
         init
-        (foldl f (f init (car lst)) (cdr lst))))
+        (foldl f (f init (head lst)) (tail lst))))
   ; foldr（r24 / 42-e stdlib 缺口补齐）：foldl 的对偶——右折叠
   ; （从表尾累积；(f 首元素 递归果) 形态——与 Racket foldr 同序）。
   (define (foldr f init lst)
-    (if (null? lst)
+    (if (is-nil lst)
         init
-        (f (car lst) (foldr f init (cdr lst)))))
+        (f (head lst) (foldr f init (tail lst)))))
   (define (for-each f lst)
-    (if (null? lst)
+    (if (is-nil lst)
         nil
-        (let ((ignored (f (car lst))))
-          (for-each f (cdr lst))))))
+        (let ((ignored (f (head lst))))
+          (for-each f (tail lst))))))

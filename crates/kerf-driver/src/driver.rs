@@ -125,7 +125,8 @@ pub struct CompileOutput {
     pub table: SymbolTable,
     /// 模块注册簿记（declare/visit/instantiate）。
     pub registry: ModuleRegistry,
-    /// W 级诊断（M2——W1001 弃用族/W1002 遮蔽族；非阻断观测面）。
+    /// W 级诊断（W1002 遮蔽族/W1003 宏名遮蔽族；非阻断观测面——r42/S1
+    /// 后现状，W1001 已随旧名退役）。
     pub warnings: Vec<Diagnostic>,
 }
 
@@ -174,7 +175,7 @@ impl CompileOutput {
 pub(crate) struct FrontOutput {
     /// 展开后的核心表达式序列。
     pub(crate) core: Vec<Rc<CoreExpr>>,
-    /// W 级诊断（M2——W1001 弃用族/W1002 遮蔽族；非阻断，编译成功
+    /// W 级诊断（W1002 遮蔽族/W1003 宏名遮蔽族；非阻断，编译成功
     /// 路径收集，CLI/CheckReport 观测面渲染）。
     pub(crate) warnings: Vec<Diagnostic>,
     /// 字节码程序。
@@ -282,12 +283,18 @@ const REQUIRE_POSITION_CODE: DiagnosticCode = DiagnosticCode(18);
 /// E0019：import 未知模块（在册名单外——深审 D2 裁定：Clojure
 /// require 同型，编译期拒绝）。
 const UNKNOWN_IMPORT_CODE: DiagnosticCode = DiagnosticCode(19);
-/// W1001：旧名弃用警告族（27 件——v0.6 弃用期起，v1.0 前夜移除；
-/// 23 §3.4 生命周期四阶段；值域 ≥1000 渲染 W 前缀）。
-const DEPRECATED_NAME_CODE: DiagnosticCode = DiagnosticCode(1001);
+/// W1001（r40 引入——r42/S1 退役）：旧名弃用警告族。旧名 27 件已在
+/// v0.9 移除（20 §7 移除轮行），旧名引用升 E0021 编译期错误——弃用
+/// W 面消失合法（23 §3.4 生命周期四阶段：引入 v0.5 → 默认 v0.6 →
+/// 弃用 v0.7 → 移除 v0.9 完整走完）。
 /// W1002：N3 遮蔽 N2 注入名警告（22 §3.2 R-N2 第二行——可恢复但
 /// 值得提示）。
 const SHADOW_IMPORT_CODE: DiagnosticCode = DiagnosticCode(1002);
+/// W1003：宏名遮蔽内置名警告（r42 / S1——22 §11 D11 排期移除轮
+/// 同窗兑现：宏胜出是宏系统的本质能力[用户重定义语义合法场景]，
+/// 但遮蔽**内置名**值得知会；意图不可判定[故意 vs 意外] → W 级
+/// [知会非阻断]是唯一可判定位）。
+const MACRO_SHADOW_CODE: DiagnosticCode = DiagnosticCode(1003);
 
 // ---------------------------------------------------------------------------
 // r41 / 62-a 语言形式深审轮——D10 裁定落地：E0020 保留字绑定禁令
@@ -304,6 +311,14 @@ const SHADOW_IMPORT_CODE: DiagnosticCode = DiagnosticCode(1002);
 /// handle 双绑定器）编译期显式拒绝；quote 位 `'if` 数据符号不受
 /// 影响（同像性维持——N0 符号宇宙层非 N4 语法层）。
 const RESERVED_BINDING_CODE: DiagnosticCode = DiagnosticCode(20);
+
+/// E0021：已移除旧名引用（r42 / S1 移除轮——20 §7「旧名引用 =
+/// E00xx 错误」兑现）：v0.9 起旧名 27 件退役（REMOVED_BUILTIN_NAMES
+/// 单源——旧名→现代名指引）。诊断携现代名指引（比裸 E0004 未绑定
+/// 更 actionable：迁移期 DX 最优形态）；遮蔽/接管豁免与 E0014 同
+/// 口径（N3 局部绑定胜出 + 用户接管合法——旧名退役的是**内置注册**
+/// 面，非符号宇宙层）。
+const REMOVED_NAME_CODE: DiagnosticCode = DiagnosticCode(21);
 
 /// 保留字判定（单源 = kerf-syntax `Keyword::from_name` 25 名查表——
 /// 与 Reader/expander 消费同一表，零名单漂移面）。
@@ -576,6 +591,33 @@ pub(crate) struct ImportFace {
 ///（限定别名）｜混列 `(import a as x b)`（别名对 + 非限定并存）。
 /// `as` 在 import 列表内恒为别名标记（contextual 语义的边界代价——
 /// 用户模块名不可在 import 列表内叫 `as`，限定名引用不受影响）。
+/// r42 / S1 移除轮——W1003 宏名收集（22 §11 D11：define-syntax 宏名
+/// 与内置函数同名 → W 级知会）。Stx 层唯一承载面：宏展开后名字从
+/// CoreExpr 消失，此面是 W1003 的唯一数据源。递归列表臂覆盖顶层 +
+/// module 体（嵌套列表中模板字面量 `(define-syntax …)` 假阳性可接受
+/// ——W 级非阻断 + 引导语料零碰撞[reader/expander 自举件不经本管线]）。
+fn collect_macro_names(forms: &[Stx], table: &SymbolTable) -> Vec<(String, Span)> {
+    let mut out: Vec<(String, Span)> = Vec::new();
+    for f in forms {
+        if let Some(items) = f.datum.as_list() {
+            if items.len() >= 2 {
+                let is_defsyntax = items[0]
+                    .datum
+                    .as_symbol()
+                    .map(|s| table.name(s) == "define-syntax")
+                    .unwrap_or(false);
+                if is_defsyntax {
+                    if let Some(name_sym) = items[1].datum.as_symbol() {
+                        out.push((table.name(name_sym).to_string(), f.span));
+                    }
+                }
+            }
+            out.extend(collect_macro_names(items, table));
+        }
+    }
+    out
+}
+
 fn collect_import_face(forms: &[Stx], table: &SymbolTable) -> ImportFace {
     let mut face = ImportFace::default();
     for f in forms {
@@ -927,28 +969,38 @@ fn require_pos_diag(e: &CoreExpr, top: bool) -> Option<Diagnostic> {
     }
 }
 
-/// W 警告收集（W1001 旧名弃用族 + W1002 遮蔽注入名族——非阻断；
-/// 22 §3.2 R-N2 第二行 + 20 §7 批次 M 行 + 23 §3.4 弃用期 v0.6 起）。
-/// 每名去重首现一条（诊断聚合——消息携现代名指引）。
+/// W 警告收集（W1002 遮蔽注入名族 + W1003 宏名遮蔽内置名族——非阻断；
+/// 22 §3.2 R-N2 第二行 + 22 §11 D11）。每名去重首现一条（诊断聚合）。
+/// r42/S1：W1001 弃用族退役（旧名升 E0021 编译期阻断——W 面收窄）。
 fn collect_warnings(
     core: &[Rc<CoreExpr>],
     table: &SymbolTable,
     face: &ImportFace,
-    sm: &SourceMap,
+    macro_defs: &[(String, Span)],
 ) -> Vec<Diagnostic> {
     let mut out: Vec<Diagnostic> = Vec::new();
-    let mut deprecated_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut shadow_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // r42 / S1 移除轮：W1001 弃用族退役（旧名 27 件升 E0021 编译期
+    // 错误——W 级面消失合法；W1002 遮蔽族维持）。W1003 宏名遮蔽
+    // 落地（22 §11 D11 排期本窗兑现）。
+    let mut macro_seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (name, span) in macro_defs {
+        if !macro_seen.insert(name.clone()) {
+            continue; // 每名一条去重（诊断聚合）
+        }
+        if crate::builtins::builtin_name_exists(name) {
+            out.push(Diagnostic::warning(
+                Some(MACRO_SHADOW_CODE),
+                format!(
+                    "宏名「{}」遮蔽了内置名（W1003——宏胜出是本质能力，此处仅知会；若非故意请改名）",
+                    name
+                ),
+                *span,
+            ));
+        }
+    }
     for e in core {
-        warn_diag(
-            e,
-            table,
-            face,
-            sm,
-            &mut deprecated_seen,
-            &mut shadow_seen,
-            &mut out,
-        );
+        warn_diag(e, table, face, &mut shadow_seen, &mut out);
     }
     out
 }
@@ -957,46 +1009,20 @@ fn warn_diag(
     e: &CoreExpr,
     table: &SymbolTable,
     face: &ImportFace,
-    sm: &SourceMap,
-    deprecated_seen: &mut std::collections::HashSet<String>,
     shadow_seen: &mut std::collections::HashSet<String>,
     out: &mut Vec<Diagnostic>,
 ) {
     match e {
-        CoreExpr::VarRef { name, span, .. } => {
-            let raw = table.name(*name);
-            let base = hygienic_base(raw);
-            // W1001 旧名弃用（27 件 BUILTIN_ALIASES 旧名列——v0.6
-            // 弃用期起，v1.0 前夜移除；每名一条去重）。
-            // preamble 豁免（20 §6.5 引导语料纪律：prelude 私有名
-            // 继续以旧名工作——不属用户弃用面，零误报）
-            let in_prelude = sm
-                .file(span.file_id)
-                .map(|f| f.name == PREAMBLE_FILENAME)
-                .unwrap_or(false);
-            if let Some(&(modern, _)) = crate::builtins::BUILTIN_ALIASES
-                .iter()
-                .find(|&&(_, old_name)| old_name == base)
-            {
-                if in_prelude {
-                    // 引导语料豁免——零误报纪律
-                } else if deprecated_seen.insert(base.to_string()) {
-                    out.push(Diagnostic::warning(
-                        Some(DEPRECATED_NAME_CODE),
-                        format!(
-                            "旧名「{}」已弃用——现代名「{}」（v0.6 弃用期；v1.0 前夜移除——20 §7 迁移计划；限定名形 kerf 域亦可用）",
-                            base, modern
-                        ),
-                        *span,
-                    ));
-                }
-            }
+        CoreExpr::VarRef { .. } => {
+            // r42/S1：W1001 弃用族退役——VarRef 无 W 职责（旧名已升
+            // E0021 编译期阻断于 verify_qualified_refs，fail-closed）
         }
         CoreExpr::Module { name, body, .. } => {
             let module_name = table.name(*name).to_string();
-            // preamble 结构性豁免（20 §6.5 引导语料纪律：prelude 模块体
-            // 内旧名引用不属用户弃用面——展开后 Span 的 file 传递经
-            // 自举桥重建不可依赖，按模块名结构豁免零误报）
+            // preamble 结构性豁免（20 §6.5 引导语料纪律：prelude 模块
+            // 体内部不属用户 W 面——展开后 Span 的 file 传递经自举桥重建
+            // 不可依赖，按模块名结构豁免防 W1002 注入遮蔽误报；r42/S1
+            // 后 preamble 已迁移现代名，豁免保持为零误报保险）
             if module_name == PRELUDE_MODULE {
                 return;
             }
@@ -1018,7 +1044,7 @@ fn warn_diag(
                         ));
                     }
                 }
-                warn_diag(item, table, face, sm, deprecated_seen, shadow_seen, out);
+                warn_diag(item, table, face, shadow_seen, out);
             }
         }
         CoreExpr::Lambda { params, body, .. } => {
@@ -1038,12 +1064,12 @@ fn warn_diag(
                     ));
                 }
             }
-            warn_diag(body, table, face, sm, deprecated_seen, shadow_seen, out);
+            warn_diag(body, table, face, shadow_seen, out);
         }
         CoreExpr::App { fn_expr, args, .. } => {
-            warn_diag(fn_expr, table, face, sm, deprecated_seen, shadow_seen, out);
+            warn_diag(fn_expr, table, face, shadow_seen, out);
             for a in args {
-                warn_diag(a, table, face, sm, deprecated_seen, shadow_seen, out);
+                warn_diag(a, table, face, shadow_seen, out);
             }
         }
         CoreExpr::If {
@@ -1052,50 +1078,24 @@ fn warn_diag(
             else_branch,
             ..
         } => {
-            warn_diag(cond, table, face, sm, deprecated_seen, shadow_seen, out);
-            warn_diag(
-                then_branch,
-                table,
-                face,
-                sm,
-                deprecated_seen,
-                shadow_seen,
-                out,
-            );
-            warn_diag(
-                else_branch,
-                table,
-                face,
-                sm,
-                deprecated_seen,
-                shadow_seen,
-                out,
-            );
+            warn_diag(cond, table, face, shadow_seen, out);
+            warn_diag(then_branch, table, face, shadow_seen, out);
+            warn_diag(else_branch, table, face, shadow_seen, out);
         }
         CoreExpr::SetBang { value, .. } | CoreExpr::Define { value, .. } => {
-            warn_diag(value, table, face, sm, deprecated_seen, shadow_seen, out)
+            warn_diag(value, table, face, shadow_seen, out)
         }
         CoreExpr::Begin { body, .. } => {
             for item in body {
-                warn_diag(item, table, face, sm, deprecated_seen, shadow_seen, out);
+                warn_diag(item, table, face, shadow_seen, out);
             }
         }
-        CoreExpr::Perform { effect, .. } => {
-            warn_diag(effect, table, face, sm, deprecated_seen, shadow_seen, out)
-        }
+        CoreExpr::Perform { effect, .. } => warn_diag(effect, table, face, shadow_seen, out),
         CoreExpr::Handle {
             handler_body, body, ..
         } => {
-            warn_diag(
-                handler_body,
-                table,
-                face,
-                sm,
-                deprecated_seen,
-                shadow_seen,
-                out,
-            );
-            warn_diag(body, table, face, sm, deprecated_seen, shadow_seen, out);
+            warn_diag(handler_body, table, face, shadow_seen, out);
+            warn_diag(body, table, face, shadow_seen, out);
         }
         CoreExpr::Require { .. } | CoreExpr::Literal { .. } => {}
     }
@@ -1286,6 +1286,24 @@ fn qualified_ref_diag(
             let base = hygienic_base(raw);
             if shadowed.contains(base) || shadowed.contains(raw) {
                 return None; // N3 局部绑定胜出（R-N1——参数遮蔽合法）
+            }
+            // r42 / S1 移除轮——E0021 已移除旧名（值位/操作位全域；与
+            // E0014 同 traversal——遮蔽已豁免[上]，接管豁免[下]同口径：
+            // 用户 define/set! 旧名 = 用户全局合法[退役的是内置注册面]）
+            if !takeover.contains(raw) && !takeover.contains(base) {
+                if let Some(&(_, modern)) = crate::builtins::REMOVED_BUILTIN_NAMES
+                    .iter()
+                    .find(|&&(old, _)| old == base)
+                {
+                    return Some(Diagnostic::error(
+                        Some(REMOVED_NAME_CODE),
+                        format!(
+                            "「{}」已于 v0.9 移除——现代名「{}」（20 §7 移除轮；限定名形 kerf 域亦可用）",
+                            base, modern
+                        ),
+                        *span,
+                    ));
+                }
             }
             // 独立 `/`（除法运算符）与不含 `/` 的名字不参与（R-N4 词法
             // 域限定：`/` 仅标识符内部分隔——裸名走既有未绑定路径）
@@ -1533,6 +1551,9 @@ fn front_from_forms(
     // 携带别名信息，此面是 R-N5 别名归一与 E0013/E0019 的唯一数据源）
     let face = collect_import_face(&forms, &table);
     let import_targets = collect_import_targets(&forms, &table);
+    // 1.58 r42 / S1 移除轮：W1003 宏名收集（Stx 层——expand 前的
+    // 声明面；宏名与内置注册面同名 → W 级知会[22 §11 D11]）
+    let macro_defs = collect_macro_names(&forms, &table);
 
     // 1.65 r41 / 62-a 深审 D10：E0020 保留字绑定禁令（Stx 源码面——
     // expand 前拦截；宏名/别名唯一承载层；run/check/compile 全路径）
@@ -1560,6 +1581,7 @@ fn front_from_forms(
         core,
         face,
         import_targets,
+        macro_defs,
         table,
         sm,
         main_sym,
@@ -1578,6 +1600,7 @@ fn front_from_core(
     core: Vec<Rc<CoreExpr>>,
     face: ImportFace,
     import_targets: Vec<(String, Span)>,
+    macro_defs: Vec<(String, Span)>,
     mut table: SymbolTable,
     sm: SourceMap,
     main_sym: Symbol,
@@ -1713,7 +1736,7 @@ fn front_from_core(
 
     // 5. M2 W 警告收集（编译成功路径——非阻断；Stx 层 import 面 +
     // core 树双数据源）
-    let warnings = collect_warnings(&core, &table, &face, &sm);
+    let warnings = collect_warnings(&core, &table, &face, &macro_defs);
 
     Ok(FrontOutput {
         core,
@@ -1854,6 +1877,8 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
     // 1.6 M2 import 面收集（与 front_from_forms 同序）
     let face = collect_import_face(&forms, &table);
     let import_targets = collect_import_targets(&forms, &table);
+    // 1.58 r42 / S1：W1003 宏名收集（与 front_from_forms 同序）
+    let macro_defs = collect_macro_names(&forms, &table);
     // 1.65 r41 / 62-a 深审 D10：E0020 保留字绑定禁令（Stx 源码面——
     // 与 front_from_forms 同序；恢复路径同样 fail-closed 拦截）
     verify_reserved_bindings_stx(&forms, &table, &sm)?;
@@ -1869,6 +1894,7 @@ pub fn check_source_recover(source: &str, filename: &str) -> Result<CheckReport,
         core,
         face,
         import_targets,
+        macro_defs,
         table,
         sm,
         main_sym,
@@ -1982,7 +2008,7 @@ pub struct RunOutcome {
     pub value: Value,
     /// 执行后的堆（GC 统计与值渲染使用）。
     pub heap: Heap,
-    /// W 级诊断（M2——W1001 弃用族/W1002 遮蔽族；CLI/测试观测面）。
+    /// W 级诊断（W1002 遮蔽族/W1003 宏名遮蔽族；CLI/测试观测面）。
     pub warnings: Vec<Diagnostic>,
 }
 

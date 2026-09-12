@@ -186,10 +186,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(car 5)",
+        src: "(head 5)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "car 需要 pair，实际 int",
+            msg: "head 需要 pair，实际 int",
             trace: false,
         },
     },
@@ -246,10 +246,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(cdr nil)",
+        src: "(tail nil)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "cdr 需要 pair，实际 nil",
+            msg: "tail 需要 pair，实际 nil",
             trace: false,
         },
     },
@@ -294,10 +294,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Single,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(str-append 1 2)",
+        src: "(string-append 1 2)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "str-append 需要 2 个字符串",
+            msg: "string-append 需要 2 个字符串",
             trace: false,
         },
     },
@@ -405,10 +405,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::Arity),
-        src: "(define (apply2 f) (f 1 2)) (apply2 car)",
+        src: "(define (apply2 f) (f 1 2)) (apply2 head)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "car 需要 1 个参数，实际 2",
+            msg: "head 需要 1 个参数，实际 2",
             trace: false,
         },
     },
@@ -417,10 +417,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(define lst (quote (1 2))) (car (cdr (cdr lst)))",
+        src: "(define lst (quote (1 2))) (head (tail (tail lst)))",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "car 需要 pair，实际 nil",
+            msg: "head 需要 pair，实际 nil",
             trace: false,
         },
     },
@@ -429,10 +429,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Multi,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(define (join a b) (str-append a b)) (join 1 2)",
+        src: "(define (join a b) (string-append a b)) (join 1 2)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "str-append 需要 2 个字符串",
+            msg: "string-append 需要 2 个字符串",
             trace: false,
         },
     },
@@ -483,10 +483,10 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // 发现（XFAIL）：运行时错误无调用链堆栈追踪（children 恒空）。
-        src: "(define (deep n) (if (= n 0) (car 5) (deep (- n 1)))) (deep 3)",
+        src: "(define (deep n) (if (= n 0) (head 5) (deep (- n 1)))) (deep 3)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "car 需要 pair，实际 int",
+            msg: "head 需要 pair，实际 int",
             trace: true,
         },
     },
@@ -507,10 +507,10 @@ const CASES: &[Case] = &[
         bucket: Bucket::Complex,
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
-        src: "(define (classify n) (if (= (mod n 2) 0) (if (> n 10) (if (> n 100) (car n) \"big\") 1) 2)) (classify 200)",
+        src: "(define (classify n) (if (= (mod n 2) 0) (if (> n 10) (if (> n 100) (head n) \"big\") 1) 2)) (classify 200)",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "car 需要 pair",
+            msg: "head 需要 pair",
             trace: false,
         },
     },
@@ -520,10 +520,10 @@ const CASES: &[Case] = &[
         polarity: Polarity::Negative,
         class: Some(ErrorClass::TypeMismatch),
         // 宏展开产物中的运行时类型错（expansion 代次 Span）
-        src: "(define-syntax twice! (syntax-rules () ((twice! e) (begin e e)))) (twice! (car 5))",
+        src: "(define-syntax twice! (syntax-rules () ((twice! e) (begin e e)))) (twice! (head 5))",
         expect: Expect::Err {
             stage: Stage::Run,
-            msg: "car 需要 pair",
+            msg: "head 需要 pair",
             trace: false,
         },
     },
@@ -554,7 +554,7 @@ const CASES: &[Case] = &[
         bucket: Bucket::Recovery,
         polarity: Polarity::Mixed,
         class: None,
-        src: "<先 (car 5) 后 fib(10)>",
+        src: "<先 (head 5) 后 fib(10)>",
         expect: Expect::Custom(probe_error_then_correct),
     },
     Case {
@@ -891,16 +891,16 @@ fn probe_macro_global_dual_path() -> CaseResult {
 
 /// D01：错误程序 → 同进程续跑正确程序结果正确。
 fn probe_error_then_correct() -> CaseResult {
-    let err = match run_source("(car 5)", FNAME) {
+    let err = match run_source("(head 5)", FNAME) {
         Err(e) => e,
-        Ok(_) => return fail("错误程序 (car 5) 意外成功".to_string()),
+        Ok(_) => return fail("错误程序 (head 5) 意外成功".to_string()),
     };
-    if !err.rendered.contains("car 需要 pair") {
+    if !err.rendered.contains("head 需要 pair") {
         return fail(format!("消息不匹配：{}", first_line(&err.rendered)));
     }
     match run_source(FIB10, FNAME) {
         Ok(o) if matches!(o.value, Value::Int(55)) => {
-            pass("Err[car 需要 pair] → 后续 fib(10)⇒55".to_string())
+            pass("Err[head 需要 pair] → 后续 fib(10)⇒55".to_string())
         }
         Ok(o) => fail(format!(
             "恢复后值不匹配：{}",
@@ -952,7 +952,7 @@ fn probe_reader_after_errors() -> CaseResult {
     for (src, msg) in [
         ("(+ 1", "括号未闭合"),
         ("()", "空列表不能作为表达式求值"),
-        ("(car 5)", "car 需要 pair"),
+        ("(head 5)", "head 需要 pair"),
     ] {
         match run_source(src, FNAME) {
             Err(e) if e.rendered.contains(msg) => {}
@@ -995,7 +995,7 @@ fn probe_error_barrage_then_correct() -> CaseResult {
         ("(+ 1 \"s\")", Stage::Run, "+ 需要 int"),
         ("()", Stage::Expand, "空列表不能作为表达式求值"),
         ("(+ 1", Stage::Read, "括号未闭合"),
-        ("(car 5)", Stage::Run, "car 需要 pair"),
+        ("(head 5)", Stage::Run, "head 需要 pair"),
         ("(set! zz 1)", Stage::Run, "set! 未绑定变量"),
     ];
     for (src, want_stage, msg) in barrage {
@@ -1031,10 +1031,10 @@ fn probe_error_barrage_then_correct() -> CaseResult {
 /// D05：堆分配后触发错误 → 同进程闭包计数器（共享可变捕获 + pair 分配 +
 /// slot_count>0）结果精确正确（错误不破坏后续堆行为）。
 fn probe_heap_intact_after_error() -> CaseResult {
-    match run_source("(define p (cons 1 (cons 2 nil))) (car p) (car 5)", FNAME) {
-        Err(e) if e.rendered.contains("car 需要 pair") => {}
+    match run_source("(define p (cons 1 (cons 2 nil))) (head p) (head 5)", FNAME) {
+        Err(e) if e.rendered.contains("head 需要 pair") => {}
         Err(e) => return fail(format!("消息不匹配：{}", first_line(&e.rendered))),
-        Ok(_) => return fail("含 (car 5) 的程序意外成功".to_string()),
+        Ok(_) => return fail("含 (head 5) 的程序意外成功".to_string()),
     }
     match run_source(COUNTERS, FNAME) {
         Ok(o) => {

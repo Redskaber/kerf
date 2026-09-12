@@ -502,7 +502,7 @@ fn m2_capability_closure_covers_read_write_union() {
 }
 
 /// B1 契约（20 §4）：限定名 `string/index-of` miss → nil；旧名
-/// `str-index-of` 与扁平新名 `string-index-of` 维持 -1（迁移不变量：
+/// `string-index-of` 与扁平新名 `string-index-of` 维持 -1（迁移不变量：
 /// 「新名新契约、旧名旧契约并存至移除」——r38 别名层 parity 不动）。
 #[test]
 fn m2_b1_contract_qualified_nil_vs_legacy_minus_one() {
@@ -513,7 +513,10 @@ fn m2_b1_contract_qualified_nil_vs_legacy_minus_one() {
     );
     assert_eq!(common::run_rendered("(string/index-of \"abc\" \"b\")"), "1");
     // 旧名（旧契约维持）
-    assert_eq!(common::run_rendered("(str-index-of \"abc\" \"z\")"), "-1");
+    assert_eq!(
+        common::run_rendered("(string-index-of \"abc\" \"z\")"),
+        "-1"
+    );
     // 扁平新名（v0.5 别名层 parity 维持——改名与改行为永不混步）
     assert_eq!(
         common::run_rendered("(string-index-of \"abc\" \"z\")"),
@@ -550,30 +553,91 @@ fn m2_b3_contract_read_line_strict_arity() {
     );
 }
 
-/// W1001 旧名弃用警告（23 §3.4 弃用期 v0.6 起）：旧名引用 → 非阻断
-/// 警告（消息携现代名指引）；现代名/限定名 → 零警告。
+/// r42 / S1 移除轮——W1001 弃用族退役 + W1003 宏名遮蔽警告（22 §11
+/// D11 排期本窗兑现）。旧名 27 件升 E0021 编译期错误（本组由
+/// stdlib_tests removed_rejects_* 27 case 承载）；本组锚定：
+/// ①现代名零警告（W 面收窄实证）②限定名零警告 ③W1003 正例（宏名
+/// 遮蔽内置名 → 恰一条知会）④W1003 非内置名零误报 ⑤W1003 限定名
+/// 遮蔽同知会 ⑥宏胜出行为不变（宏体执行非内置）。
 #[test]
-fn m2_w1001_deprecated_name_warning() {
-    let o = run_source("(module m (car (list 1 2)))", FNAME).expect("旧名仍可用（弃用非移除）");
-    assert_eq!(o.warnings.len(), 1, "恰一条 car 弃用警告");
+fn s1_w1003_macro_shadow_builtin_warning() {
+    // ① 现代名零警告（W1001 退役后 W 面收窄）
+    let o = run_source("(module m (head (list 1 2)))", FNAME).expect("现代名可用");
     assert!(
-        o.warnings[0].message.contains("旧名「car」已弃用")
-            && o.warnings[0].message.contains("现代名「head」"),
-        "消息：{}",
-        o.warnings[0].message
+        o.warnings.is_empty(),
+        "现代名不应有任何 W 警告：{:?}",
+        o.warnings
+            .iter()
+            .map(|w| w.message.clone())
+            .collect::<Vec<_>>()
     );
-    // 现代名零警告
-    let o2 = run_source("(module m (head (list 1 2)))", FNAME).expect("现代名可用");
-    assert!(o2.warnings.is_empty(), "现代名不应警告");
-    // 限定名零警告
-    let o3 = run_source("(module m (pair/head (pair/cons 1 2)))", FNAME).expect("限定名可用");
-    assert!(o3.warnings.is_empty(), "限定名不应警告");
+    // ② 限定名零警告
+    let o2 = run_source("(module m (pair/head (pair/cons 1 2)))", FNAME).expect("限定名可用");
+    assert!(o2.warnings.is_empty(), "限定名不应警告");
+    // ③ W1003 正例：宏名遮蔽内置名（故意重定义——宏胜出是本质能力，
+    // W 级知会非阻断）
+    let o3 = run_source(
+        "(module m (define-syntax head (syntax-rules () ((_ x) 99))) (head (list 1 2)))",
+        FNAME,
+    )
+    .expect("宏遮蔽内置应运行（W 级非阻断）");
+    assert_eq!(o3.warnings.len(), 1, "恰一条 W1003 宏名遮蔽警告");
+    assert!(
+        o3.warnings[0].message.contains("宏名「head」遮蔽了内置名")
+            && o3.warnings[0].message.contains("W1003"),
+        "消息：{}",
+        o3.warnings[0].message
+    );
+    // ⑥ 宏胜出行为不变（宏体 99 执行，非内置 head）
+    assert_eq!(
+        common::run_rendered(
+            "(module m (define-syntax head (syntax-rules () ((_ x) 99))) (head (list 1 2)))"
+        ),
+        "99",
+        "宏应胜出（本质能力——W 仅知会）"
+    );
 }
 
-/// W1001 preamble 豁免（20 §6.5 引导语料纪律：prelude 模块体内旧名
-/// 继续工作——不属用户弃用面，零误报）。
+/// W1003 非内置名零误报 + 限定名遮蔽同知会（22 §11 D11：宏名 ∈
+/// 内置注册面[57 扁平 + 47 限定]→ W；非内置名（用户名/模块名）零 W）。
 #[test]
-fn m2_w1001_prelude_exempt() {
+fn s1_w1003_scoping_and_qualified() {
+    // 非内置宏名：零 W
+    let o = run_source(
+        "(module m (define-syntax my-macro (syntax-rules () ((_) 1))) (my-macro))",
+        FNAME,
+    )
+    .expect("用户宏名应运行零警告");
+    assert!(
+        o.warnings.is_empty(),
+        "非内置宏名不应 W1003：{:?}",
+        o.warnings
+            .iter()
+            .map(|w| w.message.clone())
+            .collect::<Vec<_>>()
+    );
+    // 限定名遮蔽：宏名取限定形态 string/append → 同知会（注册面含 47 限定名）
+    let o2 = run_source(
+        "(module m (define-syntax string/append (syntax-rules () ((_ a b) 7))) (string/append \"a\" \"b\"))",
+        FNAME,
+    )
+    .expect("限定名宏遮蔽应运行");
+    assert!(
+        o2.warnings
+            .iter()
+            .any(|w| w.message.contains("宏名「string/append」遮蔽了内置名")),
+        "限定名遮蔽应 W1003：{:?}",
+        o2.warnings
+            .iter()
+            .map(|w| w.message.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
+/// r42 / S1 移除轮——preamble 注入零 W 面维持（W1001 退役后：preamble
+/// 已迁移现代名，结构豁免守 W1002 注入遮蔽误报——20 §6.5 纪律不变）。
+#[test]
+fn s1_prelude_injection_zero_warnings() {
     let o = run_source(
         "(module user (import kerf-prelude) (define lst (list 1 2 3)) (map (lambda (x) x) lst))",
         FNAME,
@@ -581,11 +645,44 @@ fn m2_w1001_prelude_exempt() {
     .expect("prelude 注入程序应运行");
     assert!(
         o.warnings.is_empty(),
-        "preamble 旧名不触发用户面警告：{:?}",
+        "preamble 注入不应产生用户面警告：{:?}",
         o.warnings
             .iter()
             .map(|w| w.message.clone())
             .collect::<Vec<_>>()
+    );
+}
+
+/// r42 / S1 移除轮——E0021 限定形旧名引用（值位/操作位全域 + 恢复
+/// 健康：E0021 后管线继续可编译合法程序）。
+#[test]
+fn s1_e0021_recovery_and_positions() {
+    // 操作位 + 值位（嵌套表达式 + define 初始化位）
+    let err = run_source("(module m (define x (car (list 1 2))))", FNAME)
+        .expect_err("旧名 define 初始化位应 E0021");
+    assert!(
+        err.rendered.contains("[E0021]") && err.rendered.contains("现代名「head」"),
+        "E0021 携现代名指引：{}",
+        err.rendered
+    );
+    // set! 值位
+    let err2 = run_source("(module m (define x 1) (set! x (cdr (list 1 2))))", FNAME)
+        .expect_err("旧名 set! 值位应 E0021");
+    assert!(
+        err2.rendered.contains("[E0021]"),
+        "set! 值位：{}",
+        err2.rendered
+    );
+    // E0021 后管线健康（fail-closed 单条阻断——修正后正常编译）
+    let ok = run_source("(module m (define x (head (list 1 2))) nil)", FNAME);
+    assert!(
+        ok.is_ok(),
+        "修正后应正常编译：{:?}",
+        ok.err().map(|e| e.rendered)
+    );
+    assert_eq!(
+        common::run_rendered("(module m (define x (head (list 1 2))) nil)"),
+        "nil"
     );
 }
 

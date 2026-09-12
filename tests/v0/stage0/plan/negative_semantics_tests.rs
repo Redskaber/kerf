@@ -20,7 +20,7 @@
 //!   修正归因：专门消息「嵌套 define 重复绑定」+ Span 指向第二次出现
 //!   处——原「lambda 参数重名」归因失真已消除），语义上等价 E6 的
 //!   提前防御（§2.3-4 报错>静默）；
-//! - `(define car 5)` 影子化内置全局 → E6（内置名占据全局层，
+//! - `(define head 5)` 影子化内置全局 → E6（内置名占据全局层，
 //!   同层重复定义约束对用户/内置统一生效）。
 //!
 //! 双路径消息面（TD-018 r24 统一后）：
@@ -141,7 +141,7 @@ fn e3_unbound_all_contexts() {
     expect_run_err("(set! undefined_s 1)", "set! 未绑定变量");
     expect_run_err("(define (g) (set! undefined_h 1)) (g)", "set! 未绑定变量");
     expect_run_err("(+ 1 undefined_n)", "未绑定");
-    expect_run_err("(car undefined_p)", "未绑定");
+    expect_run_err("(head undefined_p)", "未绑定");
     expect_run_err("((lambda (x) undefined_q) 1)", "未绑定");
 }
 
@@ -192,7 +192,7 @@ fn e4_not_callable_all_types() {
 #[test]
 fn e4_not_callable_computed_callee() {
     expect_run_err("((if true 1 2) 3)", "不可调用");
-    expect_run_err("((car (cons 5 6)) 7)", "不可调用");
+    expect_run_err("((head (cons 5 6)) 7)", "不可调用");
     expect_run_err("(define (f) 5) ((f) 1)", "不可调用");
 }
 
@@ -205,9 +205,9 @@ fn e4_not_callable_computed_callee() {
 fn e5_builtin_error_matrix() {
     expect_run_err("(/ 1 0)", "整数除零");
     expect_run_err("(mod 5 0)", "整数取模除零");
-    expect_run_err("(car 5)", "car 需要 pair");
-    expect_run_err("(cdr \"s\")", "cdr 需要 pair");
-    expect_run_err("(str-append 1 \"a\")", "str-append 需要");
+    expect_run_err("(head 5)", "head 需要 pair");
+    expect_run_err("(tail \"s\")", "tail 需要 pair");
+    expect_run_err("(string-append 1 \"a\")", "string-append 需要");
 }
 
 // ---------------------------------------------------------------------------
@@ -221,8 +221,8 @@ fn e6_duplicate_define_matrix() {
     expect_run_err("(define x 1) (define x 2)", "重复定义变量");
     expect_run_err("(define x 1) (define x \"s\")", "重复定义变量");
     expect_run_err("(define (f) 1) (define f 2)", "重复定义变量");
-    expect_run_err("(define car 5)", "重复定义变量"); // 内置名占全局层
-    expect_run_err("(define cdr 5)", "重复定义变量");
+    expect_run_err("(define head 5)", "重复定义变量"); // 内置名占全局层
+    expect_run_err("(define tail 5)", "重复定义变量");
     expect_run_err("(define n 1) (set! n 5) (define n 2)", "重复定义变量");
     expect_run_err("(begin (define b 1) (define b 2))", "重复定义变量");
     // 嵌套重复：直接体 define 提升后展开期拒绝（TD-014 r24：专门消息
@@ -323,7 +323,7 @@ fn message_shape_call_site_trace() {
     // 追踪链消失（优化帧不出栈迹——GCC/clang -O2 同行为）；本测试
     // 验证的是多帧追踪渲染面，故走非尾形态。）
     let two = run_source(
-        "(define (f n) (car n)) (define (g) (+ 0 (f 5))) (g)",
+        "(define (f n) (head n)) (define (g) (+ 0 (f 5))) (g)",
         "t.krf",
     )
     .err()
@@ -395,15 +395,15 @@ fn t1_regression_app_evaluation_order() {
     assert!(vm.diagnostic.primary_span.start < 16, "生产链应报 fn 位");
     assert!(ev.diagnostic.primary_span.start < 16, "种子链应报 fn 位");
     // fn 位类型错误先于参数位（fn 表达式自身报错）
-    expect_dual_err("((car 1) undefined-b)");
-    let vm2 = run_source("((car 1) undefined-b)", "o.krf").err().unwrap();
+    expect_dual_err("((head 1) undefined-b)");
+    let vm2 = run_source("((head 1) undefined-b)", "o.krf").err().unwrap();
     assert!(
-        vm2.rendered.contains("car 需要 pair"),
+        vm2.rendered.contains("head 需要 pair"),
         "fn 位错误应先报：\n{}",
         vm2.rendered
     );
     // fn 合法 + 参数错误（顺序不影响结果，但两路径同报参数错）
-    expect_dual_err("(car undefined-arg)");
+    expect_dual_err("(head undefined-arg)");
     // fn 位不可调用（E4）先于参数求值
     expect_dual_err("((if true 5 6) undefined-x)");
 }
@@ -461,13 +461,13 @@ fn scope_closure_negatives() {
 #[test]
 fn error_recovery_single_error_semantics() {
     // begin 中段错误：后续形式不求值（错误即吸收——E0）
-    let err = run_source("(begin 1 (car 5) 2)", "r.krf").err().unwrap();
+    let err = run_source("(begin 1 (head 5) 2)", "r.krf").err().unwrap();
     assert_eq!(err.stage, Stage::Run);
-    assert!(err.rendered.contains("car 需要 pair"));
+    assert!(err.rendered.contains("head 需要 pair"));
     // 首个错误优先（前错遮蔽后错）
-    let first = run_source("(car 1) (cdr 2)", "r.krf").err().unwrap();
+    let first = run_source("(head 1) (tail 2)", "r.krf").err().unwrap();
     assert!(
-        first.rendered.contains("car 需要 pair"),
+        first.rendered.contains("head 需要 pair"),
         "首错应先报：\n{}",
         first.rendered
     );
@@ -485,7 +485,7 @@ fn error_recovery_single_error_semantics() {
 #[test]
 fn error_recovery_no_panics_structured() {
     for src in [
-        "(car nil)",
+        "(head nil)",
         "(/ 1 0)",
         "(define x 1) (define x 1)",
         "((lambda (x) x) 1 2 3 4 5)",
@@ -500,18 +500,18 @@ fn error_recovery_no_panics_structured() {
 // T17-a 对抗深挖回归（D2/D7——双路径健全性修复面）
 // ---------------------------------------------------------------------------
 
-/// D2 回归：eq? 字符串按内容比较（修复前 VM 常量池去重 → true /
+/// D2 回归：eq 字符串按内容比较（修复前 VM 常量池去重 → true /
 /// eval 独立分配 → false——指针比较分裂，违反 T1 与「即时值按值」）。
 #[test]
 fn d2_eq_string_content_semantics() {
     // 同内容字面量：双路径均 true
-    let src = "(eq? \"a\" \"a\")";
+    let src = "(eq \"a\" \"a\")";
     let vm = common::run(src).expect("VM 应 Ok");
     assert!(matches!(vm, Value::Bool(true)), "VM 同内容应 true");
     let ev = kerf_driver::run_source_seed(src, "d2.krf").expect("种子链应 Ok");
     assert!(matches!(ev.value, Value::Bool(true)), "种子链同内容应 true");
     // 构造字符串 vs 字面量：内容相等 → true（双路径一致）
-    let src2 = "(eq? \"ab\" (str-append \"a\" \"b\"))";
+    let src2 = "(eq \"ab\" (string-append \"a\" \"b\"))";
     assert!(
         common::dual_path_agrees(src2),
         "构造字符串内容比较双路径一致"
@@ -519,10 +519,10 @@ fn d2_eq_string_content_semantics() {
     let v = common::run(src2).expect("应 Ok");
     assert!(matches!(v, Value::Bool(true)), "内容相等应 true");
     // 不同内容 → false（负例）
-    let v2 = common::run("(eq? \"a\" \"b\")").expect("应 Ok");
+    let v2 = common::run("(eq \"a\" \"b\")").expect("应 Ok");
     assert!(matches!(v2, Value::Bool(false)));
     // 堆值按引用（序对）语义不受影响
-    let v3 = common::run("(eq? (cons 1 2) (cons 1 2))").expect("应 Ok");
+    let v3 = common::run("(eq (cons 1 2) (cons 1 2))").expect("应 Ok");
     assert!(matches!(v3, Value::Bool(false)), "堆值（序对）仍按引用");
 }
 

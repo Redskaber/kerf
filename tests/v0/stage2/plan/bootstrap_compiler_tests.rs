@@ -132,7 +132,7 @@ fn parity_literals() {
 
 #[test]
 fn parity_quote_symbols_and_pairs() {
-    // 引号点对递归（设计 §4 S1 特化 case：先 car 后 cdr 对齐 MAKE_PAIR；
+    // 引号点对递归（设计 §4 S1 特化 case：先 head 后 tail 对齐 MAKE_PAIR；
     // 注：Reader 不支持点对字面量语法——quote 产物 = 尾 nil 的序对链，
     // 嵌套点对经嵌套列表 datum 构造）
     for src in [
@@ -479,17 +479,17 @@ fn behavior_higher_order() {
     // higher_order.krf 核心语义：map/filter 经显式递归 + 闭包实参
     behavior(
         "(define (map f lst)
-            (if (null? lst)
+            (if (is-nil lst)
                 nil
-                (cons (f (car lst)) (map f (cdr lst)))))
+                (cons (f (head lst)) (map f (tail lst)))))
          (define (filter pred lst)
-            (cond ((null? lst) nil)
-                  ((pred (car lst)) (cons (car lst) (filter pred (cdr lst))))
-                  (else (filter pred (cdr lst)))))
+            (cond ((is-nil lst) nil)
+                  ((pred (head lst)) (cons (head lst) (filter pred (tail lst))))
+                  (else (filter pred (tail lst)))))
          (define (even? n) (= (mod n 2) 0))
          (map (lambda (x) (* x x)) (quote (1 2 3 4 5)))",
     );
-    behavior("(define (map f lst) (if (null? lst) nil (cons (f (car lst)) (map f (cdr lst))))) (map (lambda (x) (+ x 1)) '(1 2 3))");
+    behavior("(define (map f lst) (if (is-nil lst) nil (cons (f (head lst)) (map f (tail lst))))) (map (lambda (x) (+ x 1)) '(1 2 3))");
 }
 
 #[test]

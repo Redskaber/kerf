@@ -45,7 +45,7 @@ fn live_data_survives_collections() {
         (define (spin n)
           (if (= n 0) 0 (begin (cons 9 9) (cons 9 9) (cons 9 9) (cons 9 9) (cons 9 9) (spin (- n 1)))))
         (spin 50000)
-        (car (cdr (cdr (cdr (cdr keep)))))
+        (head (tail (tail (tail (tail keep)))))
     "#;
     common::assert_int(src, 5);
 }
@@ -59,7 +59,7 @@ fn closure_captured_data_survives_gc() {
         (define (spin n)
           (if (= n 0) 0 (begin (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (spin (- n 1)))))
         (spin 50000)
-        (car (h))
+        (head (h))
     "#;
     common::assert_int(src, 7);
 }
@@ -113,12 +113,12 @@ fn gc_stats_observable() {
 #[test]
 fn boxed_closure_captures_survive_gc() {
     let src = r#"
-        (define (make-box) (let ((cell (cons 42 nil))) (lambda () (car cell))))
+        (define (make-box) (let ((cell (cons 42 nil))) (lambda () (head cell))))
         (define holder (cons (make-box) nil))
         (define (spin n)
           (if (= n 0) 0 (begin (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (cons 1 1) (spin (- n 1)))))
         (spin 50000)
-        ((car holder))
+        ((head holder))
     "#;
     let outcome = common::run_with_heap(src).unwrap_or_else(|e| panic!("执行失败：{}", e));
     let stats = outcome.heap.stats();
@@ -131,12 +131,12 @@ fn boxed_closure_captures_survive_gc() {
 #[test]
 fn boxed_closure_trace_transitive_pairs() {
     let src = r#"
-        (define (make-get) (let ((p (cons 40 (cons 2 nil)))) (lambda (x) (+ x (car p)))))
+        (define (make-get) (let ((p (cons 40 (cons 2 nil)))) (lambda (x) (+ x (head p)))))
         (define holder (list (make-get)))
         (define (spin n)
           (if (= n 0) 0 (begin (cons 2 2) (cons 2 2) (cons 2 2) (cons 2 2) (cons 2 2) (spin (- n 1)))))
         (spin 50000)
-        ((car holder) 0)
+        ((head holder) 0)
     "#;
     common::assert_int(src, 40);
 }
@@ -151,9 +151,9 @@ fn gc_cell_flag_flips_on_pair_write() {
         (define (make)
           (let ((box nil))
             (lambda (cmd)
-              (if (eq? cmd (quote init))
+              (if (eq cmd (quote init))
                   (set! box (list 42))
-                  (car box)))))
+                  (head box)))))
         (define f (make))
         (f (quote init))
         (define (spin n)

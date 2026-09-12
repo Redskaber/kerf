@@ -8,4 +8,4 @@
         (cons 11 12) (cons 13 14) (cons 15 16) (cons 17 18) (cons 19 20)
         (spin (- n 1)))))
 (spin 30000)
-(car (cdr (cdr (cdr (cdr keep)))))   ; ⇒ 5：存活数据跨 GC 完好
+(head (tail (tail (tail (tail keep)))))   ; ⇒ 5：存活数据跨 GC 完好

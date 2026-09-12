@@ -64,58 +64,58 @@
 ; ===== 序章：高阶函数（expander.krf 同款）=====
 
 (define (map f lst)
-  (if (null? lst)
+  (if (is-nil lst)
       nil
-      (cons (f (car lst)) (map f (cdr lst)))))
+      (cons (f (head lst)) (map f (tail lst)))))
 
 (define (filter pred lst)
-  (if (null? lst)
+  (if (is-nil lst)
       nil
-      (if (pred (car lst))
-          (cons (car lst) (filter pred (cdr lst)))
-          (filter pred (cdr lst)))))
+      (if (pred (head lst))
+          (cons (head lst) (filter pred (tail lst)))
+          (filter pred (tail lst)))))
 
 (define (foldl f init lst)
-  (if (null? lst)
+  (if (is-nil lst)
       init
-      (foldl f (f init (car lst)) (cdr lst))))
+      (foldl f (f init (head lst)) (tail lst))))
 
 ; ===== 列表访问 =====
 
-(define (first x) (car x))
-(define (second x) (car (cdr x)))
-(define (third x) (car (cdr (cdr x))))
-(define (fourth x) (car (cdr (cdr (cdr x)))))
-(define (fifth x) (car (cdr (cdr (cdr (cdr x))))))
-(define (sixth x) (car (cdr (cdr (cdr (cdr (cdr x)))))))
-(define (seventh x) (car (cdr (cdr (cdr (cdr (cdr (cdr x))))))))
-(define (eighth x) (car (cdr (cdr (cdr (cdr (cdr (cdr (cdr x)))))))))
+(define (first x) (head x))
+(define (second x) (head (tail x)))
+(define (third x) (head (tail (tail x))))
+(define (fourth x) (head (tail (tail (tail x)))))
+(define (fifth x) (head (tail (tail (tail (tail x))))))
+(define (sixth x) (head (tail (tail (tail (tail (tail x)))))))
+(define (seventh x) (head (tail (tail (tail (tail (tail (tail x))))))))
+(define (eighth x) (head (tail (tail (tail (tail (tail (tail (tail x)))))))))
 
 ; 节点固定字段：tag s e exp；fields = 其后内容（四头字段协议——core
 ; 节点形态，与 expander.krf 输出一致）
-(define (node-tag n) (car n))
+(define (node-tag n) (head n))
 (define (node-s n) (second n))
 (define (node-e n) (third n))
 (define (node-exp n) (fourth n))
-(define (node-fields n) (cdr (cdr (cdr (cdr n)))))
+(define (node-fields n) (tail (tail (tail (tail n)))))
 
 ; 去尾（作用域帧弹出——帧表按出现序）
-(define (drop-last lst) (reverse (cdr (reverse lst))))
+(define (drop-last lst) (reverse (tail (reverse lst))))
 
 ; member 命中返回子表 / 未命中返回 false——contains? 归一为布尔
 ; （truthy 语义仅 Bool，不能直接以 member 结果作条件）
 (define (contains? x lst)
-  (not (bool? (member x lst))))
+  (not (is-bool (member x lst))))
 
 ; assoc 命中返回键值对 / 未命中返回 false——idx-lookup 未命中归一 nil
 (define (idx-lookup key al)
   (let ((r (assoc key al)))
-    (if (bool? r) nil r)))
+    (if (is-bool r) nil r)))
 
 ; 错误值构造与判别（契约：('err 消息 起始 结束)）
 (define (cerr msg s e) (list 'err msg s e))
 (define (err? v)
-  (and (pair? v) (eq? (car v) 'err)))
+  (and (is-pair v) (eq (head v) 'err)))
 
 ; ===== 操作码常量（opcode.rs 声明序 0..=42——桥侧同表映射 Op；
 ; r25/42-f：41/42 效应两指令（INSTALL_HANDLER 四操作数 / PERFORM）=====
@@ -231,17 +231,17 @@
 ; 替换逆序码表中第 k 位指令的目标操作数（Jump/JumpIfFalse 恰一操作数）
 (define (patch-code lst k target)
   (if (= k 0)
-      (cons (list 'op (second (car lst)) target) (cdr lst))
-      (cons (car lst) (patch-code (cdr lst) (- k 1) target))))
+      (cons (list 'op (second (head lst)) target) (tail lst))
+      (cons (head lst) (patch-code (tail lst) (- k 1) target))))
 
 ; 从回填队列移除匹配 (原型 pc) 项
 (define (remove-patch patches p c)
-  (if (null? patches)
+  (if (is-nil patches)
       nil
-      (let ((ent (car patches)))
-        (if (and (= (car ent) p) (= (cdr ent) c))
-            (remove-patch (cdr patches) p c)
-            (cons ent (remove-patch (cdr patches) p c))))))
+      (let ((ent (head patches)))
+        (if (and (= (head ent) p) (= (tail ent) c))
+            (remove-patch (tail patches) p c)
+            (cons ent (remove-patch (tail patches) p c))))))
 
 ; 原型记录按索引替换（窗口切换回写）
 (define (proto-set-at! idx rec)
@@ -249,38 +249,38 @@
 
 (define (proto-set-loop lst idx rec k)
   (if (= k idx)
-      (cons rec (cdr lst))
-      (cons (car lst) (proto-set-loop (cdr lst) idx rec (+ k 1)))))
+      (cons rec (tail lst))
+      (cons (head lst) (proto-set-loop (tail lst) idx rec (+ k 1)))))
 
 ; ===== 常量池（镜像 ConstPool::intern——按值去重，首次插入序即索引）=====
 
-; 结构相等（eq? 对序对是引用相等——const 节点需逐字段递归比较；
+; 结构相等（eq 对序对是引用相等——const 节点需逐字段递归比较；
 ; Float 按 f64 == 语义镜像 Rust HashMap 的 Hash+Eq 去重行为：
 ; +0.0/-0.0 去重合一、NaN 永不去重）
 (define (const-eq? a b)
-  (if (eq? (second a) (second b))
+  (if (eq (second a) (second b))
       (let ((ta (third a)) (tb (third b)))
-        (cond ((eq? (second a) 'int) (eq? ta tb))
-              ((eq? (second a) 'float) (eq? ta tb))
-              ((eq? (second a) 'str) (eq? ta tb))
-              ((eq? (second a) 'sym) (eq? ta tb))
-              ((eq? (second a) 'symlit) (eq? ta tb))
-              ((eq? (second a) 'bool) (eq? ta tb))
+        (cond ((eq (second a) 'int) (eq ta tb))
+              ((eq (second a) 'float) (eq ta tb))
+              ((eq (second a) 'str) (eq ta tb))
+              ((eq (second a) 'sym) (eq ta tb))
+              ((eq (second a) 'symlit) (eq ta tb))
+              ((eq (second a) 'bool) (eq ta tb))
               ; 'nil 常量形态永不构造（Bool/Nil 直发指令不进池——
               ; 种子同口径）；nil 字面量标记在 kerf 中非符号，此处不可比
               (else false)))
       false))
 
 (define (const-index-of cnode consts i)
-  (if (null? consts)
+  (if (is-nil consts)
       nil
-      (if (const-eq? cnode (car consts))
+      (if (const-eq? cnode (head consts))
           i
-          (const-index-of cnode (cdr consts) (+ i 1)))))
+          (const-index-of cnode (tail consts) (+ i 1)))))
 
 (define (intern-const cnode)
   (let ((idx (const-index-of cnode CC-CONSTS 0)))
-    (if (null? idx)
+    (if (is-nil idx)
         (let ((i (length CC-CONSTS)))
           (begin
             (set! CC-CONSTS (append CC-CONSTS (list cnode)))
@@ -291,13 +291,13 @@
 
 (define (intern-global namestr)
   (let ((hit (idx-lookup namestr CC-GLOBAL-IDX)))
-    (if (null? hit)
+    (if (is-nil hit)
         (let ((i (intern-const (list 'const 'sym namestr))))
           (begin
             (set! CC-GLOBAL-REFS (append CC-GLOBAL-REFS (list namestr)))
             (set! CC-GLOBAL-IDX (cons (cons namestr i) CC-GLOBAL-IDX))
             i))
-        (cdr hit))))
+        (tail hit))))
 
 ; ===== 作用域解析机（镜像 match_bindings + resolve_var——TD-004/r13）=====
 
@@ -307,25 +307,25 @@
   (mb-loop bindings name ref-scopes 0 nil 0))
 
 (define (mb-loop bindings name ref-scopes i best best-rank)
-  (if (null? bindings)
+  (if (is-nil bindings)
       best
-      (let ((b (car bindings)))
-        (if (and (eq? (car b) name) (scope-subset? (cdr b) ref-scopes))
-            (let ((rank (length (cdr b))))
-              (if (or (null? best) (> rank best-rank))
-                  (mb-loop (cdr bindings) name ref-scopes (+ i 1)
-                           (cons i (cdr b)) rank)
-                  (mb-loop (cdr bindings) name ref-scopes (+ i 1)
+      (let ((b (head bindings)))
+        (if (and (eq (head b) name) (scope-subset? (tail b) ref-scopes))
+            (let ((rank (length (tail b))))
+              (if (or (is-nil best) (> rank best-rank))
+                  (mb-loop (tail bindings) name ref-scopes (+ i 1)
+                           (cons i (tail b)) rank)
+                  (mb-loop (tail bindings) name ref-scopes (+ i 1)
                            best best-rank)))
-            (mb-loop (cdr bindings) name ref-scopes (+ i 1)
+            (mb-loop (tail bindings) name ref-scopes (+ i 1)
                      best best-rank)))))
 
 ; 作用域集子集判定（binder ⊆ ref——逐元素成员检查）
 (define (scope-subset? sub ref)
-  (if (null? sub)
+  (if (is-nil sub)
       true
-      (if (contains? (car sub) ref)
-          (scope-subset? (cdr sub) ref)
+      (if (contains? (head sub) ref)
+          (scope-subset? (tail sub) ref)
           false)))
 
 ; 帧栈自顶（内层）向下解析；帧 0 仅局部（main 原型帧不构成闭包语义）；
@@ -338,21 +338,21 @@
            (- (length CC-SCOPES) 1)))
 
 (define (rv-loop frames name ref-scopes fi)
-  (if (null? frames)
+  (if (is-nil frames)
       (list 'global nil)
-      (let ((frame (car frames)))
+      (let ((frame (head frames)))
         (if (= fi 0)
-            (let ((m (match-bindings (car frame) name ref-scopes)))
-              (if (null? m)
-                  (rv-loop (cdr frames) name ref-scopes (- fi 1))
-                  (list 'local (car m) (cdr m))))
-            (let ((ml (match-bindings (car frame) name ref-scopes)))
-              (if (null? ml)
-                  (let ((mc (match-bindings (cdr frame) name ref-scopes)))
-                    (if (null? mc)
-                        (rv-loop (cdr frames) name ref-scopes (- fi 1))
-                        (list 'captured (car mc) (cdr mc))))
-                  (list 'local (car ml) (cdr ml))))))))
+            (let ((m (match-bindings (head frame) name ref-scopes)))
+              (if (is-nil m)
+                  (rv-loop (tail frames) name ref-scopes (- fi 1))
+                  (list 'local (head m) (tail m))))
+            (let ((ml (match-bindings (head frame) name ref-scopes)))
+              (if (is-nil ml)
+                  (let ((mc (match-bindings (tail frame) name ref-scopes)))
+                    (if (is-nil mc)
+                        (rv-loop (tail frames) name ref-scopes (- fi 1))
+                        (list 'captured (head mc) (tail mc))))
+                  (list 'local (head ml) (tail ml))))))))
 
 ; ===== 自由变量出现（镜像 free_var_occurrences——绑定屏蔽 + letrec* 序）=====
 ; CC-BOUND = LIFO 列表（cons 头 = 最近绑定 = Rust Vec 尾）；CC-FREE =
@@ -370,15 +370,15 @@
   (if (= n 0)
       nil
       (begin
-        (set! CC-BOUND (cdr CC-BOUND))
+        (set! CC-BOUND (tail CC-BOUND))
         (fvo-pop! (- n 1)))))
 
 (define (fvo-has-name? free namestr)
-  (if (null? free)
+  (if (is-nil free)
       false
-      (if (eq? (car (car free)) namestr)
+      (if (eq (head (head free)) namestr)
           true
-          (fvo-has-name? (cdr free) namestr))))
+          (fvo-has-name? (tail free) namestr))))
 
 (define (fvo-push-free! namestr scopes)
   (if (and (not (contains? namestr CC-BOUND))
@@ -387,47 +387,47 @@
       nil))
 
 (define (fvo-node node)
-  (let ((tag (symbol->string (node-tag node)))
+  (let ((tag (symbol-to-string (node-tag node)))
         (fields (node-fields node)))
     (cond
-      ((eq? tag "var")
+      ((eq tag "var")
        (fvo-push-free! (first fields) (second fields)))
-      ((eq? tag "lit") nil)
-      ((eq? tag "lambda")
+      ((eq tag "lit") nil)
+      ((eq tag "lambda")
        (let ((shadowed (length (first fields))))
          (begin
            (fvo-params! (first fields))
            (fvo-node (third fields))
            (fvo-pop! shadowed))))
-      ((eq? tag "app")
+      ((eq tag "app")
        (begin
          (fvo-node (first fields))
-         (fvo-seq (cdr fields))))
-      ((eq? tag "if")
+         (fvo-seq (tail fields))))
+      ((eq tag "if")
        (begin
          (fvo-node (first fields))
          (fvo-node (second fields))
          (fvo-node (third fields))))
-      ((eq? tag "set")
+      ((eq tag "set")
        (begin
          (fvo-push-free! (first fields) (second fields))
          (fvo-node (third fields))))
-      ((eq? tag "define")
+      ((eq tag "define")
        (begin
          (fvo-node (second fields))
          (fvo-bound-add! (first fields))))
-      ((eq? tag "begin")
+      ((eq tag "begin")
        (fvo-seq fields))
-      ((eq? tag "require") nil)
-      ((eq? tag "module")
-       (fvo-seq (cdr (cdr (cdr fields)))))
+      ((eq tag "require") nil)
+      ((eq tag "module")
+       (fvo-seq (tail (tail (tail fields)))))
       ; r25/42-f 效应两臂（镜像 Rust free_var_occurrences）：perform
       ; 效应子树遍历；handle 两绑定器屏蔽 + handler/body 遍历（tag
       ; 为符号字面量非变量引用；fields 序 = tagstr pv pv-scopes rv
       ; rv-scopes handler body）
-      ((eq? tag "perform")
+      ((eq tag "perform")
        (fvo-node (first fields)))
-      ((eq? tag "handle")
+      ((eq tag "handle")
        (begin
          (fvo-bound-add! (second fields))
          (fvo-bound-add! (fourth fields))
@@ -437,18 +437,18 @@
       (else nil))))
 
 (define (fvo-params! params)
-  (if (null? params)
+  (if (is-nil params)
       nil
       (begin
-        (fvo-bound-add! (car params))
-        (fvo-params! (cdr params)))))
+        (fvo-bound-add! (head params))
+        (fvo-params! (tail params)))))
 
 (define (fvo-seq items)
-  (if (null? items)
+  (if (is-nil items)
       nil
       (begin
-        (fvo-node (car items))
-        (fvo-seq (cdr items)))))
+        (fvo-node (head items))
+        (fvo-seq (tail items)))))
 
 ; ===== Lambda 编译（镜像 compile_lambda——闭包捕获转换 §8.5/§19.3）=====
 
@@ -456,15 +456,15 @@
 ; 命中绑定的绑定作用域集）；Global → 原型内全局引用（零捕获）。
 ; 自由变量总表（含全局引用名）恒记录。
 (define (capture-resolve-loop free)
-  (if (null? free)
+  (if (is-nil free)
       nil
-      (let ((nm (car (car free)))
-            (sc (cdr (car free))))
+      (let ((nm (head (head free)))
+            (sc (tail (head free))))
         (begin
           (set! CC-FREEVARS (cons nm CC-FREEVARS))
           (let ((r (resolve-var nm sc)))
             (begin
-              (if (eq? (car r) 'local)
+              (if (eq (head r) 'local)
                   (begin
                     (set! CC-CAP-NAMES (cons nm CC-CAP-NAMES))
                     (set! CC-CAP-BINDINGS
@@ -472,7 +472,7 @@
                     (set! CC-CAP-SRCS
                       (cons (list 'local (second r)) CC-CAP-SRCS)))
                   nil)
-              (if (eq? (car r) 'captured)
+              (if (eq (head r) 'captured)
                   (begin
                     (set! CC-CAP-NAMES (cons nm CC-CAP-NAMES))
                     (set! CC-CAP-BINDINGS
@@ -480,7 +480,7 @@
                     (set! CC-CAP-SRCS
                       (cons (list 'captured (second r)) CC-CAP-SRCS)))
                   nil)
-              (capture-resolve-loop (cdr free))))))))
+              (capture-resolve-loop (tail free))))))))
 
 ; 形参绑定（绑定作用域集 = param_scopes[i]，缺失容错为空集——镜像
 ; param_scopes.get(i).cloned().unwrap_or_default()）
@@ -488,24 +488,24 @@
   (pb-loop paramstrs paramscopes 0))
 
 (define (pb-loop paramstrs paramscopes i)
-  (if (null? paramstrs)
+  (if (is-nil paramstrs)
       nil
-      (cons (cons (car paramstrs)
+      (cons (cons (head paramstrs)
                   (if (< i (length paramscopes))
                       (nth-or-nil paramscopes i)
                       nil))
-            (pb-loop (cdr paramstrs) paramscopes (+ i 1)))))
+            (pb-loop (tail paramstrs) paramscopes (+ i 1)))))
 
 (define (nth-or-nil lst k)
   (if (= k 0)
-      (car lst)
-      (nth-or-nil (cdr lst) (- k 1))))
+      (head lst)
+      (nth-or-nil (tail lst) (- k 1))))
 
 ; 原型名形：首个形参名 / 无参匿名标记
 (define (proto-name-form paramstrs)
-  (if (null? paramstrs)
+  (if (is-nil paramstrs)
       (list 'anon)
-      (list 'name (car paramstrs))))
+      (list 'name (head paramstrs))))
 
 (define (compile-lambda fields s e x)
   (let ((paramstrs (first fields))
@@ -576,53 +576,53 @@
 ; 形参表 → LIFO 绑定列表（(pn ... p1 p0)——镜像 params.to_vec() 的
 ; Vec 尾部 LIFO 语义）
 (define (params->bound params acc)
-  (if (null? params)
+  (if (is-nil params)
       acc
-      (params->bound (cdr params) (cons (car params) acc))))
+      (params->bound (tail params) (cons (head params) acc))))
 
 ; ===== 表达式编译（镜像 compile_expr——八臂；栈平衡不变式 1）=====
 
-(define (compile-expr node tail)
-  (let ((tag (symbol->string (node-tag node)))
+(define (compile-expr node tail-pos)
+  (let ((tag (symbol-to-string (node-tag node)))
         (s (node-s node))
         (e (node-e node))
         (x (node-exp node))
         (fields (node-fields node)))
     (cond
-      ; ---- Literal（含引号点对递归——先 car 后 cdr 压栈对齐 MAKE_PAIR）----
-      ((eq? tag "lit") (compile-lit (first fields) s e x))
+      ; ---- Literal（含引号点对递归——先 head 后 tail-pos 压栈对齐 MAKE_PAIR）----
+      ((eq tag "lit") (compile-lit (first fields) s e x))
       ; ---- VarRef（解析 → LoadLocal/LoadCaptured/LoadGlobal）----
-      ((eq? tag "var") (compile-var (first fields) (second fields) s e x))
+      ((eq tag "var") (compile-var (first fields) (second fields) s e x))
       ; ---- Lambda ----
-      ((eq? tag "lambda") (compile-lambda fields s e x))
+      ((eq tag "lambda") (compile-lambda fields s e x))
       ; ---- App（求值顺序契约：被调函数先，参数从左到右；尾位 TailCall）----
-      ((eq? tag "app")
+      ((eq tag "app")
        (let ((rf (compile-expr (first fields) false)))
          (if (err? rf)
              rf
-             (compile-app-args (cdr fields) (- (length fields) 1)
-                               s e x tail))))
+             (compile-app-args (tail fields) (- (length fields) 1)
+                               s e x tail-pos))))
       ; ---- If（跳转回填：j_false → then → j_end → patch j_false →
       ;        else → patch j_end；两臂继承尾位）----
-      ((eq? tag "if")
+      ((eq tag "if")
        (let ((rc (compile-expr (first fields) false)))
          (if (err? rc)
              rc
              (let ((jf (emit-jump OP-JUMP-IF-FALSE s e x)))
-               (let ((rt (compile-expr (second fields) tail)))
+               (let ((rt (compile-expr (second fields) tail-pos)))
                  (if (err? rt)
                      rt
                      (let ((je (emit-jump OP-JUMP s e x)))
                        (begin
                          (patch-jump jf)
-                         (let ((re (compile-expr (third fields) tail)))
+                         (let ((re (compile-expr (third fields) tail-pos)))
                            (if (err? re)
                                re
                                (begin
                                  (patch-jump je)
                                  nil)))))))))))
       ; ---- Set!（值 → DUP → 存储；目标解析与 VarRef 同一口径）----
-      ((eq? tag "set")
+      ((eq tag "set")
        (let ((rv (compile-expr (third fields) false)))
          (if (err? rv)
              rv
@@ -630,9 +630,9 @@
                (emit! (list 'op OP-DUP) s e x)
                (let ((r (resolve-var (first fields) (second fields))))
                  (cond
-                   ((eq? (car r) 'local)
+                   ((eq (head r) 'local)
                     (emit! (list 'op OP-STORE-LOCAL (second r)) s e x))
-                   ((eq? (car r) 'captured)
+                   ((eq (head r) 'captured)
                     (emit! (list 'op OP-STORE-CAPTURED (second r)) s e x))
                    (else
                     (emit! (list 'op OP-STORE-GLOBAL
@@ -640,7 +640,7 @@
                            s e x))))))))
       ; ---- Define（仅入口原型：值 → DUP → DefineGlobal；函数体内
       ;        结构化拒绝——D1 全局泄漏防护，两路径同报）----
-      ((eq? tag "define")
+      ((eq tag "define")
        (if (not (= CC-CUR 0))
            (cerr "define 仅允许出现在顶层或函数体头部（begin/表达式位置包裹的 define 不合法——嵌套 define 请置于体头部）"
                  s e)
@@ -654,25 +654,25 @@
                           s e x))))))
       ; ---- Begin（末项继承尾位——begin 尾调用 = 尾调用；中间值弹出
       ;        span = 项自身 Span）----
-      ((eq? tag "begin")
-       (if (null? fields)
+      ((eq tag "begin")
+       (if (is-nil fields)
            (emit! (list 'op OP-PUSH-NIL) s e x)
-           (compile-begin-seq fields 0 (length fields) tail)))
+           (compile-begin-seq fields 0 (length fields) tail-pos)))
       ; ---- Module（Stage 0 单模块语义：体 inline——逐项非尾位编译 +
       ;        中间值 Pop（span = 项自身 Span）；空体 PushNil（span =
       ;        module 自身 Span）；首原型名覆写 '<main>' 值等价无操作
       ;        注记——镜像 compile.rs:416 逐语义）----
-      ((eq? tag "module")
-       (compile-module-body (cdr (cdr (cdr fields))) s e x))
+      ((eq tag "module")
+       (compile-module-body (tail (tail (tail fields))) s e x))
       ; ---- Require（r8 能力声明：求值恒 nil（零副作用）——PushNil
       ;        保持顶层「每形式一值」栈不变式（与 eval 路径 Ok(Nil)
       ;        一致，T1 双路径口径；权限验证已在 driver 前端 R9/E0006
       ;        完成——编译段零感知，与种子同口径）----
-      ((eq? tag "require")
+      ((eq tag "require")
        (emit! (list 'op OP-PUSH-NIL) s e x))
       ; ---- Perform（r25/42-f——R10：效应值先求值 → PERFORM；恒非尾
       ;        位：控制转移后未恢复则本表达式永不完成）----
-      ((eq? tag "perform")
+      ((eq tag "perform")
        (let ((rf (compile-expr (first fields) false)))
          (if (err? rf)
              rf
@@ -682,83 +682,83 @@
       ; ---- Handle（r25/42-f——D6 三原型帧编排：T 惰性 → H → B →
       ;        INSTALL_HANDLER 原子发射（fields 序 = tagstr pv
       ;        pv-scopes rv rv-scopes handler body））----
-      ((eq? tag "handle")
+      ((eq tag "handle")
        (compile-handle fields s e x))
       (else
-       (cerr (str-append "未知 core 节点种类：" tag) s e)))))
+       (cerr (string-append "未知 core 节点种类：" tag) s e)))))
 
-(define (compile-app-args args argc s e x tail)
-  (if (null? args)
-      (emit! (list 'op (if tail OP-TAIL-CALL OP-CALL) argc) s e x)
-      (let ((r (compile-expr (car args) false)))
+(define (compile-app-args args argc s e x tail-pos)
+  (if (is-nil args)
+      (emit! (list 'op (if tail-pos OP-TAIL-CALL OP-CALL) argc) s e x)
+      (let ((r (compile-expr (head args) false)))
         (if (err? r)
             r
-            (compile-app-args (cdr args) argc s e x tail)))))
+            (compile-app-args (tail args) argc s e x tail-pos)))))
 
-(define (compile-begin-seq items idx total tail)
-  (if (null? items)
+(define (compile-begin-seq items idx total tail-pos)
+  (if (is-nil items)
       nil
-      (let ((r (compile-expr (car items)
-                             (and tail (= (+ idx 1) total)))))
+      (let ((r (compile-expr (head items)
+                             (and tail-pos (= (+ idx 1) total)))))
         (if (err? r)
             r
             (if (< (+ idx 1) total)
                 (begin
                   (emit! (list 'op OP-POP)
-                         (node-s (car items)) (node-e (car items))
-                         (node-exp (car items)))
-                  (compile-begin-seq (cdr items) (+ idx 1) total tail))
-                (compile-begin-seq (cdr items) (+ idx 1) total tail))))))
+                         (node-s (head items)) (node-e (head items))
+                         (node-exp (head items)))
+                  (compile-begin-seq (tail items) (+ idx 1) total tail-pos))
+                (compile-begin-seq (tail items) (+ idx 1) total tail-pos))))))
 
 ; module 体 inline（镜像 CoreExpr::Module 臂——逐项恒 tail=false 编译
 ; （区别于 begin 末项继承尾位：module 项不构成尾位——TCO 不参与）+
 ; 中间值 Pop（span = 项自身 Span）；空体 PushNil（span = module Span））
 (define (compile-module-body items s e x)
-  (if (null? items)
+  (if (is-nil items)
       (emit! (list 'op OP-PUSH-NIL) s e x)
       (compile-module-seq items 0 (length items))))
 
 (define (compile-module-seq items idx total)
-  (if (null? items)
+  (if (is-nil items)
       nil
-      (let ((r (compile-expr (car items) false)))
+      (let ((r (compile-expr (head items) false)))
         (if (err? r)
             r
             (if (< (+ idx 1) total)
                 (begin
                   (emit! (list 'op OP-POP)
-                         (node-s (car items)) (node-e (car items))
-                         (node-exp (car items)))
-                  (compile-module-seq (cdr items) (+ idx 1) total))
-                (compile-module-seq (cdr items) (+ idx 1) total))))))
+                         (node-s (head items)) (node-e (head items))
+                         (node-exp (head items)))
+                  (compile-module-seq (tail items) (+ idx 1) total))
+                (compile-module-seq (tail items) (+ idx 1) total))))))
 
 ; ---- 字面量（消歧标记形态分派；Bool/Nil 直发指令不进池）----
 ; 注：标记分派按名字字符串（'true/'false/'nil 在 kerf 中是 bool/nil
-; 字面量而非符号——eq? 恒假；expander.krf tname 同款纪律）
+; 字面量而非符号——eq 恒假；expander.krf tname 同款纪律）
 
 (define (compile-lit lval s e x)
-  (let ((tname (symbol->string (car lval))))
+  (let ((tname (symbol-to-string (head lval))))
     (cond
-      ((eq? tname "int")
+      ((eq tname "int")
        (emit-push-const (list 'const 'int (second lval)) s e x))
-      ((eq? tname "float")
+      ((eq tname "float")
        (emit-push-const (list 'const 'float (second lval)) s e x))
-      ((eq? tname "str")
+      ((eq tname "str")
        (emit-push-const (list 'const 'str (second lval)) s e x))
-      ((eq? tname "sym")
+      ((eq tname "sym")
        (emit-push-const (list 'const 'symlit (second lval)) s e x))
-      ((eq? tname "true")
+      ((eq tname "true")
        (emit! (list 'op OP-PUSH-TRUE) s e x))
-      ((eq? tname "false")
+      ((eq tname "false")
        (emit! (list 'op OP-PUSH-FALSE) s e x))
-      ((eq? tname "nil")
+      ((eq tname "nil")
        (emit! (list 'op OP-PUSH-NIL) s e x))
-      ((eq? tname "pair")
+      ((eq tname "pair")
        (compile-lit-pair lval s e x))
       (else
        (cerr "未知字面量标记种类" s e)))))
 
-; 引号点对递归：car 构造 → cdr 构造 → MAKE_PAIR（span = 字面量自身）
+; 引号点对递归：head 构造 → tail-pos 构造 → MAKE_PAIR（span = 字面量自身）
 (define (compile-lit-pair lval s e x)
   (let ((rc (compile-lit-val (second lval) s e x)))
     (if (err? rc)
@@ -769,8 +769,8 @@
               (emit! (list 'op OP-MAKE-PAIR) s e x))))))
 
 (define (compile-lit-val v s e x)
-  (let ((tname (symbol->string (car v))))
-    (if (eq? tname "pair")
+  (let ((tname (symbol-to-string (head v))))
+    (if (eq tname "pair")
         (compile-lit-pair v s e x)
         (compile-lit v s e x))))
 
@@ -781,9 +781,9 @@
 (define (compile-var namestr scopes s e x)
   (let ((r (resolve-var namestr scopes)))
     (cond
-      ((eq? (car r) 'local)
+      ((eq (head r) 'local)
        (emit! (list 'op OP-LOAD-LOCAL (second r)) s e x))
-      ((eq? (car r) 'captured)
+      ((eq (head r) 'captured)
        (emit! (list 'op OP-LOAD-CAPTURED (second r)) s e x))
       (else
        (emit! (list 'op OP-LOAD-GLOBAL (intern-global namestr)) s e x)))))
@@ -804,18 +804,18 @@
 
 ; 顶层形式序列：非尾位编译 + 中间值弹出（span = 形式自身）；Halt 终止
 (define (compile-toplevel nodes rem)
-  (if (null? nodes)
+  (if (is-nil nodes)
       nil
-      (let ((r (compile-expr (car nodes) false)))
+      (let ((r (compile-expr (head nodes) false)))
         (if (err? r)
             r
             (if (> rem 1)
                 (begin
                   (emit! (list 'op OP-POP)
-                         (node-s (car nodes)) (node-e (car nodes))
-                         (node-exp (car nodes)))
-                  (compile-toplevel (cdr nodes) (- rem 1)))
-                (compile-toplevel (cdr nodes) (- rem 1)))))))
+                         (node-s (head nodes)) (node-e (head nodes))
+                         (node-exp (head nodes)))
+                  (compile-toplevel (tail nodes) (- rem 1)))
+                (compile-toplevel (tail nodes) (- rem 1)))))))
 
 ; nodes（core 节点列表）→ ('prog ...) 或 ('err msg s e)
 (define (lexc-compile-program nodes)
@@ -841,19 +841,19 @@
     (set! CC-PROTOS
       (list (list (list 'main) nil 0 nil nil nil nil nil)))
     ; 空程序：PushNil（main_span = 首形式 Span 或哑元 (0 0 0)）
-    (if (null? nodes)
+    (if (is-nil nodes)
         (emit! (list 'op OP-PUSH-NIL) 0 0 0)
         nil)
-    (let ((main-s (if (null? nodes) 0 (node-s (car nodes))))
-          (main-e (if (null? nodes) 0 (node-e (car nodes))))
-          (main-x (if (null? nodes) 0 (node-exp (car nodes)))))
+    (let ((main-s (if (is-nil nodes) 0 (node-s (head nodes))))
+          (main-e (if (is-nil nodes) 0 (node-e (head nodes))))
+          (main-x (if (is-nil nodes) 0 (node-exp (head nodes)))))
       (let ((r (compile-toplevel nodes (length nodes))))
         (if (err? r)
             r
             (begin
               (emit! (list 'op OP-HALT) main-s main-e main-x)
               ; 回填完备性断言（§19.3 不变式 2）
-              (if (null? CC-PATCHES)
+              (if (is-nil CC-PATCHES)
                   (begin
                     ; main 窗口回写 + 组装输出
                     (proto-set-at! 0
@@ -892,7 +892,7 @@
 ; 程序原型序恒一致。code = [RET]，span 三元组 (0 0 0)——哨兵帧的 RET
 ; 无源位置，与 Rust Span::dummy() 对齐）
 (define (ensure-trampoline)
-  (if (null? CC-TRAMPOLINE)
+  (if (is-nil CC-TRAMPOLINE)
       (let ((idx (length CC-PROTOS)))
         (begin
           (set! CC-PROTOS
@@ -907,7 +907,7 @@
 
 ; 内层原型构造（compile-lambda 的原型段——无 CLOSURE 发射；H/B 原型
 ; 复用：自由变量分析（bound 起点 = 形参）→ 捕获解析 → 新原型 → 作用域
-; 帧压入 → 体编译（tail = true——lambda 体语义）→ 尾部 RET（span = 体
+; 帧压入 → 体编译（tail-pos = true——lambda 体语义）→ 尾部 RET（span = 体
 ; 自身 Span）→ 回写 → 弹帧 → 还原窗口。错误路径直传（入口全量复位
 ; 约定——同 compile-lambda 错误口径）
 (define (compile-inner-proto paramstrs paramscopes body)

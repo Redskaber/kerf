@@ -4884,3 +4884,48 @@ Work Log:
 
 Stage Summary:
 - **批次 M 全链闭环**（M1 r39 + M2 r40 + 深审 D10 r41 + M3 门审 r41）：837:0:0（净 +12）+ 五审计集 233 case APPROVED + 窗 M 出口条件达成；**下一步移除轮（与 E5 同窗——23 §2.2 触发表驱动）**；62-z 打包 + 62-web web 面随后
+---
+Task ID: 62-z（r41 收尾——打包 + 包内自举 + rec 树）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r41 tar.gz + 包内自举 + rec 树 04_r41 + worklog 双源
+
+Work Log:
+- r41 tar.gz（§19.3 commit-then-package 正序：git 436a2b9 先行）：**kerf-stage3-v0.8.0-r41-batchM-m3close-837tests.tar.gz（2.15MB / 352 条目）**落 download/；排除 target/.git/download/tool-results
+- **包内自举**（/tmp 全新解包）：build --release **14.45s 零告警** + **test 837:0:0 复跑**（22 套件逐二进制汇总）+ 包内五审计集 APPROVED ×5（41+50+53+46+43=233）+ CLI 一致（fib ⇒ 144 / macros ⇒ 42 / check E0005 REAL_EXIT 1 / **E0020 端到端 REAL_EXIT 1**）+ qbe 在包（tools/qbe/bin/qbe）
+- rec 树：03_stage-3_入场序列/**04_r41**（深审交付零 + M3 交付一 + 打包交付二 + 里程碑——1:8 压缩）+ 03 层 l 04 行 + root l 更新随后（62-web 承载）
+- 遵循：§19.1（规则四条）/ §19.3（三检查：§3.2 全绿 ✅ + commit 先行 ✅ + RELEASE_NOTES ✅）/ §8.6（worklog 双源）
+
+Stage Summary:
+- r41 打包门达成——M3 + 深审验收三门全过（§3.2 全绿 ✅[837:0:0] + 包内自举 ✅[837 复跑 + 五审计集 ×5 + CLI 一致 + qbe] + E2E[62-web 承载]）；62-web web 面随后
+---
+Task ID: 63-a（r42 E5 开窗设计轮——移除轮与 E5 同窗的开启载体；详录 e5-removal-round-plan.md）
+Agent: Super Z (main) — 设计裁决（ARCH-A/REC-A；PHASE 1 定位声明 v2 一次通过——磁盘实况复核：r41 全链闭环[62-a/62-b/62-z + root 62-web] @ 74ef82f/3f43d43 双仓 clean，真实指针 = 移除轮[与 E5 同窗]——v0.5-roadmap v0.5.0 末行）
+Task: E5 入口信号四核对 + 自举 parity 链保护方案 + 三腿分步计划 + 外循环投票
+
+Work Log:
+- **E5 入口信号四核对**（23 §2.2——红线 3「禁止无信号开窗」合规）：①窗 M 后 v0.6 稳定期（M3 闭环 837:0:0 + 弃用期跨版本核对[W1001 落地 v0.7 → v0.8 一稳定版全绿 → v0.9 移除——23 §3.4「弃用期最小一个稳定版本」]）②12 §2.5.1 全行终态（磁盘实况逐行核对：十二行全持终态注记或显式 DEFER 契约）③外循环投票 5/5 = 100% GO（§6.3 口径——权重 2/1.5/1/1/1）④自举 parity 链保护方案评审通过（本设计即评审对象）
+- **设计载体**：docs/develop/v0/stage-3/e5-removal-round-plan.md v1.0（新目录——stage-2 模式延续）：§1 三腿载荷定义（S1 表面/S2 关键字/S3 ADT + S4 收口——SetBang 不迁边界声明[21 §5.3 原文维持：语义等价证明在位、实现义务不迁移]）/ §2 入口信号证据表 / §3 parity 链保护方案（i1 门 A/B/C 三门复用零新造——原则 6 通用>特例；每腿断言矩阵：S1 行为 parity[沿 r38 同分派体锚] → S2 CoreExpr parity[表面/内部分离原则 31 的机器验证] → S3 字节码 parity[脱糖零语义漂移硬证明]）/ §4 分步计划 + `?`/`->` 不收紧裁定（否决记录在位——判据三条：引导私有名仍持 `->` 形态 + N0 符号宇宙层自由 + 命名检查已由 20 §5 承载）/ §6 投票记录
+- 遵循：23 §2.2/§2.3 红线 3/4（禁止无信号开窗/同窗分步验收）/ 原则 6/28/31/35 / 01 §8.3 + 21 §5.3/§5.5（迁移映射 + 出口口径）
+
+Stage Summary:
+- E5 窗合法开启：四信号全过 + parity 保护方案评审 + 投票 100% GO——三腿分步验收合同就位；S1 随本轮实施（63-b）
+---
+Task ID: 63-b（r42 E5 S1 表面腿本体——旧名 27 件退役 + E0021 + W1003 + W1001 退役 + 全语料迁移）
+Agent: Super Z (main) — 实施（DEV-A/QA-A/REC-A）
+Task: 旧名 27 件移除（REMOVED_BUILTIN_NAMES + E0021）+ W1003 宏名遮蔽警告 + W1001 下线 + 引导语料 ×4/测试 ~350 处迁移 + 负例组 27 名全覆盖 + §3.2 六命令 + 审计 + CLI
+
+Work Log:
+- **注册面退役**：builtins.rs 主注册 27 对旧名→现代名迁移（含分派体名 + one_arg/two_args + 错误消息——`car 需要 pair` → `head 需要 pair` 等族）+ `BUILTIN_ALIASES` 表转身为 `REMOVED_BUILTIN_NAMES`（方向反转：旧名→现代名——E0021 诊断单源）+ alias 注册段删除 + `BUILTIN_SIGS` 旧条目删除（83→56 维持）+ STDLIB_MODULES 底层 4 名现代化（pair/head→head 等）+ `builtin_name_exists`（W1003 判定：57 扁平 + 47 限定）
+- **E0021 落地**：driver `qualified_ref_diag` VarRef 臂扩展（与 E0014 同 traversal——遮蔽[N3 局部胜出]/接管[用户 define 旧名合法]豁免同口径：退役的是内置注册面非符号宇宙层）；诊断「已于 v0.9 移除——现代名 X」携指引；前段管线全路径（run/check/compile + 恢复路径）
+- **W1001 退役 + W1003 落地**：W1001 收集段删除（deprecated_seen + VarRef 臂清空 + preamble 文件级豁免移除——preamble 本体已迁移）+ `sm` 死参数移除（collect_warnings/warn_diag——clippy 零告警纪律）+ W1003：`collect_macro_names`（Stx 层唯一数据源——宏展开后名字从 CoreExpr 消失）+ `collect_warnings` 消费 + 双入口（front_from_forms/check_source_recover）穿线
+- **语料迁移**（词法边界替换——标识符字符集 [A-Za-z0-9_?!<>=/+-] 边界感知）：引导 .krf ×4（compiler 249 + expander 511 + reader 200 + preamble 17 处）+ 21 测试文件 ~350 处 + examples + audits；hm.rs 结构重解释臂（car/cdr→head/tail + 消息）+ anf.rs（eq?→eq）
+- **开发实录三则**（R1 实测纪律）：⑴**compiler.krf `tail` 参数名碰撞**——compile-expr/compile-app-args/compile-begin-seq 三函数的尾位布尔参数 `tail` 与现代内置名 `tail` 词法碰撞（`(tail fields)` 调用位解析为参数 bool → E0002「不可调用的值：bool」）→ 参数改名 `tail-pos`（15 处——词法遮蔽合法但迁移期文本碰撞，如实登记）；⑵debug 模式深嵌套测试栈溢出 = 环境既有特性（基线 stash 实测同溢出——release 模式通过，§3.2 一直是 release 口径，非本轮引入）；⑶`#<builtin:car>` 渲染断言边界遗漏（`>` 在标识符字符集内——`#<builtin:car>` 的 car 未被替换）→ 测试期望更新 `#<builtin:head>`
+- **负例组 + 守卫**：stdlib_tests parity 组 28 → **removed_* 退役负例组 17 case**（14 负例[27 旧名全覆盖：E0021 编译期 + [E0021] 码位 + 现代名指引三断言] + 参数遮蔽/用户接管合法豁免 2 + 闭合守卫 1[removed_names_group_covers_all_27——静态名单 ↔ REMOVED 表双向对账 + 每名 E0021 实测 + 现代名正路]）+ namespace_tests W1001 组 2 → **s1 组 4 case**（W1003 正例知会 + 宏胜出行为不变 + 非内置零误 + 限定名遮蔽 + E0021 恢复健康/位置面）+ builtins.rs 守卫三件重锚（removed_names_closed_and_modern_registered[104 全授权/92 零授权/旧名零注册零签名/现代名全注册] + 模块表 131→104 + 零授权 119→92 + 门控腿收敛）
+- **M3 门审 P07 计数锚更新**（r42/S1 后口径：57 扁平 + 47 限定 + 27 退役 + 旧名 E0021 拒绝面 + W1003 W 面在位）——43:0 APPROVED 维持
+- **§3.2 六命令 clean 起步全绿**：cargo clean 4937 files/1.1GiB → build --release 16.67s 零告警 → check 0/0 → fmt 0 diff → clippy -D warnings 0 → **test 828:0:0**（837 - 9——移除轮测试面合法收缩：28 parity case 收敛 17 + 2 W1001 演进 4；净账 837-28-2+17+4 = 828 ✓）
+- **五审计集 EXIT 0 ×5**（233 维持）+ **CLI 路径**（fib 75025/144 / macros 42 / effect_stress 120 / higher_order (1 4 9 16 25) / closures (4 2) / gc_stress 5 / io 双行 / check ok + E0005 REAL_EXIT 1 + **E0021 端到端 REAL_EXIT 1** + **W1003 warning 渲染 + 宏胜出 ⇒ 99**）
+- **对账八面**：matrix v0.1.0-r42（r42 增量行 + 总量行 828=218+610）+ RELEASE v0.9.0-r42 节 + pipeline-test-coverage v0.7.0-r42（Tier 2 头 619→610）+ 六文档回写（20 v1.5 / 22 v1.5[D11 ✅] / 23 v1.5[E5 行证据回填] / 18 v6.7[E0021+W1003 码位落位] / 12 / 09 v6.11）+ **TD-027 清偿关闭**（三腿全兑现：批次 L r38 + M r39-40 + 移除 S1 r42）+ v0.5-roadmap v0.6.0 + e5-plan v1.0（新件）
+- 遵循：§3.2（六命令）/ §8.4.5（R4——审计集 P07 计数锚随实现更新）/ §8.6（worklog 双源）/ 20 §7/§8（移除轮行 + 映射表单源）/ 22 §11 D11（W1003 排期兑现）/ 23 §2.2（E5 入口四信号 + 出口条件 S1 行）/ 23 §3.4（生命周期四阶段——W1001 v0.5→v0.9 完整走完）/ 18 §6（先占位后落位：E0021/W1003 本轮登记本轮落位）/ R1（开发实录三则实测修正）/ 原则 9（死代码删除——W1001 机制整体退役）/ 原则 31（vm.rs Op::Car 内部消息维持 ISA 命名——表面/内部分离）
+
+Stage Summary:
+- **E5 S1 表面腿交付**：旧名 27 件退役（E0021 + 负例组 27 名全覆盖 + 闭合守卫）+ W1001 下线 + W1003 落地 + 全语料现代名终态（grep 零旧名实证）——**828:0:0 + 五审计集 233 + E0021/W1003 端到端**；TD-027 清偿关闭；注册面 84→57 扁平（104 全授权）；63-z 打包 + 63-web web 面随后
