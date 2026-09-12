@@ -4588,3 +4588,73 @@ Stage Summary:
 - r34 交付闭环：设计缺陷深度审计收敛轮（23-演进治理 v1.0 + 21 v1.1 + 22 v1.1 + 原则 35 + 十二轴收敛证明）+ v0.4.0-r34 包 + 包内自举 + web E2E + git 双仓库；批次 K 输入条件零接触维持（下一步 = K1 终门审 stage2_gate_audit_r2 ≥30 新 case——plan §5c / 23 §2.2 窗 K 触发表）
 
 **55-z 补注（包内自举实测教训——打包面漂移修正）**：首轮 r34 tar 严格按 §19.4 模板九路径打包（无 tools/）→ 包内自举实测 9 case 失败（qbe_backend_tests 全族——QBE 二进制查找链「KERF_QBE 环境变量 → 安装布局 tools/qbe/bin/qbe → 编译期仓库锚」在全新解包环境三者全断）→ 处置：①重打包（对齐 r33 包实践惯例：+scripts/ +tools/ +worklog.md +.gitignore 十二路径——包内复跑 **758:0:0 全绿** + CLI 三路径一致 + 包内三审计集 EXIT 0 ×3）；②**根因修正 sop §19.4 模板**（v12.3：模板与 r25+ 实践漂移——以实践为准修正文档，依据 §8.4.5/R4「文档与代码冲突以实跑为准 + 本轮修正文档」；打包清单漂移 = 审计轴 A9 在交付面的实锤——第一轮扫描只查了设计文档面，包内自举实测补全了交付面——轴系覆盖声明更新：十二轴均含「设计面 + 交付面」双检查位）
+---
+Task ID: 56-a（r35 同步轮 / 附录级全面同步——用户指令驱动）
+Agent: Super Z (main) — 同步轮（REC-A/ARCH-A——用户三指令首件）
+Task: lang-design 拆分面 → stage0.md 存档面附录级全面同步 + sop.md 反哺（用户指令「将更新的 docs/lang-design/ 下所有内容同步到 docs/stage0.md 中，并反哺 docs/sop.md」）
+
+Work Log:
+- 同步缺口实测（磁盘对账——依据 §8.4.5 规则 2 文档漂移以实况为准）：①stage0 附录 A 缺 r32-r34 三轮 33 条术语（18 §5a 七条 + §5b 十三条 + §5c 十三条——r32-r34 各轮只做 §9.x 存档侧镜像 + 原则增量，附录面无 owner）②附录 E 缺 14 条引用（19 §7 r33 八查询 66-73 + §8 r34 四查询 74-79）③§23.1 标题计数漂移（「核心三十二条原则」vs 正文 35 条——内容自 v6.4 已同步，标题停在 v6.1 时代）
+- stage0.md v6.4 → v6.5：附录 A 增补「r32-r34 设计栈增补术语」33 行（表面现代化 7 + 能力架构 13 + 演进治理 13——表头声明权威源 = lang-design/18 v6.4）+ 附录 E 新增 E.9 节（r33/r34 设计栈知识搜索引用 14 条——权威源 = 19 v6.3）+ §23.1 标题计数修正（三十二条→三十五条 + 增补说明行）+ 三处指针注记（§7 三义消歧[同步自 13 v6.2] / §9.3.2 LSP×命名空间三交互点[同步自 10 v6.4/F10] / §21.5 时机治理单源[同步自 12 v6.8]）+ 版本历史 v6.5 条目 + 归档说明/文档状态行更新
+- sop.md v12.3 → v12.4（反哺）：§8.4.3 语言设计文档目录树由「00-13 + …（13+ 扩展设计文档）」修正为 24 文件全列（设计栈四件 20/21/22/23 显式列出 + 四层设计栈说明 + 存档侧对应注记）+ §8.4.5 文档优先查询表增 4 行设计栈落点（库表面命名→20 / 能力归属与授权→21 / 命名空间与模块机制→22 / 演进时机与窗口触发→23）+ §16.1 版本历史 v12.4 行 + 头部 Version 行 + **存档纪律吸收**（附录级内容[术语表/参考文献/原则计数]属「同步债」——自本轮起纳入 §8.5 审查检查项）
+- 零代码变更轮（纯文档同步）；§3.2 复验见 56-z
+
+Stage Summary:
+- 附录级同步缺口清零：stage0.md v6.5（+33 术语 / +14 引用 / 计数修正 / 三指针注记 / 版本历史）+ sop.md v12.4（§8.4.3 目录树 24 文件 / §8.4.5 +4 查询行 / v12.4 版本历史）
+- 遵循：§8.1（强制同步项）+ §8.4.5 规则 2（漂移以实况为准本次修正）+ §8.6（worklog 双源）
+---
+Task ID: 56-b（r35 批次 K 首件 / K1 终门审——49-a 全交付）
+Agent: Super Z (main) — 编译执行（QA-A/REV-A 主导——plan §5c 责任矩阵）
+Task: K1 Stage 2 终门审（用户指令「按照 sop.md 继续推进任务」——批次 K 首件：stage2_gate_audit_r2 ≥30 新 case + 批次 J 修复边界 + §21.3 四条件终验 + §21.5 九信号全核对 + §6.3 投票）
+
+Work Log:
+- 输入条件核对：批次 J 全绿（r31 收口 + r32-r34 三轮批间插入零接触维持）✅——K1 输入满足（plan §5c 49-a 行）
+- **新审计集第 4 件 examples/audit/stage2_gate_audit_r2.rs**（Cargo.toml [[example]] 登记 + §7.3.1 可重运行口径）：**46 case 全 PASS EXIT 0 APPROVED**——与 r1（53 case）零源语料重叠；结构 A10/B10/C7/D5/E7/P7 = 46（负向 34 ≥ 22 / 恢复 5 / 正向 7 ≤ 8；七类覆盖 1/1/1/2/24/1/1 全非零——配比机械校验内置）
+- **主轴差异化（r1 主轴 = 运行期负向；r2 主轴 = 静态判定面）**：A 桶 10 单语句静态 E0005（HM 旗标期生产判定面 check_source——r1 零覆盖半区：R2 算术/R3 比较/R5 car-cdr/R4 not/R1 if/R8 str 族/元数/lambda 实参/R6 不可调用）+ B 桶 10 多语句静态（hm 缺口 ③分支分歧 + ①lambda 实参 + ④递归元数 + occurs 自应用 + 多错误非短路三连 + r28 效应臂收敛三 case[B05/B06/B07 perform 效果值/handler 体/handle 体] + E0006 门控函数体位变体 + 空列表 define 值位变体 + 用户函数形参传播）+ C 桶 7（①语法深嵌套未闭合/⑥三模块循环链 a→b→c→a[深于 r1 两模块]/⑦互递归宏 m1↔m2[异于 r1 自指宏]/②函数体未绑定调用期归因/深递归静态约束合一冲突/E0008 算术恢复+外部二次恢复变体/E0007 万级 cons 分配压力 + tag 逃逸）
+- **E 桶 7 = 批次 J 修复边界（§7.3.2 三修复面）**：E01/E02 r28（perform 效果值双面检出[tc+hm 超集纪律] + handle 双体多错误收集双面 ≥2）+ E03/E04/E05 r29（TD-011 字符串全序对偶[全串零误报 + 混串检出] + car/cdr Nil 漏检归零[Nil 跳出保守臂] + E0005 定位面[文件名 + 行:列 + Span 非空]）+ E06/E07 r30（FFI 编译面收窄[VarRef 实参 CompileError「仅支持字面量」] + VM 三码族[E0010 双重释放 Alloc-Dup-Free-Pop-Free / E0011 非令牌释放 Int 值 / E0012 未登记符号 fail-closed 含符号名]）
+- **P 桶 7 = §21.3 四条件终验 + §21.5 九信号**：P03 条件 2 门 B fixpoint（B₁/B₂ compiler.krf + preamble.krf 两件 bytecode_equal + SHA-256——隔离纪律关缓存 fresh 状态）+ P04 条件 3 QBE 本地码 fib(12) exit 144 端到端 + **P05 条件 4 FFI 真端到端**（write_stdout 经冻结 FfiCall → lowering → CallExternal 操作码 → 窗口规程 pin/借用/unpin → 宿主真实 I/O → Int(4)——r30 VM 面做实后，较 r1「模型冻结断言」升级为运行时实证）+ P06 条件 1 生产链自编译 compiler.krf + 活性终验（sq(7)=49 与种子一致）+ P01/P02 金路径双链（prelude foldr 管道 25 + 嵌套 handler 7）+ P07 §21.5 九信号全核对（S1 金路径进程内实测/S2 P03 证据引用/S3 matrix 758:0:0 v0.1.0-r34 锚/S4 CLI bench 锚/S5 lang-design 24 文件实测 + stage0 v6.5/S6 12 §2.5.1 终态注记锚/S7 TD 登记册开放 P0/P1 机械扫描 = 0/S8 投票协议承载[本审计集为证据输入]/S9 K2 承载[§14.6 四项——如实登记]）
+- D 桶 5 恢复探针：check_source_recover 合并报告（E0002 + E0005 位置序 + 部分产物全管线）/ 静态三连全报 / 静态-运行双面独立 + 同进程恢复（check 报诊断不阻断 run 独立 Err + fib(10) 续跑）/ E0008 后效应金路径 / E0006 fail-closed 后自举状态纯净
+- 开发实录（R1 纪律记录）：初版 4 case 消息/语义实测修正——C05 深递归静态消息为「类型不一致」约束合一冲突形（非 car 域直陈）；B10 用户函数形参传播同型；C06 初版 E0008 逃逸变体（子句不 resume + begin 序列双恢复）实测为合法程序（逃逸后首恢复即重放全程序——语义边界学习：逃逸 continuation 首恢复为有效重放路径）→ 换用「子句内算术恢复 + 外部二次恢复」变体（RESUME_THEN_OUTER_DOUBLE——E0008 实证触发）；clippy useless_format 1 处修正 + fmt
+- **§6.3 五角色投票**：ARCH-A 2 票 GO + DEV-A 1.5 票 GO + QA-A 1 票 GO + ALG-C 1 票 GO + SKL-A 1 票 GO（不参与加权）——**加权 5.5/5.5 = 100% ≥ 95% GO**（K1 验收合同达成）
+- 对账四面：matrix r35 增量行（758 零增量 + 四审计集 46 新件）/ pipeline v0.4.0-r35（Date 行 + Version）/ RELEASE_NOTES r35 节（三交付）/ plan.md K1 执行注记（§5c 前——下一步 K2）
+
+Stage Summary:
+- K1 终门审全交付：stage2_gate_audit_r2 **46 case APPROVED EXIT 0**（七类全覆盖 + 配比满足 + 批次 J 三修复面边界 7 + §21.3 四条件终验 + §21.5 九信号核对）+ §6.3 投票 5.5/5.5 = 100% GO
+- 遵循：§7.3.1/§7.3.2（配比与修复边界——main 机械校验）/ §2.3-11（实测禁臆测——四 case 初版实测修正实录）/ §21.3/§21.5（终验与九信号）/ GATE 1（EXIT 0 = 实测通过）
+- 下一步：K2 大阶段末深审环（plan §5c 49-b——§14.5 全量 D1-D8 + §14.8 B1-B4 + §14.9 C1-C6 + §14.6 阶段间四项 + final-assessment + Stage 3 切换 GO/NO-GO）
+---
+Task ID: 56-z（r35 收尾——同步轮 + K1 终门审）
+Agent: Super Z (main) — 收尾交付（QA-A/REC-A）
+Task: r35 GATE 1 §3.2 六命令 clean 起步实测 + 对账四面 + r35 tar.gz 包内自举 + rec 树 19_r35/l + git 双仓库 + web 面（56-web 索引见 root worklog）
+
+Work Log:
+- GATE 1 §3.2 六命令 clean 起步实测：cargo clean（589 files 166.5MiB）/ build --release 13.11s 零告警 / check --workspace 0 errors 0 warnings / fmt --check 0 diff（审计器 fmt 后修正）/ clippy --all-targets --workspace -D warnings 超集 0 / **test --release --workspace 758:0:0 维持**（22 套件零断言修改——代码增量 = 审计器单件 46 case，零生产代码变更）+ **四审计集 EXIT 0 ×4**（stage0 41 + stage1 50 + stage2_r1 53 + stage2_r2 46）+ CLI 四路径（run fib ⇒ 75025 ⇒ 144 / run macros ⇒ (2 1) ⇒ 42 / check ok「2 原型/9 常量/5 全局引用/38 指令」/ check 负例 E0005「+ 需要数值，实际 str」REAL_EXIT 1）
+- 打包正序（§19.3 commit-then-package + §19.4 v12.3 修正模板十二路径）：git commit 先行 → r35 tar.gz → 包内自举验证（全新解包构建 + 758 复跑 + CLI 一致 + 包内四审计集）→ web 面（kerf-data r35 节点 + footer + download README r35 节 + E2E）
+- rec 树：19_r35 新建（本条目 1:8 压缩）+ l 两层更新（02 层导航行 19 + 未压实区间刷新；根 l 02 行扩展 r35 + by-topic 增行）
+- root worklog（/home/z/my-project/worklog.md）根索引条目 + 56-web web 面详录
+
+Stage Summary:
+- r35 交付闭环：附录级同步轮（stage0 v6.5 + sop v12.4）+ K1 终门审（stage2_gate_audit_r2 46 case APPROVED + §6.3 投票 100% GO）+ v0.4.0-r35 包 + 包内自举 + web E2E + git 双仓库；**批次 K 首件闭环（下一步 K2 大阶段末深审环）**
+---
+Task ID: 57-a（r36 批次 K 次件 / K2 大阶段末深审环——全协议面）
+Agent: Super Z (main) — K2 深审环（ARCH-A/QA-A/REV-A/PM-A/ALG-C 五角色联合——plan §5c 49-b 责任矩阵）
+Task: K2 大阶段末深审环（用户指令「按照 sop.md 继续推进任务」——§14.5 D1-D8 全量三段式 + §14.8 B1-B4 回写 + §14.9 C1-C6 整理 + §14.6 阶段间四项深验证 + final-assessment + Stage 3 切换 GO/NO-GO 裁定）
+
+Work Log:
+- PHASE 1 路由：读 sop §1 全节 + worklog 最近 3 条（56-a/56-b/56-z+web——冲突检测无：本轮用户指令与 worklog 下一步指针一致 K2；上轮同步任务 56-a 已闭环无悬挂）+ 定位声明 v2（L3 三指标：全仓审计 + 8 文档 + 阶段切换决策面）→ 五问自检过
+- 输入条件核对：K1 APPROVED（56-b 46 case + 投票 100%）✅——K2 输入满足（plan §5c 49-b 行）
+- **§14.6.3 第 1 轮（事实采集——实测禁臆测 §2.3-11）**：57-s1 子代理（十三项代码扫描：C1-C6/§11/§14.6.1.1——只读零 cargo）+ 57-s2 子代理（八设计文档三方对照 + §14.8 偏差候选）+ 本会话基线实测：cargo clean 589 files/166.5MiB → build --release 14.48s 零告警 → check --workspace 0/0 → fmt 0 diff → clippy --all-targets --workspace 超集 0 → test --release --workspace **758:0:0 零断言修改** + 四审计集 EXIT 0 ×4（41+50+53+46）+ CLI 四路径（fib ⇒ 75025 ⇒ 144 / macros ⇒ (2 1) ⇒ 42 / check ok 38 指令 / check 负例 E0005 REAL_EXIT 1）+ 性能三重采样（fib 稳态 92.3-92.8ms / gc_tail 42.2-42.9ms / gc_nontail 91.9-116.9ms / 二进制 1.92 MiB / 全量测试 54.5s）
+- 57-s1 发现（分级）：P0=0 / P1=0 / **P2 注释时效 7 项**（TD-008/TD-003 口径过时 / net-process 消息文案 Stage 2 过时 ×2 双侧 / multistage 多处 Stage 2 / expander 深度「当前 128」/ effects ext1「不激活」事实性过时）+ P3 12 项（catch-all 无臂注释 5 / 枚举注释不全 2 / 文件头小过时 4 / gen_il 观察 1）+ 需复核 3 项；机械合规 7 项全过（TODO=0 / glob=0 / 命名零违规 / §11 四向零违规 / reader 唯一调用者 / dead_code 1 处有登记）
+- 57-s2 发现：「枚举-实现-测试」四方互锚零缺项（46 操作码/57 stdlib/12 变体/12 E 码族/prelude 五件）+ B2 偏差候选 5 主项（03 深度 500 / 05 根集五来源+八入口 / 02 Keyword 22-叶级 45 / 13 §3.1.1 节态停 r8 / 轻计数簇）+ B1 候选 1（02 §8.1 同核验证）+ B4 候选 1（krf 六头字段协议）+ B3 零新项
+- **§14.6.3 第 2 轮（发现即修——零行为变更）**：19 处注释级修复（P2 7 + P3 11——含用户面错误消息双侧同步「net/process 属 Stage 3 触发式引入」[capability_tests:201 断言锚前缀不受影响 parity 保持] + catch-all 臂注释 5 处 + 枚举注释 2 处 + 文件头 4 处）+ §14.8 回写四件（03 v6.3：深度 500→10_000 五处 + 头部版本 + 推迟项清理 / 05 v6.3：根集五→六来源六处 + 八→九入口 + 推迟项口径 / 02 v6.1：Keyword 22→25 + 叶级 45→48 + §8.1 B1-1 改判批次 L/M 承载 / 13 v6.3：§3.1.1 r25/r28 终态注记 + 12 宏行同步）+ 修复后复验：build 12.18s / fmt 0 / clippy 0 / **758:0:0 复验零断言修改**——零行为变更实证
+- **§14.6.3 第 3 轮（收敛复核）**：修复面复核 + 残余盘点（gen_il 容忍级 / 计数簇登记 matrix 单源）——**零新 P0/P1**（R6/R7 收敛判据达成）
+- **§14.5 主件 deep-review-round2.md**（大阶段末版——r26 round1 为批次裁剪版的如实区分）：D1-D8 全量三段式 + §3 委员会投票（**5.5/5.5 = 100% GO**）+ §4 行动计划（Stage 3 入场序列：批次 L → M → 移除轮）+ §5 结论 GO + §6 §14.8 偏差清单（B2 五项全回写/B1-1 改判/B4-1 裁定登记册承载/B3 零新项）+ §7 §14.9 C1-C6 六维表 + §8 交叉引用
+- **§14.6 六件套**：architecture-review.md（八阶段全绿 + §11 七项机械验证 + 数据流五段）/ design-impl-test-coverage.md（四方互锚零缺项 + B1 净缺口 0）/ hidden-problems-assessment.md（**强制修复项 ≥2× = 0** + Stage 3 就绪 12/12——批次 L/M 输入 + 治理单源 + 码位预登记 + HM 轨道 + 测试基线 + 文档底座 + 自举底座全 ✅）/ refactoring-optimality-review.md（Stage 2 七项重构 7/7 最优零 hack + 数据结构七项审查 + 遗漏四候选跳过理由充分）/ performance-baseline.md（大阶段末基线新建 + 复测协议 + O(n²) 扫描零新增）/ **final-assessment.md（Stage 3 切换 GO 裁定**——含 §14.6.3 协议 5 用户确认位）
+- pipeline-test-coverage.md v0.4.0-r36：§4 完整性小节 r36 全量重测（catch-all 86 处/24 文件六分类全合规——口径较 r16/r26 扩大到全 catch-all 面；生产 expect 23 处全消息化；enum 穷尽性四抽查[Op 46 变体主分派穷尽无 `_`]）+ §6 性能基线表（fib 92.5ms ⚠️ TD-028 / gc_tail 42.6ms ⚠️ / gc_nontail 噪声域 / build 14.48s / 1.92 MiB / 54.5s）
+- **TD-028 新登记**（P3——性能漂移 ~10% 双基准同向；归因候选三面[主分派 46 臂布局 / GC 六来源入口 / ForeignBox 追踪器入口]待 Stage 3 profile 定锚——判据先于先例原则 35；§14.5.3 D6 条款处置）——TD 登记册 28 项总量 P0/P1 = 0 维持
+- 对账面：matrix.md v0.1.0-r36（r36 增量行 + 总量行同步债修正「三件 144→四件 190」[r35 遗留] + Date 头 r36）/ RELEASE_NOTES r36 节（四交付）/ plan.md K2 执行注记（下一步 K3）/ pipeline v0.4.0-r36
+- 遵循条款清单：§14.5/§14.6.1-1.4/§14.6.2/§14.6.3/§14.6.4/§14.6.6/§14.8.1-8.5/§14.9.1-9.3/§6.3/§7.3.1（输入 K1）/§2.3-11（实测禁臆测）/§8.6（worklog 双源）/R2（TD-028 登记）/R4（文档代码冲突以实况为准——注释时效修复 + 总量行修正）/R6-R7（收敛判据）
+
+Stage Summary:
+- K2 全协议面交付：§14.5 D1-D8（deep-review-round2 大阶段末版）+ §14.6 六件套 + §14.8 回写四件（03 v6.3/05 v6.3/02 v6.1/13 v6.3 + 12 宏行）+ §14.9 整理 19 处（零行为 758:0:0 复验）+ TD-028 登记 + §6.3 投票 5.5/5.5 = 100% GO + **final-assessment：Stage 3 切换 GO**（P0/P1 = 0 维持 + 强制修复项 0 + 就绪 12/12 + 投票 100%——plan §5c K2 验收合同「四项审查各 ≥1 产出文档 + P0/P1 = 0 维持」达成）
+- 下一步：K3 收尾交付（49-z——§3.2 六命令 + 对账六面 + v0.5-roadmap Stage 2 行 + tar.gz + web + git + rec 树压实；57-z/57-web 本轮随同执行）

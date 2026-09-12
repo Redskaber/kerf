@@ -62,9 +62,9 @@ pub(crate) const IO_PERMISSION_CODE: DiagnosticCode = DiagnosticCode(6);
 /// 撤销的效应」）已于本批就位（Effect M1-M5 落地）；②族分类学手术
 /// 面经模型层锢定收敛为三点加法（D11：枚举变体 + 门控表行 + 族文件）。
 /// 评估结论：**维持不增行**——net 语音面（`(require net ...)`）与门控
-/// 内置属 Stage 2 末窗口（I3 门审后——避免与 42-f 同批引入新门控行
-/// 破坏零回归基线；本批为纯新增面：效应 + IoFamily 归位，既有门控
-/// 表/授权管线/require 语法零改动）。
+/// 内置原拟 Stage 2 末窗口；plan §5d 窗口核对终判（r27）：**net 增行
+/// 随 Stage 3 首个网络内置需求触发式引入**（消费面零 net 语料 + 沙箱
+/// 网络受限 + 手术面 D11 三点加法已收敛——延迟引入无结构惩罚）。
 pub(crate) const READ_GATED: &[&str] = &["read-line", "read-int", "read-num"];
 
 /// 写门控内置名（R9 数据驱动表——write 能力覆盖面）。

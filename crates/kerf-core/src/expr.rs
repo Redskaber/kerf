@@ -89,8 +89,9 @@ fn render_elem(v: &Rc<LiteralValue>) -> String {
 /// kerf-reader → kerf-expander 桥接到本类型（无旁路）；Span 独立携带
 /// 元数据（`kind_name` 仅诊断渲染用）。
 ///
-/// **Stage 2 ADT 演进目标（lang-design 01 §8.3 迁移映射——冻结期不
-/// 实施，登记为 Stage 2「目标语言完整化」门审查评估清单）**：
+/// **Stage 2 ADT 演进目标（lang-design 01 §8.3 迁移映射——冻结维持：
+/// K1 终门审 r35 + K2 深审 r36 复核维持冻结，迁移窗口随 Stage 3「目标
+/// 语言完整化」重评）**：
 /// Lambda→`Fn`（de Bruijn）/ App→`Apply` / If→`Branch` / VarRef→`Var` /
 /// Literal→`Const` / SetBang→`Perform(State)` / Define→脱糖消除 /
 /// Begin→`Let` 链 / Module→模块系统层 / 新增 `Let`+`Perform`/`Handle` /

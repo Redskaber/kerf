@@ -1389,7 +1389,8 @@ fn collect_value_roots(v: &Value, roots: &mut Vec<GcRef>, visited: &mut HashSet<
                 }
             }
         }
-        // _ 臂理由：即时值（Unit/Nil/Bool/Int/Float/Str/Builtin）无堆子引用，无需入根集
+        // _ 臂理由：即时值（Unit/Nil/Bool/Int/Float/Str/Symbol——TD-002 装箱
+        // 叶子 / Builtin）无堆子引用，无需入根集
         _ => {}
     }
 }
@@ -1588,6 +1589,8 @@ fn num_cmp(
         // 经 f64 提升；纯 Int 路径保持精确）
         let ord = match (a, b) {
             (Value::Int(i), Value::Int(j)) => i.cmp(j),
+            // f64 无全序（NaN）——partial_cmp 失配时取 Greater 保底
+            //（比较链非短路语义下不产生静默错误；NaN ≠ NaN 语义如实）
             _ => x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Greater),
         };
         Ok(Value::Bool(pred(ord)))

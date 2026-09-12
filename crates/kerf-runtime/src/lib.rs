@@ -20,8 +20,8 @@
 //!
 //! **堆语义**（文档化决策）：GC 管理序对图（`HeapObj::Pair`）为主；
 //! 装箱即时值（Str/Int/Float/Bool/Nil/Symbol——r5 TD-002 符号加入）为
-//! 叶节点（无内部堆引用）；分代/压缩推迟到 Stage 2（TD-008——批次 I2，
-//! 含 TD-023 gc_stress 回归对症评估）。
+//! 叶节点（无内部堆引用）；分代/压缩裁定 DEFER Stage 3+（TD-008——
+//! r24/42-e 实测依据三面，条件触发重评估；TD-023 gc_stress 对症已 r24 交付）。
 
 pub mod gc;
 pub mod heap;

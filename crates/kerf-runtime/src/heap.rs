@@ -346,7 +346,8 @@ impl Heap {
                 (b.tracer)(&b.any, &mut out);
                 out
             }
-            // _ 臂理由：非序对堆对象（Str/Int/Float/Bool/Nil）与越界引用均无子引用——标记图遍历无出边
+            // _ 臂理由：非序对堆对象（Str/Int/Float/Bool/Nil/Symbol——TD-002
+            // r5 符号装箱为叶子）与越界引用均无子引用——标记图遍历无出边
             _ => Vec::new(),
         }
     }

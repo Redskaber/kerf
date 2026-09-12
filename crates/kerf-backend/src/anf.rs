@@ -192,6 +192,7 @@ impl LowerError {
 fn prim_arity(p: APrim) -> (usize, usize) {
     match p {
         APrim::Not => (1, 1),
+        // _ 臂理由：其余原语均为二元（算术/比较/cons 族）——静态校验默认域
         _ => (2, 2),
     }
 }

@@ -1,10 +1,10 @@
 # 运行时：最小 I/O 与标记-清除 GC
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-11（v6.2：批次 F 深审回写——TD-002 符号值家族对齐：HeapObj 七变体/八入口 + I/O 通道三函数 + gc_stress 回归基线注记；v5.2：HeapObj 六变体对齐 + alloc_boxed 第 7 入口 + 根集五来源 + GC 冷却数值冻结 + 分配算法描述对齐（slot-Vec + 空闲表 + 显式工作栈））
-> **Version**: v6.2
+> **Date**: 2026-09-12（v6.3：K2/r36 大阶段末深审回写——§14.8 B2-2/B2-5：根集五来源 → 六来源（continuation 帧链 r25/M5 第六源，与 06 §1.2 对齐）+ 类型化分配八入口 → 九入口（alloc_foreign r30 FFI）+ 分代/压缩推迟项口径对齐 TD-008 r24 DEFER Stage 3+；2026-09-11（v6.2：批次 F 深审回写——TD-002 符号值家族对齐：HeapObj 七变体/八入口 + I/O 通道三函数 + gc_stress 回归基线注记；v5.2：HeapObj 六变体对齐 + alloc_boxed 第 7 入口 + 根集五来源 + GC 冷却数值冻结 + 分配算法描述对齐（slot-Vec + 空闲表 + 显式工作栈））
+> **Version**: v6.3
 > **Status**: Active
-> **处理程度**：GC 为 P0（安全关键组件，Stage 0 已实现）；最小 I/O 为 P1（传统全局函数，能力模型 I/O 接口预留）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：分代/增量/并发 GC（Stage 2）、能力模型 I/O（Stage 2，[13-能力矩阵 §3.1.3](./13-capability-matrix.md)）、屏障接口实现（Stage 0 no-op）
+> **处理程度**：GC 为 P0（安全关键组件，Stage 0 已实现）；最小 I/O 为 P1（传统全局函数，能力模型 I/O 接口预留）｜ **所属 Stage**：Stage 0 ｜ **推迟项**：分代/增量/并发 GC（TD-008 r24 裁定 DEFER Stage 3+ 条件触发）、能力模型 I/O net/process（Stage 3 触发式，[13-能力矩阵 §3.1.3](./13-capability-matrix.md)）、屏障接口实现（Stage 0 no-op）
 
 > 本文件收录运行时基座的设计与实现：最小 I/O（原 §8.8）、标记-清除 GC 的最小实现（原 §8.11）、内存管理策略（原 §14.2，v5.1 从冻结实现回填分配器/堆/根集契约），以及标记-清除 GC 实现框架（原 §19.4：三阶段骨架 + 核心不变式 + 实现陷阱）。字节码 VM（运行时基座的另一半）见 [04-字节码 VM](./04-bytecode-vm.md)；最小内置库的函数级边界见 [09-标准库](./09-stdlib.md)；12 个能力模型的完整矩阵见 [13-能力矩阵](./13-capability-matrix.md)（其 §2.8/§2.11 为本文件 §1/§2 的规范副本）；高级 GC 的推迟理由见同文件 §3。操作语义侧的 GC 不可观测性引理（L-GC）见 [06-操作语义 §4](./06-operational-semantics.md)。
 
@@ -35,7 +35,7 @@ pub fn write_stdout(s: &str) -> Result<(), RuntimeError>;
 
 ## 2. 标记-清除 GC（最小实现）（原 §8.11）
 
-**v5.2 算法描述对齐（原「bump-pointer 分配 + 递归标记」摘要失真，以下为实现即事实）**：**slot-Vec 分配 + 空闲表（free 表）+ 显式工作栈标记 + 堆线性遍历清除**。堆为 `Vec<Slot>`（槽位数组，`GcRef = u32` 索引句柄），分配优先复用空闲表中的槽位、耗尽后追加新槽；标记阶段用显式 `work` 栈替代递归（防爆栈）；清除阶段线性遍历堆重建空闲表（不移动对象、不压缩——碎片治理推迟至分代/压缩，TD-008）。根集包括（**五来源**）：VM 数据栈、全局环境、调用帧局部槽、**帧捕获槽（Rc<RefCell> 共享单元格）**、`register_foreign_ref` 登记的外部引用。Stage 0 用最简单的 mark-sweep，避免分代/增量/并发的复杂度。
+**v5.2 算法描述对齐（原「bump-pointer 分配 + 递归标记」摘要失真，以下为实现即事实）**：**slot-Vec 分配 + 空闲表（free 表）+ 显式工作栈标记 + 堆线性遍历清除**。堆为 `Vec<Slot>`（槽位数组，`GcRef = u32` 索引句柄），分配优先复用空闲表中的槽位、耗尽后追加新槽；标记阶段用显式 `work` 栈替代递归（防爆栈）；清除阶段线性遍历堆重建空闲表（不移动对象、不压缩——碎片治理推迟至分代/压缩，TD-008 r24 裁定 DEFER Stage 3+）。根集包括（**六来源**）：VM 数据栈、全局环境、调用帧局部槽、**帧捕获槽（Rc<RefCell> 共享单元格）**、`register_foreign_ref` 登记的外部引用、**活跃 continuation 帧链**（r25/M5 第六源——vm.rs:1368）。Stage 0 用最简单的 mark-sweep，避免分代/增量/并发的复杂度。
 
 **实现指引**：分配、标记、清除三个阶段的完整伪代码与栈溢出对策见本文 §4。
 
@@ -75,10 +75,11 @@ pub struct Heap {
 }
 
 impl Heap {
-    /// 类型化分配（**八入口**——调用方携带类型信息，非统一 alloc(size)）：
-    /// 七个类型化入口 + alloc_boxed（即时值统一描述入口，按 BoxedInput
+    /// 类型化分配（**九入口**——调用方携带类型信息，非统一 alloc(size)）：
+    /// 八个类型化入口 + alloc_boxed（即时值统一描述入口，按 BoxedInput
     /// 分派到 Str/Int/Float/Bool/Nil 五类——符号走 alloc_symbol 直通，
-    /// 不在 BoxedInput 内——v6.2 对齐 r5 实现）。
+    /// 不在 BoxedInput 内——v6.2 对齐 r5 实现；v6.3 增补：alloc_foreign
+    /// 为第 9 入口——r30/48-d FFI ForeignBox 装箱，追踪器协议入标记图）。
     pub fn alloc_pair(&mut self, car: GcRef, cdr: GcRef) -> GcRef;
     pub fn alloc_str(&mut self, s: Rc<str>) -> GcRef;
     pub fn alloc_int(&mut self, v: i64) -> GcRef;
@@ -151,7 +152,7 @@ impl RootSet {
 pub fn mark_sweep_cycle(heap: &mut Heap, roots: &RootSet) -> GcStats;
 ```
 
-**根集五来源（根集完备性不变式，本文 §4；v5.2 修订——原「四来源」漏帧捕获槽）**：(1) VM 数据栈；(2) 调用帧局部槽；(3) **帧捕获槽**（`Rc<RefCell<Value>>` 共享单元格——可变捕获的根，VM 侧 `collect_roots` 逐帧枚举 locals 与 captures 两组）；(4) 全局环境；(5) `register_foreign_ref` 登记的外部引用（回收周期起点并入标记工作栈；r30/48-d 起 = 持久根 **∪ supp(Φ)**——pin 计数簿（P/U 规则）为第五来源的计数化泛化，F-PIN 引理维持完备性不变式）。五类根缺一不可——漏根 = 悬垂指针（P0 级安全缺陷）。
+**根集六来源（根集完备性不变式，本文 §4；v6.3 修订——r25/M5 增第六源 continuation 帧链，原 v5.2 增帧捕获槽）**：(1) VM 数据栈；(2) 调用帧局部槽；(3) **帧捕获槽**（`Rc<RefCell<Value>>` 共享单元格——可变捕获的根，VM 侧 `collect_roots` 逐帧枚举 locals 与 captures 两组）；(4) 全局环境；(5) `register_foreign_ref` 登记的外部引用（回收周期起点并入标记工作栈；r30/48-d 起 = 持久根 **∪ supp(Φ)**——pin 计数簿（P/U 规则）为第五来源的计数化泛化，F-PIN 引理维持完备性不变式）；(6) **活跃 continuation 帧链**（r25/M5——`Value::Continuation` 四要素含帧链/数据栈快照，vm.rs:1368 部署跨压力存活锚 effect_tests gc_continuation_boxed）。六类根缺一不可——漏根 = 悬垂指针（P0 级安全缺陷）。
 
 **屏障接口的边界裁定**：Stage 0 的屏障为 no-op（无分代/并发，无屏障需求）；`register_foreign_ref` 在 Stage 0 **不是** no-op（外部持有的 GcRef 必须作为根保存，否则悬垂）——两个接口的成熟度分级不同，见 [13-能力矩阵 §3.1.3](./13-capability-matrix.md)。
 
@@ -159,7 +160,7 @@ pub fn mark_sweep_cycle(heap: &mut Heap, roots: &RootSet) -> GcStats;
 
 > **实现框架系列说明（原 §19 章导言）**：本系列（[02-语法模型 §6](./02-syntax-model.md) / [03-宏系统 §4](./03-macro-system.md) / [04-字节码 VM §2-§3](./04-bytecode-vm.md) / 本文 §4）将 [13-能力矩阵 §2](./13-capability-matrix.md) 定义的 12 个能力模型落实为可直接照抄实现的伪代码框架。所有伪代码采用 Rust 风格语法，但刻意停留在"控制流 + 数据流"层面，不绑定具体内存布局——同一框架可无损翻译为 OCaml（推荐宿主）或 C（VM 基座）。每节按「算法骨架 → 核心不变式 → 实现陷阱」组织：不变式是测试设计的直接依据，陷阱清单来自历史实现（Guix 自举链、rustc、Racket BC）踩过的坑。
 
-slot-Vec 分配 + 显式工作栈标记 + 堆线性遍历清除（能力模型见本文 §2，内存管理策略见本文 §3；v5.2 对齐冻结实现——原 bump-pointer 描述是早期设计草案，非实现事实）。根集五来源：VM 数据栈、调用帧局部槽、帧捕获槽（共享单元格）、全局环境、`register_foreign_ref` 登记的外部引用（本文 §3.2）。
+slot-Vec 分配 + 显式工作栈标记 + 堆线性遍历清除（能力模型见本文 §2，内存管理策略见本文 §3；v5.2 对齐冻结实现——原 bump-pointer 描述是早期设计草案，非实现事实）。根集六来源：VM 数据栈、调用帧局部槽、帧捕获槽（共享单元格）、全局环境、`register_foreign_ref` 登记的外部引用、活跃 continuation 帧链（r25/M5——本文 §3.2）。
 
 **三阶段骨架**：
 
@@ -201,7 +202,7 @@ fn sweep(heap: &mut Heap) {
 ```
 
 **核心不变式**：
-1. **根集完备性**：VM 数据栈、调用帧局部槽、**帧捕获槽（共享单元格）**、全局环境、`register_foreign_ref` 登记的外部引用（[13-能力矩阵 §4](./13-capability-matrix.md) FFI 预留）——**五类根**缺一不可，漏根 = 悬垂指针（v5.2 修订：原「四类」漏帧捕获槽）
+1. **根集完备性**：VM 数据栈、调用帧局部槽、**帧捕获槽（共享单元格）**、全局环境、`register_foreign_ref` 登记的外部引用（[13-能力矩阵 §4](./13-capability-matrix.md) FFI 预留）、**活跃 continuation 帧链（r25/M5）**——**六类根**缺一不可，漏根 = 悬垂指针（v5.2 修订：原「四类」漏帧捕获槽；v6.3 修订：r25 增第六源）
 2. **标记位复位对称**：清除阶段重建空闲表后，存活槽的标记位与被回收槽的复用状态必须一致复位（新分配槽 `marked: false` 起步），否则下一轮标记会继承脏状态
 3. **分配零内卷**：分配路径上不得调用任何可能触发回收的函数（含日志），否则递归触发 GC
 
@@ -214,7 +215,7 @@ fn sweep(heap: &mut Heap) {
 
 | 契约/不变式 | 测试锚点（tests/v0/stage0/ + examples/） | 验证命题 |
 |-----------|------------------------------------------|---------|
-| 根集完备性（§3.2 五来源） | gc_tests（深递归 + 分配计数驱动触发 + 环/深链/foreign） + examples/usage/gc_stress.krf | 漏根 = 悬垂检测 |
+| 根集完备性（§3.2 六来源） | gc_tests（深递归 + 分配计数驱动触发 + 环/深链/foreign） + examples/usage/gc_stress.krf + effect_tests gc_continuation_boxed（第六源） | 漏根 = 悬垂检测 |
 | 标记位复位对称（§4 不变式 2） | 多轮回收周期单测（free 表对账） | 复位无脏状态 |
 | GC 不可观测（[06-操作语义 §4](./06-operational-semantics.md) L-GC） | 双执行路径互查（含堆效应程序，集成 164 函数内置） | 归约结果与触发点无关 |
 | 冷却退避性能（§3.1） | gc_tests + CLI `kerf bench examples/usage/gc_stress.krf`（122s → 3.4s 修复基线；当前单轮口径 ~0.17s / 3×10^5 分配） | O(n²) 消退 |

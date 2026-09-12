@@ -463,3 +463,24 @@ lang-design 全部对账面）。推断与 TD-001/006 同型：跳号笔误而�
 - **顺带修复（r32 本轮已做）**：builtins.rs 文件头注记「3 个 Reader 原语」
   → 4（实测漂移——`str-int-valid?` 第 4 件）；hm-inference-design.md A8
   「BUILTIN_SIGS 49 项」→ 56（实测漂移）。
+
+### TD-028 VM 主分派与 GC 根扫描性能漂移（P3，r36 新增——57-a/K2 深审 D6 登记）
+
+- **登记背景（r36 / 57-a）**：K2 大阶段末深审性能基线三重采样实测：fib(25)
+  bench 84.2ms（r24 基线）→ **92.3-92.8ms（中位 ~92.5ms，+9.9%）**；
+  gc_stress（尾形）38.57ms → **42.2-42.9ms（+9.5%）**；gc_stress_nontail
+  91.9-116.9ms（方差带 ±13% 与 r24 105.15ms 重叠——噪声域）。漂移方向
+  双基准一致（非纯噪声）。
+- **归因候选（三面，未做针对性 profile——Stage 3 优化窗口入场时实测定锚）**：
+  ①r25 效应两操作码（INSTALL_HANDLER/PERFORM）+ r30 FFI 三操作码入 VM
+  主分派 match——46 臂分支布局变化；②GC 六来源（r25 continuation 帧链
+  入根扫描入口——零活跃 continuation 时为空遍历但仍过入口检查）；
+  ③ForeignBox 装箱追踪器入口（TD-010 r24——同型）。
+- **等级 P3 依据**：正确性零影响（758:0:0 全绿 + 四审计集 190 case）；
+  §14.5.3 D6 条款「性能瓶颈除非影响功能正确性，否则记录为 Stage N+2
+  优化项」；漂移量级 ~10% 非用户可感知面（CLI bench 口径）。
+- **优化候选（Stage 3 优化窗口与 TD-003/TD-015 同窗评估）**：主分派
+  查表化/computed goto 候选 + GC 根扫描入口快路径（零 continuation/
+  零 Foreign 时跳过）——优化前须先 profile 实测定锚（判据先于先例——
+  原则 35）。
+- **目标阶段**：Stage 3 优化窗口（触发式——性能消费面出现时）。

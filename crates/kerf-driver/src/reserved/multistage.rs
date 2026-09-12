@@ -10,28 +10,33 @@
 //! **行为规格**（MetaOCaml 语义，stage0.md §6.1）：
 //! - `quote`：将表达式提升为代码值（良构/良类型/良作用域保证）；
 //! - `splice`：将代码值拼接进当前阶段的语法；
-//! - `run`：执行未来阶段代码（Stage 2 做实时为编译期计算）。
+//! - `run`：执行未来阶段代码（原定 Stage 2 做实；v6.3/r27 改判：
+//!   多阶段整体 DEFER Stage 3 成熟度重评——12 §2.5.1 行 + plan §5d
+//!   处置表，零消费场景依据）。
 //!
-//! Stage 0 裁定：元循环求值器（§21.10 决策点 1）；多阶段于 Stage 2+ 替换。
+//! Stage 0 裁定：元循环求值器（§21.10 决策点 1）；多阶段于 Stage 2+
+//! 替换（已改判：DEFER Stage 3——r27 §5d）。
 
 use kerf_core::CoreExpr;
 use kerf_runtime::RuntimeError;
 use kerf_vm::Value;
 
-/// 多阶段编程（§9.1.2 预留接口——Stage 2 实现）。
+/// 多阶段编程（§9.1.2 预留接口——DEFER Stage 3 成熟度重评：r27/§5d
+/// 处置表改判，签名冻结维持原则 27）。
 ///
-/// Stage 0 裁定：元循环求值器（§21.10 决策点 1）；多阶段于 Stage 2+ 替换。
+/// Stage 0 裁定：元循环求值器（§21.10 决策点 1）；多阶段于 Stage 2+
+/// 替换（已改判：DEFER Stage 3——r27）。
 pub trait MultiStage {
-    /// 代码值类型（Stage 2 具体化为 `CodeValue`）。
+    /// 代码值类型（具体化随 Stage 3 多阶段窗口——`CodeValue` 候选）。
     type Code;
 
-    /// 引号：表达式 → 代码值（Stage 2 实现）。
+    /// 引号：表达式 → 代码值（随 Stage 3 窗口实现）。
     fn quote(&self, expr: &CoreExpr) -> Self::Code;
 
-    /// 拼接：代码值 → 当前阶段代码（Stage 2 实现）。
+    /// 拼接：代码值 → 当前阶段代码（随 Stage 3 窗口实现）。
     fn splice(&self, code: &Self::Code) -> Result<CoreExpr, RuntimeError>;
 
-    /// 执行代码值（Stage 2 实现）。
+    /// 执行代码值（随 Stage 3 窗口实现）。
     fn run(&self, code: &Self::Code) -> Result<Value, RuntimeError>;
 }
 

@@ -417,6 +417,8 @@ impl<'a> TypeCtxt<'a> {
         if let Some(sig) = builtin_sig {
             let op = match fn_expr.as_ref() {
                 CoreExpr::VarRef { name, .. } => self.table.name(*name).to_string(),
+                // 防御性回退：调用点非 VarRef 时无符号名可归因（上游
+                // 408 行已窄化内置调用为直接引用形）
                 _ => "<内置>".to_string(),
             };
             self.check_builtin_app(&op, &sig, args, &arg_tys, span, diags);

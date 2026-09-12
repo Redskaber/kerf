@@ -1,10 +1,10 @@
 # 宏系统：相位分离与卫生宏
 
 > **Author**: kerf-doc-agent
-> **Date**: 2026-09-11（v6.2：批次 F 深审回写——ExpandCtxt 契约块补 next_scope 第 4 字段 + 「全模式面」限定词；2026-09-10（v5.2：instantiate Stage 0 简化改述（#9）+ visit 循环依赖检测已实现回填 + syntax-rules 单层省略号边界注记（#1）+ Transformer 接口标注（#4））)
-> **Version**: v6.2
+> **Date**: 2026-09-12（v6.3：K2/r36 大阶段末深审回写——§14.8 B2-1：深度上限 500 → 10_000 全口径对齐（TD-007 r18 全解除——Stx Rc 化 + retag 迭代式重建 + 均匀标记 O(1) 共享，双路径实锚 expander.rs/tco_tests）；2026-09-11（v6.2：批次 F 深审回写——ExpandCtxt 契约块补 next_scope 第 4 字段 + 「全模式面」限定词；2026-09-10（v5.2：instantiate Stage 0 简化改述（#9）+ visit 循环依赖检测已实现回填 + syntax-rules 单层省略号边界注记（#1）+ Transformer 接口标注（#4））)
+> **Version**: v6.3
 > **Status**: Active
-> **处理程度**：P1（卫生保证与展开核心 Stage 0 已实现；syntax-parse 等宏组合机制推迟）｜ **所属 Stage**：Stage 0（骨架）→ Stage 1+（组合） ｜ **推迟项**：syntax-parse 类结构化宏 DSL、宏展开调试工具、迭代式工作表展开（TD-007）
+> **处理程度**：P1（卫生保证与展开核心 Stage 0 已实现；syntax-parse 等宏组合机制推迟）｜ **所属 Stage**：Stage 0（骨架）→ Stage 1+（组合） ｜ **推迟项**：syntax-parse 类结构化宏 DSL、宏展开调试工具
 
 > 本文件收录元编程层的设计与实现：相位分离系统（原 §8.9）、基础宏系统（原 §8.10，v5.1 从冻结实现回填完整契约）、模块相位分离系统的横切架构约束（原 §12.3），以及 Expander 实现框架（原 §19.2：展开循环骨架 + 核心不变式 + 实现陷阱）。语法对象模型与 Span 系统是卫生性的数据基础，见 [02-语法模型](./02-syntax-model.md)；九个核心原语见 [01-核心原语](./01-core-forms.md)；字节码编译（展开产物的下游）见 [04-字节码 VM](./04-bytecode-vm.md)；12 个能力模型的完整矩阵见 [13-能力矩阵](./13-capability-matrix.md)（其 §2.9/§2.10 为本文件 §1/§2 的规范副本——本文件为专题深化版，两者内容应保持同步）。
 
@@ -72,7 +72,7 @@ impl ModuleRegistry {
 
 **能力边界（P1 处理程度的精确划定）**：
 - ✅ 已实现：syntax-rules 宏（模式/字面量/省略号/模板实例化）、Rust 内置变换器（语法糖推导，[01-核心原语 §3](./01-core-forms.md) 推导表）、卫生重命名（引入标识符唯一化）、宏自引用（递归宏）、展开深度上限保护
-- ✅ **E1-β（r15）**：宏系统整体以 kerf 源码重写并切换为**生产路径**（expander.krf——define-syntax/syntax-rules 全模式面（**单层省略号边界内**——v6.2 限定，与 §2.3 边界声明对齐：嵌套省略号/syntax-parse 推迟 TD-005）+ 卫生 α + 深度 500 + Span 并集代次守卫；Rust 种子保留为 parity oracle + 自举引导；parity 36 测试）
+- ✅ **E1-β（r15）**：宏系统整体以 kerf 源码重写并切换为**生产路径**（expander.krf——define-syntax/syntax-rules 全模式面（**单层省略号边界内**——v6.2 限定，与 §2.3 边界声明对齐：嵌套省略号/syntax-parse 推迟 TD-005）+ 卫生 α + 深度 10_000（r18/TD-007 全解除）+ Span 并集代次守卫；Rust 种子保留为 parity oracle + 自举引导；parity 36 测试）
 - ⛔ Stage 0 推迟：`syntax-parse` 类结构化宏 DSL（Stage 2+）、宏展开调试工具（宏展开逐步跟踪，Stage 2+）、过程宏（任意 Rust 代码作为变换器——信任模型未定，[13-能力矩阵 §3.2](./13-capability-matrix.md)）
 
 ### 2.1 变换器契约（Stage 0 冻结，kerf-expander/src/macro_sys.rs）
@@ -116,14 +116,12 @@ impl Transformer {
 
 ```rust
 /// 宏展开深度上限（本文 §4 不变式 1 的取值裁定）。
-/// TD-007 部分解除（Stage 1 批次 A3，2026-09-10）：宏展开链经
-/// trampoline 工作表迭代化（expand_form 顶层循环——产物头部仍是
-/// 宏调用时循环继续，不递归），展开控制流栈深与链长解耦；上限
-/// 128 → 500（实测标定：2MiB 测试线程 1_000 层通过/2_000 层溢出；
-/// 500 = 2× 裕度——TD-017 同型实测法）。完整 10_000 口径依赖
-/// Stx Rc 化（值语义深树 clone/drop 递归为残余栈约束）——Stage 1
-/// 前端重写批次 B 范围，残留边界登记 TD-007。
-pub const MAX_EXPANSION_DEPTH: u32 = 500;
+/// TD-007 全解除（r18 / 40-c，2026-09-11）：Stx List/Vector → Rc<Vec<Stx>>
+/// 共享化（clone/drop O(1)）+ retag 迭代式重建（显式工作表后序——栈深恒定）
+/// + 均匀标记 O(1) 共享链 + 扁平 Drop；上限 500 → 10_000（种子
+/// expander.rs 与自举 expander.krf MAX-EXP-DEPTH 同步双路径）；
+/// 10_000 链测试 0.02s 通过 + 10_001 边界报错（tco_tests 断言锚）。
+pub const MAX_EXPANSION_DEPTH: u32 = 10_000;
 
 /// 展开上下文。
 pub struct ExpandCtxt {
@@ -242,7 +240,7 @@ fn expand(stx: &Stx, ctx: &mut ExpandCtx) -> Result<Stx, ExpandError> {
 > **实现状态（r13，TD-004 收口）**：上文 `ctx.resolve(sym, stx.scopes())` 的作用域集解析已落地——编译器 `resolve_var` 与 eval `Env::lookup/set` 均按 `(name, scopes ⊆)` 子集匹配 + max-cardinality（帧序/链序消解 shadowing）；`CoreExpr::VarRef/SetBang` 携带引用作用域集、`Lambda.param_scopes` 携带绑定作用域集（展开器绑定形式 fresh scope 深注入产出）。空作用域集全局绑定 ⊆ 任意引用集——名称基解析成为显式兜底路径（`$hyg$` 基名回退 = driver 全局层的回退近似）。锚点测试 = tests/v0/stage1/plan/scope_set_tests.rs（9 项双路径 + 负例）。
 
 **核心不变式**：
-1. **展开终止性**：每次宏调用产生的语法对象携带"展开代次 + 1"的 expansion_id（[02-语法模型 §2 的 Span 定义](./02-syntax-model.md)）；超过上限报错而非栈溢出（实现取值 500——TD-007 部分解除：trampoline 工作表迭代化后实测标定，见本文 §2.2）
+1. **展开终止性**：每次宏调用产生的语法对象携带"展开代次 + 1"的 expansion_id（[02-语法模型 §2 的 Span 定义](./02-syntax-model.md)）；超过上限报错而非栈溢出（实现取值 10_000——TD-007 r18 全解除：Rc 共享化 + 迭代式重建双路径，见本文 §2.2）
 2. **卫生性保持**：宏引入的标识符作用域集 ≠ 用户代码作用域集，二者在 SyntaxObject 中永不合并为一个集合
 3. **相位封闭性**：Phase 1 的 transformer 只能产生 Phase 0 语法对象，不能反向执行 Phase 0 代码（本文 §1 规则 1）
 4. **同类路径审查（§20.3 迭代审计）**：lambda 体铺平（4 处构造点统一）、letrec 与提升路径 nil 包裹、while 递归裸符号、卫生一致性（同标识符 → 同一重命名符号）、宏自引用保留集、核心关键字重命名豁免——六项同类修复簇已全部落地（worklog Task 4-b）
@@ -258,7 +256,7 @@ fn expand(stx: &Stx, ctx: &mut ExpandCtx) -> Result<Stx, ExpandError> {
 |-----------|------------------------------|---------|
 | 卫生性保证（§2.4 三重保证） | plan 套件卫生宏用例：宏内外同名不串扰（集成验证）+ negative_semantics_tests::t1_regression_hygiene_fallback_dual_path（卫生回退双路径，v5.2 修复面） | 引入隔离 + 自由穿透 |
 | syntax-rules 匹配（§2.3 文法） | examples/usage/macros.krf + 展开单测（模式/字面量/省略号/模板实例化）+ negative_expander_tests::syntax_rules_misuse / macro_expansion_failures（模式不匹配/深度超限负例） | 首匹配 + 维度匹配报错 |
-| 展开终止性（§4 不变式 1） | 深度上限负例：超限报错而非栈溢出（negative_expander_tests 宏深度超限 case）+ 深链正例（expander 单测 deep_macro_chain_expands_iteratively 500 层构造链）+ 端到端 200 层链（stage1/plan/expansion_worklist_tests） | TD-007 标定值 500（trampoline 工作表） |
+| 展开终止性（§4 不变式 1） | 深度上限负例：超限报错而非栈溢出（negative_expander_tests 宏深度超限 case）+ 深链正例（expander 单测 deep_macro_chain 10_000 层构造链 + tco_tests「超限 10000」断言）+ 端到端 200 层链（stage1/plan/expansion_worklist_tests） | TD-007 r18 全口径 10_000（Rc 共享 + 迭代式重建双路径） |
 | 相位簿记（§1.1 契约） | phase 单测：declare/visit/instantiate 幂等 + 先行次序 + **模块循环依赖检测（DFS 灰标记 → 结构化 Err）+ 菱形依赖合法**（negative_expander_tests::module_cycle_dependency_errors / module_registry_phase_violations） | 传递依赖相位传播 + 无环不变式 |
 | 空应用（§7.1.1 类 3） | negative_expander_tests::empty_application_family（11 case——曾零测试的分类，v5.2 补齐） | `()` 展开期报错 |
 | 关键字误用矩阵（§2 核心形式卫式） | negative_expander_tests：lambda/if/set!/define/module/import/export/quote/let/letrec/let*/cond/else/define-syntax 等 21 关键字误用矩阵（96 case 覆盖） | 形式结构错误全部 E0002 |

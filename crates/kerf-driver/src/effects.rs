@@ -16,13 +16,15 @@
 //!
 //! **语义边界**（与 multi-error-recovery-design §4 联动裁定一致）：
 //! - 编译期错误恢复（展开器形式级）= 控制流，**非效应**（§11 接口
-//!   隔离——不把编译器内部控制流暴露到语言语义面，Stage 2 复核）；
+//!   隔离——不把编译器内部控制流暴露到语言语义面；K2/r36 深审复核
+//!   维持：编译期恢复与语言级效应分域不变）；
 //! - 本系统的消费面 = **运行期/工具链**跨嵌套逃逸：`kerf test` 的用例
 //!   短路与错误恢复（case 内任意深度失败 → 边界捕获 → 下一用例续跑）；
-//! - 多次恢复（resumption）不实现——`Continuation` 留 unit 形状（P3
-//!   留白，Stage 2 语言级引入时定语义）；
-//! - VM 帧 `ext1` 槽位**不激活**（review F3 边界记录：Rust 层一次性
-//!   逃逸无需帧槽；ext1 激活 = Stage 2 语言级效应）。
+//! - 多次恢复（resumption）不在本内部层实现（语言级 resumption 已由
+//!   VM continuation 四要素承载——r25 M5；本层维持一次性逃逸语义）；
+//! - VM 帧 `ext1` 槽位已由语言级效应激活（r25 M5——`Option<Rc<
+//!   HandlerFrame>>` 承载三原型帧编排 T/H/B + trampoline；本 Rust 层
+//!   一次性逃逸仍服务于编译期恢复，两层分域并存）。
 //!
 //! **构建约束**：本机制要求 unwind profile（全仓无 `panic = "abort"`
 //! 配置——已核验；若未来引入 abort 配置须先重构本模块）。
@@ -93,8 +95,8 @@ pub fn handle_escape<R, T: Any + Send>(computation: impl FnOnce() -> R) -> Resul
 /// `handle_escape::<T>` 边界（无匹配边界则带清晰消息终止——不产生
 /// 不透明载荷 panic）。
 ///
-/// **不返回**（发散）——一次性逃逸无恢复续体（resumption 属 Stage 2
-/// 语言级语义）。
+/// **不返回**（发散）——一次性逃逸无恢复续体（语言级 resumption
+/// 已由 VM continuation 值承载——r25 M5；本内部层维持发散语义）。
 pub fn perform_escape<T: Any + Send>(payload: T) -> ! {
     let has_handler = HANDLER_DEPTH.with(|d| d.get() > 0);
     if !has_handler {

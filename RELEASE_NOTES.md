@@ -1,3 +1,52 @@
+## v0.4.0-r36（2026-09-15）——批次 K 次件：K2 大阶段末深审环 + §14.8 设计回写 + §14.9 系统性代码整理（57-a/57-s1/57-s2/57-z/57-web——用户指令「按 sop.md 继续推进 + 同步完整打包 tar.gz 并同步完整更新 web page」，758 维持全绿 + Stage 3 切换 GO 裁定）
+
+### 交付一：K2 大阶段末深审环——§14.5/§14.6/§14.8/§14.9 全协议面（会话 Task 57-a——plan §5c 49-b 批次 K 次件）
+
+- **§14.6.3 三轮深挖**：第 1 轮事实采集（57-s1 子代理十三项代码扫描[C1-C6 + §11 接口隔离 + §14.6.1.1 数据流覆盖] + 57-s2 子代理八设计文档三方对照[§14.6.1.3 + §14.8 偏差候选] + §3.2 基线六命令 clean 起步实测：cargo clean 589 files/166.5MiB → build --release 14.48s 零告警 → check --workspace 0 errors 0 warnings → fmt --check 0 diff → clippy --all-targets --workspace -D warnings 超集 0 → test --release --workspace **758:0:0 零断言修改** + 四审计集 EXIT 0 ×4[41+50+53+46] + CLI 四路径[fib ⇒ 75025 ⇒ 144 exit 0 / macros ⇒ (2 1) ⇒ 42 exit 0 / check ok「2 原型/9 常量/5 全局引用/38 指令」/ check 负例 E0005「+ 需要数值，实际 str」REAL_EXIT 1] + 性能三重采样）→ 第 2 轮发现即修（19 处注释级修复 + 四件设计回写——见交付二/三）→ 第 3 轮收敛（**零新 P0/P1——R6/R7 收敛判据达成**）
+- **§14.5 D1-D8 全量三段式深审（大阶段末版——非 r26 批次裁剪版）**：`docs/develop/v0/stage-2/deep-review-round2.md`——八维度各「现状/风险/建议」三段式 + §6.3 五角色投票（ARCH-A 2/DEV-A 1.5/QA-A 1/ALG-C 1/SKL-A 1 不加权）**加权 5.5/5.5 = 100% GO** + §14.8 偏差清单 + §14.9 C1-C6 六维表。结论：P0 = 0 / P1 = 0 / P2 = 0（7 项当场修复）/ P3 = 12（11 修复 + 1 容忍观察）
+- **§14.6 六件套深验证文档（全落位——批次 K K2 验收合同「四项审查各 ≥1 产出文档 + P0/P1 = 0 维持」达成）**：`architecture-review.md`（八管道阶段全绿 + §11 七项机械验证零违规 + 数据流五段校验）/ `design-impl-test-coverage.md`（**「枚举-实现-测试」四方互锚零缺项**：46 操作码 opcode_count_matches_spec 逐一断言 / 57 stdlib 逐名核对 / CoreExpr 12 变体三面穷尽 / E0001-E0012 全测试锚 / prelude 五件；B1 净缺口 0 / B3 零新项）/ `hidden-problems-assessment.md`（**强制修复项[复杂度增长 ≥2×] = 0** + Stage 3 就绪度清单 12/12 ✅）/ `refactoring-optimality-review.md`（Stage 2 七项重构 7/7 最优判据零「治症不治根」hack）/ `performance-baseline.md`（新建大阶段末基线：clean 构建 14.48s/二进制 1.92 MiB/fib 92.5ms/gc_tail 42.6ms/gc_nontail 噪声域/全量测试 54.5s + 复测协议）/ `final-assessment.md`（**Stage 3 切换 GO 裁定**——附条件无）+ `pipeline-test-coverage.md` v0.4.0-r36（§4 完整性审查小节 r36 全量重测：catch-all 86 处/24 文件六分类判定全合规[「_ 臂理由」24 + 显式错误臂 ~30 + unreachable 窄化 4 + 空臂注释 5 + None 契约 ~20 + 数值塔语义 ~7]；生产区 expect 23 处全不变式消息化零裸 unwrap；enum 穷尽性四抽查[Op 46 变体 VM 主分派穷尽无 `_`——新变体编译器强制双面更新]；§6 性能基线表更新）
+- **TD-028 新登记（P3）**：VM 主分派与 GC 根扫描性能漂移——fib(25) 84.2→92.5ms（+9.9%）/ gc_stress 尾形 38.57→42.6ms（+9.5%）双基准同向漂移三重采样；归因候选三面（r25 效应两操作码 + r30 FFI 三操作码入主分派 match 46 臂分支布局 / GC 六来源入口 / ForeignBox 追踪器入口）待 Stage 3 优化窗口 profile 定锚（判据先于先例——原则 35）；正确性零影响（§14.5.3 D6 条款「非正确性影响的性能记录为 Stage N+2 优化项」）
+
+### 交付二：§14.8 设计回写四件（实现 → 设计单向——代码超前文档的滞后清零）
+
+- **03-macro-system.md v6.2 → v6.3**：深度上限 500 → **10_000** 全口径对齐（TD-007 r18 全解除——Stx Rc 化 + retag 迭代式重建 + 均匀标记 O(1) 共享；§2.2 契约块 + §4 不变式 1 + §5 测试锚行 + 头部版本行；expander.rs:77 / expander.krf:478 / tco_tests「超限 10000」断言三实锚）+ 推迟项清「迭代式工作表展开（TD-007）」（已 resolved）
+- **05-runtime.md v6.2 → v6.3**：根集**五来源 → 六来源**（第 6 源 = 活跃 continuation 帧链——r25/M5；vm.rs:1368 实锚 + effect_tests gc_continuation_boxed；§2/§3.2/§4 三节六处——修复 06 §1.2 指针落空）+ 类型化分配**八入口 → 九入口**（alloc_foreign r30 FFI ForeignBox 装箱第 9 入口——heap.rs:202 实锚）+ 推迟项口径对齐（TD-008 DEFER Stage 3+ / net/process Stage 3 触发式）
+- **02-syntax-model.md v6.0 → v6.1**：Keyword **22 → 25 变体**（r25 增 perform/handle/resume 效应三关键字——symbol.rs:24-54 实锚）+ 叶级**45 → 48 种** + **§8.1 两语法同核验证改判**（B1-1：原定 Stage 2 前置未执行——重规划至表面现代化批次 L/M[20 §5 模块树 + 12 §2.10] 承载，目标语法引入随 v0.5/v0.6 窗口，同核验证作为该批次验收件）
+- **13-capability-matrix.md v6.2 → v6.3**：**§3.1.1 Effect Handlers 节态由 r8 口径升 r25/r28 终态**（语言面 P0：M1-M5 全量[原语集 9→11 + ext1 具体化 Option<Rc<HandlerFrame>> + continuation 四要素 + E0007-E0009 + GC 第六来源] + 静态收敛面[typecheck/hm 双面检出超集]；行多态/效应行 Stage 3——修复主链 01/04/06/12 已回写而本节残留的「节态滞后」）+ 12-roadmap 宏系统行「深度 500」同步（跟随 03 v6.3 单源）
+
+### 交付三：§14.9 系统性代码整理（19 处注释级修复——零行为变更，758:0:0 复验实证）
+
+- **P2 注释时效 7 项全修**（设计口径已改判未同步的「代码注释滞后」）：runtime/lib.rs TD-008 DEFER Stage 3+ / core/ir.rs TD-003 优化窗口 / expander core_forms.rs:444 + bootstrap expander.krf:1373 net-process Stage 3 触发式（**用户面错误消息双侧同步**——capability_tests:201 断言锚「未知能力主体」前缀不受影响，parity 保持） / reserved/multistage.rs 多阶段 DEFER Stage 3（头部 + trait 注释 + 三方法注释）/ expander/lib.rs:32 深度 128→10_000 / driver/effects.rs:24-25 ext1 已激活（r25 M5 HandlerFrame）+ resumption 语义分域（内部层一次性逃逸 vs 语言级 continuation 四要素）/ effects.rs:19 K2 深审复核结论注记
+- **P3 12 项修复 11**：catch-all 无臂注释 5 处补齐（backend/anf.rs:195 prim_arity 默认二元 / compiler/hm.rs:688 扫描窗口终止 / compiler/typecheck.rs:420 防御回退 / expander/macro_sys.rs:191 构造性默认 / vm/vm.rs:1591 NaN partial_cmp 保底）+ 注释枚举不全 2 处（vm.rs:1392 + Symbol / runtime/heap.rs:349 + Symbol）+ 文件头时效 4 处（vm/lib.rs 值模型清单补 Symbol/continuation/Foreign/External / compiler/lib.rs 操作码 39→46 / driver/lib.rs eval 退役 VM 唯一生产路径 / expander/lib.rs TD-004 r13 已解决时态）+ 1 容忍观察（backend qbe.rs gen_il 业界惯用缩写）
+- **需复核 3 项处置落位**：capability.rs:65 net 窗口终判注记（plan §5d 触发式口径） / effects.rs:19「Stage 2 复核」= 本轮 K2 承办完成 / expr.rs:92-94 ADT 评估清单冻结维持注记（K1+K2 双复核）
+- **修复后复验**：build 12.18s / fmt 0 diff / clippy 超集 0 / **test 758:0:0 零断言修改**——零行为变更实证（§14.9 完成标准 7 项全过：TODO/FIXME/HACK/XXX = 0 / glob re-export = 0 / fmt 0 / clippy 0 / test 全绿 / 无死代码 / 整理报告落位 worklog）
+
+### 交付四：对账四面 + 收尾（57-z/57-web 随同执行）
+
+- 对账四面：matrix.md **v0.1.0-r36**（r36 增量行 + **总量行同步债修正**：门审计集「三件 144」→「四件 190」[r35 遗留的总量行未同步——本轮同步债清理先例延续]）/ pipeline-test-coverage.md **v0.4.0-r36**（§4 r36 全量重测 + §6 性能基线）+ performance-baseline 新建 / RELEASE_NOTES r36 节（本节）/ plan.md K2 执行注记（下一步 K3 收尾交付——K2 GO 已满足输入条件）
+- TD 登记册：TD-028 新增（28 项总量：**P0/P1 = 0 维持**——解决 17 + 断档 4 + DEFER 1 + 开放 6）
+- r36 tar.gz（§19.3 commit-then-package 正序 + §19.4 十二路径）包内自举 + web 同步（kerf-data r36 节点 + download README r36 节 + footer）+ rec 树 20_r36/l + git 双仓库
+
+## v0.4.0-r35（2026-09-15）——批次 K 首件：K1 终门审 + lang-design→stage0/sop 附录级全面同步（56-a/56-b/56-z/56-web——用户三指令驱动，758 维持全绿 + 第四审计集 46 case APPROVED）
+
+### 交付一：lang-design → stage0.md 附录级全面同步 + sop.md 反哺（会话 Task 56-a——用户指令「将更新的 docs/lang-design/ 下所有内容同步到 docs/stage0.md 中，并反哺 docs/sop.md」）
+
+- **同步缺口实测（磁盘对账）**：①附录 A 术语表缺 r32-r34 三轮 33 条（18 §5a 七条 + §5b 十三条 + §5c 十三条）②附录 E 参考文献缺 14 条（19 §7 r33 八查询 + §8 r34 四查询）③§23.1 标题计数漂移（「三十二条」vs 正文 35 条——内容自 v6.4 已同步，标题停在 v6.1 时代）——判定为「拆分面→存档面的附录级同步债」（r32-r34 各轮只做了 §9.x 存档侧镜像 + 原则增量，附录面无 owner）
+- **stage0.md v6.4 → v6.5**：附录 A 增补 33 条设计栈术语（is- 前缀谓词/方向词转换/命名空间限定名/别名层/能力-命名空间对齐/表面债/表面现代化动态演进 + 三义定锚/能力四要素/L0-L3/J1-J4/授权三态/六类迁移/新原语两判据/N0-N4/R-N1/R-N2/import 不传播授权/kerf 保留域/原则 34 + 三轴坐标系/双轴归属/授权组合闭包/编译期权威三判据/诊断终止域/横切泛函域/演进六窗/时间治理四红线/变更通道矩阵/受控债务四步/生命周期四阶段/十二审计轴/判据先于先例）+ 附录 E 新增 E.9 节（66-79 十四条知识搜索引用）+ §23.1 标题计数修正 + 三处指针注记（§7 三义消歧 / §9.3.2 LSP×命名空间三交互点 / §21.5 时机治理单源）+ 版本历史 v6.5 条目
+- **sop.md v12.3 → v12.4（反哺）**：§8.4.3 语言设计文档目录树由「00-13 + …（13+ 扩展设计文档）」修正为 24 文件全列（设计栈四件 20/21/22/23 显式列出——r32-r34 三轮交付后的目录树漂移）+ §8.4.5 文档优先查询表增 4 行设计栈落点（库表面命名→20 / 能力归属与授权→21 / 命名空间与模块机制→22 / 演进时机与窗口触发→23）+ §16.1 版本历史 v12.4 + **存档纪律吸收**（附录级内容[术语表/参考文献/原则计数]属「同步债」——自本轮起纳入 §8.5 审查检查项）
+
+### 交付二：K1 终门审——stage2_gate_audit_r2 46 case APPROVED（会话 Task 56-b——plan §5c 批次 K 首件）
+
+- **新审计集第 4 件 `examples/audit/stage2_gate_audit_r2.rs`**（Cargo.toml [[example]] 登记 + §7.3.1 可重运行口径）：**46 case 全 PASS EXIT 0 APPROVED**——与 r1（53 case）零源语料重叠，主轴 = **静态判定面**（r29 HM 旗标期切换后 check_source 生产判定面 E0005——r1 零覆盖的半区：A 桶 10 单语句静态 + B 桶 10 多语句/集成静态含 r28 效应臂收敛三 case + E0006 门控函数体位变体 + 空列表 define 值位变体 + 多错误非短路收集）
+- **批次 J 修复边界（§7.3.2 三修复面 7 case）**：r28 效应 typecheck 收敛双 case（perform 效果值双面检出[tc+hm 超集纪律] + handle 双体多错误收集）+ r29 HM 旗标双缺口修复双 case（TD-011 字符串全序零误报/混串检出对偶 + car/cdr Nil 漏检归零）+ E0005 定位面（文件名 + 行:列 + Span）+ r30 FFI 双 case（编译面收窄[非字面量实参 CompileError] + VM 三码族[E0010 双重释放/E0011 非令牌释放/E0012 未登记符号 fail-closed]）
+- **§21.3 四条件终验（P 桶）**：条件 1 = P06 生产链自编译 compiler.krf + 活性终验（sq(7)=49 与种子一致）；条件 2 = P03 门 B fixpoint（B₁/B₂ bytecode_equal + SHA-256 两件）；条件 3 = P04 QBE 本地码 fib(12) exit 144 端到端；条件 4 = **P05 FFI 真端到端**（write_stdout 经冻结 FfiCall → lowering → 操作码 → 窗口规程 → 宿主真实 I/O → Int(4)——r30 VM 面做实后，较 r1 的「模型冻结断言」升级为运行时实证）
+- **§21.5 九信号全核对（P07）**：S1 语义稳定（金路径进程内实测）/ S2 自举验证（P03 证据引用）/ S3 测试覆盖（matrix 758:0:0 v0.1.0-r34 锚）/ S4 性能基线（CLI bench 锚）/ S5 文档同步（lang-design 24 文件实测 + stage0 v6.5）/ S6 能力处理程度（12 §2.5.1 终态注记锚）/ S7 技术债 P0/P1 清零（登记册机械扫描开放项 = 0）/ S8 外循环投票（协议承载——本审计集为证据输入）/ S9 阶段间深验证（K2 承载——如实登记）
+- **§6.3 五角色投票**：ARCH-A 2 票 GO + DEV-A 1.5 票 GO + QA-A 1 票 GO + ALG-C 1 票 GO + SKL-A 1 票 GO（不参与加权）——**加权 5.5/5.5 = 100% ≥ 95% GO**（K1 验收合同达成；批次 K 输入条件进入 K2）
+
+### 交付三：GATE 1 §3.2 六命令 clean 起步实测全绿
+
+- cargo clean（589 files 166.5MiB）/ build --release 13.11s 零告警 / check --workspace 0 errors 0 warnings / fmt --check 0 diff / clippy --all-targets --workspace 超集 0 / **test --release --workspace 758:0:0（22 套件零断言修改——代码增量 = 审计器单件，零生产代码变更）** + **四审计集 EXIT 0 ×4**（stage0 41 + stage1 50 + stage2_r1 53 + stage2_r2 46）+ CLI 四路径（run fib ⇒ 75025 ⇒ 144 / run macros ⇒ (2 1) ⇒ 42 / check ok「2 原型/9 常量/5 全局引用/38 指令」/ check 负例 E0005「+ 需要数值，实际 str」REAL_EXIT 1）
+
 ## v0.4.0-r34（2026-09-14）——批间插入轮第三弹：设计缺陷深度审计收敛轮（55-a/55-z/55-web——用户审查指令驱动，设计栈治理层补齐 + 原则 35，758 维持全绿）
 
 ### 交付一：演进治理与设计收敛（会话 Task 55-a——「定位/权限/能力边界/职责边界/层级处理和管理模型/演进阶段和时机——网状发散、内循环直至收敛」）

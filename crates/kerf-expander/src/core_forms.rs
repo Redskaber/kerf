@@ -441,7 +441,7 @@ fn expand_require(
     if subject_name != "io" {
         return Err(ExpandError::new(
             format!(
-                "未知能力主体「{}」（当前仅支持 io；net/process 属 Stage 2）",
+                "未知能力主体「{}」（当前仅支持 io；net/process 属 Stage 3 触发式引入）",
                 subject_name
             ),
             items[1].span,

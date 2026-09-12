@@ -685,6 +685,8 @@ impl<'a> Gen<'a> {
                                 all_params = false;
                             }
                         }
+                        // 扫描窗口终止：非 SetBang 前导形式即停——
+                        // letrec 前导 set! 序列探测仅覆盖连续头部
                         _ => break,
                     }
                 }

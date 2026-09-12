@@ -188,6 +188,8 @@ fn retag_scopes(stx: &Stx, scopes: &ScopeSet) -> Stx {
                 let items: Vec<Stx> = out.drain(start..).collect();
                 let datum = match &input.datum {
                     StxDatum::List(_) => StxDatum::List(std::rc::Rc::new(items)),
+                    // 构造性默认：仅 List/Vector 两容器变体可到达本重建
+                    // 路径（Assemble 上游已窄化）——保持原容器类别不变
                     _ => StxDatum::Vector(std::rc::Rc::new(items)),
                 };
                 out.push(retag_leaf(datum, input, scopes));

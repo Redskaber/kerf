@@ -2,7 +2,7 @@
 
 > **Author**: kerf-doc-agent
 > **Date**: 2026-09-11（v6.1：next4.md 第八轮吸收——接口预留完整性审查 §3.3-§3.5 新增（10 个新识别关键接口 + 完整矩阵 + P0-P3 策略）+ LSP/FFI 重分类 + 矩阵 4→14 项；v5.5：v6.0 审查修正；v5.4：r8 批次 D——Effect 编译器内部做实与能力模型 I/O 基础传递做实注记；v5.3：r7 批次 C——编译缓存 P2 做实注记 + 类型检查器 Stage 1 引入交付注记；v5.2：§3.1 四项预留接口以 reserved.rs 冻结签名回填（#16）+ 能力模型 I/O P3→P2（#21））
-> **Version**: v6.2（v6.1 对应 stage0.md v6.1 的目录级镜像——接口预留完整性版；v6.2 r33 三义消歧指针 + 语言能力架构接线）
+> **Version**: v6.3（v6.2 r33 三义消歧指针 + 语言能力架构接线；**v6.3 K2/r36 大阶段末深审回写——§14.8 B2-4：§3.1.1 Effect 节态由 r8 口径升 r25/r28 终态（语言面 P0：M1-M5 + 静态收敛；ext1 已激活；continuation 四要素）**）
 > **Status**: Active
 
 > 本文件是 12 个能力模型详细设计（原 §8）的**唯一完整副本**，同时收录 Stage 0 能力矩阵与职责边界（原 §7：三层分类矩阵与架构原则）、接口预留与完全推迟的能力（原 §9 全文）、以及三个待定决策的前置架构约束（原 §15）。其中 §8.1/§8.6/§8.7、§8.9/§8.10、§8.12、§8.8/§8.11 的正文同时收录于对应主题文件（[02-语法模型](./02-syntax-model.md) / [03-宏系统](./03-macro-system.md) / [04-字节码 VM](./04-bytecode-vm.md) / [05-运行时](./05-runtime.md)）以保证自包含；关键算法伪代码收口于 02-05 的「实现框架」章节。能力选型的批判性审视与 2026 现代方案见 [14-替代设计](./14-design-alternatives.md)；能力引入时机与处理程度（P0-P4）的进程视角见 [12-路线图 §2](./12-roadmap.md)。
@@ -410,7 +410,7 @@ switch-dispatch 循环，处理约 35 个操作码。完整操作码定义涵盖
 
 > **v5.2 签名权威声明（deep-review R1 偏差 #16）**：本节四项预留接口的**冻结签名权威是 `kerf-driver/src/reserved.rs`**（冻结性经 Probe 实现测试 `reserved_signatures_are_frozen` 证明——「测试实现体编译通过 = 契约冻结」）。早期版本的伪签名（如 `Self::Effect::Result` 关联类型路径、`splice(code) -> Self::Code::Inner` 等不可编译形态）仅为设计草稿，以下全部回填为可编译的真实冻结签名。
 
-#### 3.1.1 Effect Handlers（P3 语言面 + 编译器内部做实——r8 批次 D 交付注记）（原 §9.1.1）
+#### 3.1.1 Effect Handlers（P0 语言面已做实——r25 全量 + r28 静态收敛；历史：r8 编译器内部做实）（原 §9.1.1）
 
 > **r8 交付注记（2026-09-10，批次 D）**：[12-路线图 §2.5.1](./12-roadmap.md) 演进矩阵
 > Stage 1 行「做实引入（**编译器内部**）」已兑现——`kerf-driver/src/effects.rs`
@@ -424,6 +424,17 @@ switch-dispatch 循环，处理约 35 个操作码。完整操作码定义涵盖
 > continuation 不实现，`Continuation` 维持 unit 形状留白）；消费面 =
 > `kerf test` 用例短路 + 错误恢复（[11-测试 §4](./11-testing.md)）。
 > VM 帧 `ext1` 槽位不激活（Stage 2 语言级效应时启用）。
+>
+> **r25/r28 终态注记（v6.3/K2-r36 补——本节原停 r8 口径，代码侧早已演进）**：
+> 语言级效应 **M1-M5 全量交付（r25/42-f）**：原语集 9→11（perform/handle）
+> + resume 脱糖（D4）+ VM `ext1` 具体化为 `Option<Rc<HandlerFrame>>`
+> （INSTALL_HANDLER/PERFORM 两指令，三原型帧编排 T/H/B + trampoline
+> 惰性单例）+ continuation 值四要素（帧链/数据栈快照/恢复点/线性唯一
+> ——多次恢复已实现，E0008 二次恢复检出）+ E0007-E0009 诊断族 + GC
+> 第六来源（活跃 continuation 帧链，05 §3.2 v6.3 同步）+ 自举双侧 parity。
+> **静态收敛面（r28/49-a）**：typecheck.rs/hm.rs Perform 效应值入 R1-R8/
+> HM 检查域 + Handle 两体入检出域（双面检出超集纪律——tc+hm）。
+> 语言面 P0 口径；行多态/效应行属 Stage 3（typecheck.rs:362 注记锚）。
 
 **预留接口（Stage 0 冻结，P3——仅类型形状）**：
 

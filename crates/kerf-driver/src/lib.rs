@@ -8,7 +8,8 @@
 //! ```text
 //! 源文本 → [kerf-reader] Token/Stx → [kerf-expander] CoreExpr
 //!        → [kerf-core] IrGraph/CodeValue → [kerf-compiler] BcProgram
-//!        → [kerf-vm] 执行（eval / VM 双路径） → [kerf-runtime] 堆与 I/O
+//!        → [kerf-vm] 执行（VM 唯一生产路径——r23/INC7 eval 退役，
+//!        互查口径 = 生产链 vs 种子链） → [kerf-runtime] 堆与 I/O
 //! ```
 //!
 //! **相位分离接线**（§8.9）：declare → visit（变换器注册）→ instantiate
